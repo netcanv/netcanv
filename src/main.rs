@@ -1,8 +1,3 @@
-use std::error::Error;
-
-use skulpin::*;
-use skulpin::app::*;
-
 mod netcanv;
 use netcanv::*;
 

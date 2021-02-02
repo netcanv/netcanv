@@ -5,12 +5,22 @@ use skulpin::app::{AppBuilder, AppHandler, AppUpdateArgs, AppDrawArgs, AppError}
 use skulpin::skia_safe::*;
 
 pub struct NetCanv {
+    pub font_sans: Font,
+    pub font_sans_bold: Font,
 }
+
+const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
+const SANS_BOLD_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 
 impl NetCanv {
 
     pub fn new() -> Self {
-        NetCanv {}
+        let sans_typeface = Typeface::from_data(Data::new_copy(SANS_TTF), None).unwrap();
+        let sans_bold_typeface = Typeface::from_data(Data::new_copy(SANS_BOLD_TTF), None).unwrap();
+        NetCanv {
+            font_sans: Font::new(sans_typeface, 15.0),
+            font_sans_bold: Font::new(sans_bold_typeface, 15.0),
+        }
     }
 
     pub fn build() -> ! {
@@ -45,6 +55,20 @@ impl AppHandler for NetCanv {
             right: 64.0,
             bottom: 64.0,
         }, &black_fill);
+
+        canvas.draw_str(
+            "Regular",
+            Point::new(72.0, 32.0 + self.font_sans.size()),
+            &self.font_sans,
+            &black_fill,
+        );
+
+        canvas.draw_str(
+            "Bold",
+            Point::new(72.0, 48.0 + self.font_sans_bold.size()),
+            &self.font_sans_bold,
+            &black_fill,
+        );
     }
 
     fn fatal_error(&mut self, error: &AppError) {
