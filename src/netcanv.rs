@@ -48,7 +48,7 @@ impl AppHandler for NetCanv {
     }
 
     fn fatal_error(&mut self, error: &AppError) {
-
+        println!("Fatal error: {}", error);
     }
 
 }
