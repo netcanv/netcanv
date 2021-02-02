@@ -2,6 +2,7 @@ use std::ffi::CString;
 
 use skulpin::*;
 use skulpin::app::{AppBuilder, AppHandler, AppUpdateArgs, AppDrawArgs, AppError};
+use skulpin::skia_safe::*;
 
 pub struct NetCanv {
 }
@@ -30,7 +31,20 @@ impl AppHandler for NetCanv {
     }
 
     fn draw(&mut self, args: AppDrawArgs) {
+        let canvas = args.canvas;
+        canvas.clear(Color::WHITE);
 
+        let black = Color4f::new(0.0, 0.0, 0.0, 1.0);
+        let mut black_fill = Paint::new(black, None);
+        black_fill.set_anti_alias(true);
+        black_fill.set_style(paint::Style::Fill);
+
+        canvas.draw_rect(Rect {
+            left: 32.0,
+            top: 32.0,
+            right: 64.0,
+            bottom: 64.0,
+        }, &black_fill);
     }
 
     fn fatal_error(&mut self, error: &AppError) {
