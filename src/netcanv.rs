@@ -1,18 +1,19 @@
-use std::ffi::CString;
-
 use skulpin::*;
 use skulpin::app::{AppBuilder, AppHandler, AppUpdateArgs, AppDrawArgs, AppError};
 use skulpin::skia_safe::*;
 
-pub struct NetCanv {
+use crate::paint_canvas::*;
+
+pub struct NetCanv<'a> {
     pub font_sans: Font,
     pub font_sans_bold: Font,
+    pub paint_canvas: PaintCanvas<'a>,
 }
 
 const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 
-impl NetCanv {
+impl NetCanv<'_> {
 
     pub fn new() -> Self {
         let sans_typeface = Typeface::from_data(Data::new_copy(SANS_TTF), None).unwrap();
@@ -20,22 +21,13 @@ impl NetCanv {
         NetCanv {
             font_sans: Font::new(sans_typeface, 15.0),
             font_sans_bold: Font::new(sans_bold_typeface, 15.0),
+            paint_canvas: PaintCanvas::new((1024, 600)),
         }
-    }
-
-    pub fn build() -> ! {
-        let window_size = LogicalSize::new(1024, 600);
-        AppBuilder::new()
-            .window_title("netCanv")
-            .app_name(CString::new("netCanv").unwrap())
-            .inner_size(window_size)
-            .use_vulkan_debug_layer(false)
-            .run(Self::new());
     }
 
 }
 
-impl AppHandler for NetCanv {
+impl AppHandler for NetCanv<'_> {
 
     fn update(&mut self, args: AppUpdateArgs) {
     }

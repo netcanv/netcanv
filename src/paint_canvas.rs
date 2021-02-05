@@ -27,3 +27,4 @@ impl PaintCanvas<'_> {
     }
 
 }
+
