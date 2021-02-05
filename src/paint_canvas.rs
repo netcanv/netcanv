@@ -20,10 +20,12 @@ impl PaintCanvas<'_> {
         }
         let bitmap_ref = bitmap.borrow();
         let image = Image::from_bitmap(&bitmap_ref).unwrap();
+        let mut canvas = Canvas::from_bitmap(&bitmap_ref, None);
+        canvas.clear(Color::TRANSPARENT);
         Self {
             bitmap: bitmap.clone(),
             image,
-            canvas: Canvas::from_bitmap(&bitmap_ref, None),
+            canvas,
         }
     }
 
