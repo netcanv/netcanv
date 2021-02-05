@@ -3,10 +3,13 @@ use skulpin::app::{AppHandler, AppUpdateArgs, AppDrawArgs, AppError, MouseButton
 use skulpin::skia_safe::*;
 
 use crate::paint_canvas::*;
+use crate::ui::*;
 
 pub struct NetCanv<'a> {
     pub font_sans: Font,
     pub font_sans_bold: Font,
+
+    pub ui: Ui,
     pub paint_canvas: PaintCanvas<'a>,
 
     previous_mouse: (f64, f64),
@@ -25,6 +28,7 @@ impl NetCanv<'_> {
         NetCanv {
             font_sans: Font::new(sans_typeface, 15.0),
             font_sans_bold: Font::new(sans_bold_typeface, 15.0),
+            ui: Ui::new(),
             paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
             previous_mouse: (0.0, 0.0),
         }
@@ -69,6 +73,18 @@ impl AppHandler for NetCanv<'_> {
     fn draw(&mut self, args: AppDrawArgs) {
         let canvas = args.canvas;
         canvas.clear(Color::WHITE);
+
+        let window_size: (f32, f32) = {
+            let logical_size = args.coordinate_system_helper.window_logical_size();
+            (logical_size.width as f32, logical_size.height as f32)
+        };
+        let ui = &mut self.ui;
+        ui.begin(window_size, Layout::Freeform);
+
+        ui.push_group(ui.size(), Layout::Freeform);
+        ui.pad((32.0, 32.0));
+        ui.fill(canvas, Color4f::new(0.0, 0.0, 0.0, 0.2));
+        ui.pop_group();
 
         canvas.draw_bitmap(
             &self.paint_canvas,

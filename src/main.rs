@@ -4,6 +4,7 @@ use skulpin::LogicalSize;
 
 mod netcanv;
 mod paint_canvas;
+mod ui;
 
 use netcanv::*;
 
