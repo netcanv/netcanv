@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use skulpin::skia_safe::*;
@@ -26,5 +27,18 @@ impl PaintCanvas<'_> {
         }
     }
 
+    pub fn canvas<'a>(&'a mut self) -> &'a mut Canvas {
+        &mut self.canvas
+    }
+
 }
 
+impl Deref for PaintCanvas<'_> {
+
+    type Target = Image;
+
+    fn deref(&self) -> &Self::Target {
+        &self.image
+    }
+
+}
