@@ -48,6 +48,18 @@ impl AppHandler for NetCanv<'_> {
             self.paint_canvas.stroke(
                 (self.previous_mouse.0 as f32, self.previous_mouse.1 as f32),
                 (mouse.0 as f32, mouse.1 as f32),
+                &Brush::Draw {
+                    color: Color4f::from(Color::BLACK),
+                    stroke_width: 4.0,
+                },
+            );
+        } else if input_state.is_mouse_down(MouseButton::Right) {
+            self.paint_canvas.stroke(
+                (self.previous_mouse.0 as f32, self.previous_mouse.1 as f32),
+                (mouse.0 as f32, mouse.1 as f32),
+                &Brush::Erase {
+                    stroke_width: 8.0,
+                },
             );
         }
 

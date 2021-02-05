@@ -2,6 +2,35 @@ use std::ops::Deref;
 
 use skulpin::skia_safe::*;
 
+#[derive(Clone)]
+pub enum Brush {
+    Draw { color: Color4f, stroke_width: f32 },
+    Erase { stroke_width: f32 },
+}
+
+impl Brush {
+
+    pub fn as_paint(&self) -> Paint {
+        let mut paint = Paint::new(Color4f::from(Color::TRANSPARENT), None);
+        paint.set_anti_alias(false);
+        paint.set_style(paint::Style::Stroke);
+        paint.set_stroke_cap(paint::Cap::Round);
+
+        match self {
+            Self::Draw { color, stroke_width } => {
+                paint.set_color(color.to_color());
+                paint.set_stroke_width(*stroke_width);
+            },
+            Self::Erase { stroke_width } => {
+                paint.set_blend_mode(BlendMode::Clear);
+                paint.set_stroke_width(*stroke_width);
+            },
+        }
+
+        paint
+    }
+}
+
 pub struct PaintCanvas<'a> {
     bitmap: Bitmap,
     canvas: OwnedCanvas<'a>,
@@ -20,12 +49,13 @@ impl PaintCanvas<'_> {
         }
     }
 
-    pub fn stroke(&mut self, from: impl Into<Point>, to: impl Into<Point>) {
-        let mut paint = Paint::new(Color4f::new(0.0, 0.0, 0.0, 1.0), None);
-        paint.set_anti_alias(false);
-        paint.set_style(paint::Style::Stroke);
-        paint.set_stroke_width(4.0);
-        paint.set_stroke_cap(paint::Cap::Round);
+    pub fn stroke(
+        &mut self,
+        from: impl Into<Point>,
+        to: impl Into<Point>,
+        brush: &Brush
+    ) {
+        let mut paint = brush.as_paint();
         self.canvas.draw_line(from.into(), to.into(), &paint);
     }
 
