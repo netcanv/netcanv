@@ -29,10 +29,6 @@ impl PaintCanvas<'_> {
         }
     }
 
-    pub fn canvas<'a>(&'a mut self) -> &'a mut Canvas {
-        &mut self.canvas
-    }
-
 }
 
 impl Deref for PaintCanvas<'_> {
