@@ -81,10 +81,10 @@ impl AppHandler for NetCanv<'_> {
         let ui = &mut self.ui;
         ui.begin(window_size, Layout::Freeform);
 
-        ui.push_group(ui.size(), Layout::Freeform);
-        ui.pad((32.0, 32.0));
-        ui.fill(canvas, Color4f::new(0.0, 0.0, 0.0, 0.2));
-        ui.pop_group();
+        ui.group(ui.size(), Layout::Freeform, |ui| {
+            ui.pad((32.0, 32.0));
+            ui.fill(canvas, Color4f::new(0.0, 0.0, 0.0, 0.2));
+        });
 
         canvas.draw_bitmap(
             &self.paint_canvas,

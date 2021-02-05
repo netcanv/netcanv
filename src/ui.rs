@@ -74,6 +74,12 @@ impl Ui {
         self.group_stack.pop();
     }
 
+    pub fn group(&mut self, size: (f32, f32), layout: Layout, callback: impl FnOnce(&mut Self)) {
+        self.push_group(size, layout);
+        callback(self);
+        self.pop_group();
+    }
+
     pub fn pad(&mut self, padding: (f32, f32)) {
         self.top_mut().rect.left += padding.0 / 2.0;
         self.top_mut().rect.right -= padding.0 / 2.0;
