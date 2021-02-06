@@ -14,8 +14,8 @@ enum PaintMode {
 }
 
 pub struct NetCanv<'a> {
-    pub font_sans: Font,
-    pub font_sans_bold: Font,
+    pub font_sans: RcFont,
+    pub font_sans_bold: RcFont,
 
     pub ui: Ui,
     pub paint_canvas: PaintCanvas<'a>,
@@ -46,11 +46,9 @@ const COLOR_PALETTE: &'static [u32] = &[
 impl NetCanv<'_> {
 
     pub fn new() -> Self {
-        let sans_typeface = Typeface::from_data(Data::new_copy(SANS_TTF), None).unwrap();
-        let sans_bold_typeface = Typeface::from_data(Data::new_copy(SANS_BOLD_TTF), None).unwrap();
         NetCanv {
-            font_sans: Font::new(sans_typeface, 15.0),
-            font_sans_bold: Font::new(sans_bold_typeface, 15.0),
+            font_sans: new_rc_font(SANS_TTF, 15.0),
+            font_sans_bold: new_rc_font(SANS_BOLD_TTF, 15.0),
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
             mouse_over_panel: false,
@@ -72,7 +70,7 @@ impl AppHandler for NetCanv<'_> {
             time_state: _,
         }: AppUpdateArgs
     ) {
-        let mouse = self.ui.mouse_position(&input);
+        let mouse = self.ui.abs_mouse_position(&input);
 
         if !self.mouse_over_panel {
             if input.is_mouse_just_down(MouseButton::Left) {
@@ -125,6 +123,8 @@ impl AppHandler for NetCanv<'_> {
             (logical_size.width as f32, logical_size.height as f32)
         };
         self.ui.begin(window_size, Layout::Vertical);
+        self.ui.set_font(self.font_sans.clone());
+        self.ui.set_font_size(14.0);
 
         // drawing area
         self.ui.push_group((self.ui.width(), self.ui.height() - 32.0), Layout::Freeform);
@@ -164,6 +164,12 @@ impl AppHandler for NetCanv<'_> {
             });
             self.ui.pop_group();
         }
+        self.ui.space(16.0);
+
+        // brush size
+        self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
+        self.ui.text(canvas, "Brush size", Color4f::from(Color::BLACK), (AlignH::Center, AlignV::Middle));
+        self.ui.pop_group();
 
         self.ui.pop_group();
     }

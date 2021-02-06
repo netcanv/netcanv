@@ -1,6 +1,8 @@
 use skulpin::app::{InputState, PhysicalPosition};
 use skulpin::skia_safe::*;
 
+use crate::util::RcFont;
+
 #[derive(Copy, Clone, Debug)]
 pub enum AlignH {
     Left,
@@ -15,8 +17,7 @@ pub enum AlignV {
     Bottom,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Alignment(AlignH, AlignV);
+pub type Alignment = (AlignH, AlignV);
 
 #[derive(Copy, Clone, Debug)]
 pub enum Layout {
@@ -29,6 +30,9 @@ struct Group {
     rect: Rect,
     layout: Layout,
     layout_position: Point,
+    font: Option<RcFont>,
+    font_size: f32,
+    font_height_in_pixels: f32
 }
 
 pub struct Ui {
@@ -78,6 +82,9 @@ impl Ui {
             rect: Rect::from_point_and_size((0.0, 0.0), window_size),
             layout,
             layout_position: Point::new(0.0, 0.0),
+            font: None,
+            font_size: -1.0, // invalid font size by default to trigger an error in text()
+            font_height_in_pixels: 0.0,
         };
         self.group_stack.push(group);
     }
@@ -88,6 +95,8 @@ impl Ui {
             rect: Rect::from_point_and_size(top_position + self.top().layout_position, size),
             layout,
             layout_position: Point::new(0.0, 0.0),
+            font: self.top().font.clone(),
+            .. *self.top()
         };
         match self.top().layout {
             Layout::Freeform => (),
@@ -112,10 +121,77 @@ impl Ui {
         self.top_mut().rect.bottom -= padding.1 / 2.0;
     }
 
+    pub fn space(&mut self, offset: f32) {
+        match self.top().layout {
+            Layout::Freeform => panic!("only Vertical and Horizontal layouts can be spaced"),
+            Layout::Horizontal => self.top_mut().layout_position.x += offset,
+            Layout::Vertical => self.top_mut().layout_position.y += offset,
+        }
+    }
+
     pub fn fill(&self, canvas: &mut Canvas, color: Color4f) {
         let mut paint = Paint::new(color, None);
         paint.set_anti_alias(false);
         canvas.draw_rect(self.top().rect, &paint);
+    }
+
+    fn text_size_impl(&self, text: &str, font: &mut Font) -> Size {
+        let original_size = font.size();
+        font.set_size(self.top().font_size);
+        let (advance, _) = font.measure_str(text, None);
+        font.set_size(original_size);
+        Size::new(advance, self.top().font_height_in_pixels)
+    }
+
+    pub fn set_font(&mut self, new_font: RcFont) {
+        self.top_mut().font = Some(new_font);
+    }
+
+    pub fn set_font_size(&mut self, new_font_size: f32) {
+        assert!(new_font_size >= 0.0, "font size must be zero or positive");
+        self.top_mut().font_size = new_font_size;
+        let font = self.top().font.as_ref()
+            .expect("a font must be provided first")
+            .borrow()
+            .with_size(new_font_size)
+            .unwrap();
+        let (_, metrics) = font.metrics();
+        self.top_mut().font_height_in_pixels = metrics.cap_height.abs();
+    }
+
+    pub fn text(&self, canvas: &mut Canvas, text: &str, color: Color4f, alignment: Alignment) {
+        assert!(self.top().font_size >= 0.0, "font size must be provided");
+
+        // ↓ hell on earth
+        let mut font = self.top().font.as_ref()
+            .expect("cannot draw text without a font")
+            .borrow_mut();
+        let original_size = font.size();
+        font.set_size(self.top().font_size);
+
+        let rect = self.top().rect;
+        let Size { width: text_width, height: text_height } = self.text_size_impl(text, &mut font);
+        let x = match alignment.0 {
+            AlignH::Left => rect.left,
+            AlignH::Center => rect.center_x() - text_width / 2.0,
+            AlignH::Right => rect.right - text_width,
+        };
+        let y = match alignment.1 {
+            AlignV::Top => rect.top + text_height,
+            AlignV::Middle => rect.center_y() + text_height / 2.0,
+            AlignV::Bottom => rect.bottom,
+        };
+
+        let mut paint = Paint::new(color, None);
+        paint.set_anti_alias(true);
+        canvas.draw_str(
+            text,
+            Point::new(x, y),
+            &font,
+            &paint,
+        );
+
+        font.set_size(original_size);
     }
 
     pub fn draw_on_canvas(&self, canvas: &mut Canvas, callback: impl FnOnce(&mut Canvas)) {
@@ -126,13 +202,19 @@ impl Ui {
         canvas.restore();
     }
 
-    pub fn mouse_position(&self, input: &InputState) -> Point {
+    pub fn abs_mouse_position(&self, input: &InputState) -> Point {
         let PhysicalPosition { x: xd, y: yd } = input.mouse_position();
         Point::new(xd as f32, yd as f32)
     }
 
+    pub fn mouse_position(&self, input: &InputState) -> Point {
+        self.abs_mouse_position(input) - self.top().rect.to_quad()[0]
+    }
+
     pub fn has_mouse(&self, input: &InputState) -> bool {
-        self.top().rect.contains(self.mouse_position(input))
+        let mouse = self.mouse_position(input);
+        let Size { width, height } = self.top().rect.size();
+        mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
     }
 
 }
