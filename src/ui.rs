@@ -143,20 +143,27 @@ impl Ui {
         Size::new(advance, self.top().font_height_in_pixels)
     }
 
+    fn recalculate_font_metrics(&mut self) {
+        let font = self.top().font.as_ref()
+            .expect("a font must be provided first")
+            .borrow()
+            .with_size(self.top().font_size)
+            .unwrap();
+        let (_, metrics) = font.metrics();
+        self.top_mut().font_height_in_pixels = metrics.cap_height.abs();
+    }
+
     pub fn set_font(&mut self, new_font: RcFont) {
         self.top_mut().font = Some(new_font);
+        if self.top().font_size > 0.0 {
+            self.recalculate_font_metrics();
+        }
     }
 
     pub fn set_font_size(&mut self, new_font_size: f32) {
         assert!(new_font_size >= 0.0, "font size must be zero or positive");
         self.top_mut().font_size = new_font_size;
-        let font = self.top().font.as_ref()
-            .expect("a font must be provided first")
-            .borrow()
-            .with_size(new_font_size)
-            .unwrap();
-        let (_, metrics) = font.metrics();
-        self.top_mut().font_height_in_pixels = metrics.cap_height.abs();
+        self.recalculate_font_metrics();
     }
 
     pub fn text(&self, canvas: &mut Canvas, text: &str, color: Color4f, alignment: Alignment) {
