@@ -22,7 +22,7 @@ pub struct NetCanv<'a> {
 
     mouse_over_panel: bool,
     paint_mode: PaintMode,
-    previous_mouse: (f64, f64),
+    previous_mouse: Point,
     paint_color: Color4f,
 }
 
@@ -55,7 +55,7 @@ impl NetCanv<'_> {
             paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
             mouse_over_panel: false,
             paint_mode: PaintMode::None,
-            previous_mouse: (0.0, 0.0),
+            previous_mouse: Point::new(0.0, 0.0),
             paint_color: hex_color4f(COLOR_PALETTE[0]),
         }
     }
@@ -72,7 +72,7 @@ impl AppHandler for NetCanv<'_> {
             time_state: _,
         }: AppUpdateArgs
     ) {
-        let mouse: (f64, f64) = input.mouse_position().into();
+        let mouse = self.ui.mouse_position(&input);
 
         if !self.mouse_over_panel {
             if input.is_mouse_just_down(MouseButton::Left) {
@@ -88,8 +88,8 @@ impl AppHandler for NetCanv<'_> {
             PaintMode::None => (),
             PaintMode::Paint =>
                 self.paint_canvas.stroke(
-                    (self.previous_mouse.0 as f32, self.previous_mouse.1 as f32),
-                    (mouse.0 as f32, mouse.1 as f32),
+                    self.previous_mouse,
+                    mouse,
                     &Brush::Draw {
                         color: self.paint_color.clone(),
                         stroke_width: 4.0,
@@ -97,8 +97,8 @@ impl AppHandler for NetCanv<'_> {
                 ),
             PaintMode::Erase =>
                 self.paint_canvas.stroke(
-                    (self.previous_mouse.0 as f32, self.previous_mouse.1 as f32),
-                    (mouse.0 as f32, mouse.1 as f32),
+                    self.previous_mouse,
+                    mouse,
                     &Brush::Erase {
                         stroke_width: 8.0,
                     },
