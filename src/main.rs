@@ -5,6 +5,7 @@ use skulpin::LogicalSize;
 mod netcanv;
 mod paint_canvas;
 mod ui;
+mod util;
 
 use netcanv::*;
 
