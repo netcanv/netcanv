@@ -1,7 +1,11 @@
-use skulpin::app::{InputState, PhysicalPosition};
+pub use skulpin::app::InputState;
+use skulpin::app::PhysicalPosition;
 use skulpin::skia_safe::*;
 
 use crate::util::RcFont;
+
+mod slider;
+pub use slider::*;
 
 #[derive(Copy, Clone, Debug)]
 pub enum AlignH {

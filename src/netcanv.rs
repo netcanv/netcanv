@@ -23,7 +23,7 @@ pub struct NetCanv<'a> {
     paint_mode: PaintMode,
     previous_mouse: Point,
     paint_color: Color4f,
-    brush_size: f32,
+    brush_size_slider: Slider,
 }
 
 const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -49,13 +49,15 @@ impl NetCanv<'_> {
         NetCanv {
             font_sans: new_rc_font(SANS_TTF, 15.0),
             font_sans_bold: new_rc_font(SANS_BOLD_TTF, 15.0),
+
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
+
             mouse_over_panel: false,
             paint_mode: PaintMode::None,
             previous_mouse: Point::new(0.0, 0.0),
             paint_color: hex_color4f(COLOR_PALETTE[0]),
-            brush_size: 4.0,
+            brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
         }
     }
 
@@ -83,6 +85,7 @@ impl AppHandler for NetCanv<'_> {
         if input.is_mouse_just_up(MouseButton::Left) || input.is_mouse_just_up(MouseButton::Right) {
             self.paint_mode = PaintMode::None;
         }
+        let brush_size = self.brush_size_slider.value();
         match self.paint_mode {
             PaintMode::None => (),
             PaintMode::Paint =>
@@ -91,7 +94,7 @@ impl AppHandler for NetCanv<'_> {
                     mouse,
                     &Brush::Draw {
                         color: self.paint_color.clone(),
-                        stroke_width: self.brush_size,
+                        stroke_width: brush_size,
                     },
                 ),
             PaintMode::Erase =>
@@ -99,7 +102,7 @@ impl AppHandler for NetCanv<'_> {
                     self.previous_mouse,
                     mouse,
                     &Brush::Erase {
-                        stroke_width: self.brush_size,
+                        stroke_width: brush_size,
                     },
                 ),
         }
@@ -141,7 +144,7 @@ impl AppHandler for NetCanv<'_> {
             outline.set_anti_alias(true);
             outline.set_style(paint::Style::Stroke);
             outline.set_blend_mode(BlendMode::Difference);
-            canvas.draw_circle(mouse, self.brush_size * 0.5, &outline);
+            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
         });
         self.ui.pop_group();
 
@@ -180,9 +183,14 @@ impl AppHandler for NetCanv<'_> {
         self.ui.text(canvas, "Brush size", Color::BLACK, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
+        self.ui.space(8.0);
+        self.brush_size_slider.process(&mut self.ui, canvas, &input, 192.0, Color::BLACK);
+        self.ui.space(8.0);
+
+        let brush_size_string = self.brush_size_slider.value().to_string();
         self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
         self.ui.set_font(self.font_sans_bold.clone());
-        self.ui.text(canvas, self.brush_size.to_string().as_str(), Color::BLACK, (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, brush_size_string.as_str(), Color::BLACK, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
         self.ui.pop_group();
