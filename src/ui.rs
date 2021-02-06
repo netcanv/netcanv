@@ -129,8 +129,8 @@ impl Ui {
         }
     }
 
-    pub fn fill(&self, canvas: &mut Canvas, color: Color4f) {
-        let mut paint = Paint::new(color, None);
+    pub fn fill(&self, canvas: &mut Canvas, color: impl Into<Color4f>) {
+        let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(false);
         canvas.draw_rect(self.top().rect, &paint);
     }
@@ -166,7 +166,7 @@ impl Ui {
         self.recalculate_font_metrics();
     }
 
-    pub fn text(&self, canvas: &mut Canvas, text: &str, color: Color4f, alignment: Alignment) {
+    pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) {
         assert!(self.top().font_size >= 0.0, "font size must be provided");
 
         // ↓ hell on earth
@@ -189,7 +189,7 @@ impl Ui {
             AlignV::Bottom => rect.bottom,
         };
 
-        let mut paint = Paint::new(color, None);
+        let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(true);
         canvas.draw_str(
             text,

@@ -176,14 +176,13 @@ impl AppHandler for NetCanv<'_> {
 
         // brush size
 
-        let black = Color4f::from(Color::BLACK);
         self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
-        self.ui.text(canvas, "Brush size", black.clone(), (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, "Brush size", Color::BLACK, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
         self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
         self.ui.set_font(self.font_sans_bold.clone());
-        self.ui.text(canvas, self.brush_size.to_string().as_str(), black.clone(), (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, self.brush_size.to_string().as_str(), Color::BLACK, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
         self.ui.pop_group();
