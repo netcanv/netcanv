@@ -55,8 +55,7 @@ impl PaintCanvas<'_> {
         to: impl Into<Point>,
         brush: &Brush
     ) {
-        let mut paint = brush.as_paint();
-        self.canvas.draw_line(from.into(), to.into(), &paint);
+        self.canvas.draw_line(from.into(), to.into(), &brush.as_paint());
     }
 
 }

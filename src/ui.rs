@@ -91,7 +91,7 @@ impl Ui {
 
     pub fn push_group(&mut self, size: (f32, f32), layout: Layout) {
         let top_position = Point::new(self.top().rect.left, self.top().rect.top);
-        let mut group = Group {
+        let group = Group {
             rect: Rect::from_point_and_size(top_position + self.top().layout_position, size),
             layout,
             layout_position: Point::new(0.0, 0.0),

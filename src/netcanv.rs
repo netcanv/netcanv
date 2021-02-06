@@ -1,4 +1,3 @@
-use skulpin::*;
 use skulpin::app::{AppHandler, AppUpdateArgs, AppDrawArgs, AppError, MouseButton};
 use skulpin::skia_safe::*;
 
