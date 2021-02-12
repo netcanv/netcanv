@@ -1,5 +1,7 @@
-use std::ffi::CString;
-use skulpin::app::AppBuilder;
+use std::error::Error;
+
+use skulpin::*;
+use skulpin::skia_safe::*;
 
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -13,7 +15,7 @@ mod util;
 
 use netcanv::*;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
 //     let window_size = LogicalSize::new(1024, 600);
 //     AppBuilder::new()
 //         .window_title("netCanv")
@@ -23,14 +25,22 @@ fn main() {
 //         .run(NetCanv::new());
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
+    let winit_window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(1024, 600))
         .with_title("NetCanv")
         .with_resizable(true)
         .build(&event_loop)
         .unwrap();
 
+    let window = WinitWindow::new(&winit_window);
+    let mut renderer = RendererBuilder::new()
+        .use_vulkan_debug_layer(false)
+        .build(&window)?;
+
+    let mut app = NetCanv::new();
+
     event_loop.run(move |event, _, control_flow| {
+        let window = WinitWindow::new(&winit_window);
         *control_flow = ControlFlow::Wait;
 
         match event {
@@ -45,11 +55,9 @@ fn main() {
             },
 
             Event::MainEventsCleared => {
-                window.request_redraw();
-            },
-
-            Event::RedrawRequested(_) => {
-
+                renderer.draw(&window, |canvas, coordinate_system_helper| {
+                    app.process(canvas).unwrap();
+                }).unwrap();
             },
 
             _ => (),

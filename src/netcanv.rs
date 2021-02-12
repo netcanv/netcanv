@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use skulpin::app::{AppHandler, AppUpdateArgs, AppDrawArgs, AppError, MouseButton};
 use skulpin::skia_safe::*;
 
@@ -59,6 +61,14 @@ impl NetCanv<'_> {
             paint_color: hex_color4f(COLOR_PALETTE[0]),
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
         }
+    }
+
+    pub fn process(
+        &mut self,
+        canvas: &mut Canvas,
+    ) -> Result<(), Box<dyn Error>> {
+        canvas.clear(Color::BLACK);
+        Ok(())
     }
 
 }
