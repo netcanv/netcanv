@@ -4,6 +4,7 @@ use skulpin::skia_safe::*;
 
 use crate::util::RcFont;
 
+pub mod input;
 mod slider;
 pub use slider::*;
 

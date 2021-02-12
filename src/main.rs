@@ -14,6 +14,7 @@ mod ui;
 mod util;
 
 use netcanv::*;
+use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
 //     let window_size = LogicalSize::new(1024, 600);
