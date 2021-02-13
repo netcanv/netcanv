@@ -21,7 +21,6 @@ pub struct NetCanv<'a> {
     pub ui: Ui,
     pub paint_canvas: PaintCanvas<'a>,
 
-    mouse_over_panel: bool,
     paint_mode: PaintMode,
     paint_color: Color4f,
     brush_size_slider: Slider,
@@ -56,7 +55,6 @@ impl NetCanv<'_> {
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
 
-            mouse_over_panel: false,
             paint_mode: PaintMode::None,
             paint_color: hex_color4f(COLOR_PALETTE[0]),
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
@@ -120,10 +118,13 @@ impl NetCanv<'_> {
         self.ui.pop_group();
     }
 
-    fn process_bar(&mut self, canvas: &mut Canvas, input: &Input) {
+    fn process_bar(&mut self, canvas: &mut Canvas, input: &mut Input) {
+
+        if self.paint_mode != PaintMode::None {
+            input.lock_mouse_buttons();
+        }
 
         self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Horizontal);
-        self.mouse_over_panel = self.ui.has_mouse(&input);
         self.ui.fill(canvas, Color4f::new(0.9, 0.9, 0.9, 1.0));
         self.ui.pad((16.0, 0.0));
 
@@ -136,9 +137,7 @@ impl NetCanv<'_> {
                 if self.paint_color == color { 0.5 }
                 else if self.ui.has_mouse(&input) { 0.7 }
                 else { 0.8 };
-            if self.paint_mode == PaintMode::None &&
-               self.ui.has_mouse(&input) &&
-               input.mouse_button_is_down(MouseButton::Left) {
+            if self.ui.has_mouse(&input) && input.mouse_button_is_down(MouseButton::Left) {
                 self.paint_color = color.clone();
             }
             self.ui.draw_on_canvas(canvas, |canvas| {
@@ -168,13 +167,15 @@ impl NetCanv<'_> {
 
         self.ui.pop_group();
 
+        input.unlock_mouse_buttons();
+
     }
 
     pub fn process(
         &mut self,
         canvas: &mut Canvas,
         coordinate_system_helper: &CoordinateSystemHelper,
-        input: &Input,
+        input: &mut Input,
     ) -> Result<(), Box<dyn Error>> {
         canvas.clear(Color::WHITE);
 
@@ -196,26 +197,3 @@ impl NetCanv<'_> {
     }
 
 }
-
-// impl AppHandler for NetCanv<'_> {
-
-
-//     fn draw(
-//         &mut self,
-//         AppDrawArgs {
-//             app_control: _,
-//             input_state: input,
-//             time_state: _,
-//             canvas,
-//             coordinate_system_helper,
-//         }: AppDrawArgs
-//     ) {
-//         canvas.clear(Color::WHITE);
-
-//     }
-
-//     fn fatal_error(&mut self, error: &AppError) {
-//         println!("Fatal error: {}", error);
-//     }
-
-// }

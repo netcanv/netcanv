@@ -13,6 +13,7 @@ pub struct Input {
     mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
     mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
     mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
+    mouse_buttons_locked: bool,
 }
 
 impl Input {
@@ -24,6 +25,7 @@ impl Input {
             mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
+            mouse_buttons_locked: false,
         }
     }
 
@@ -36,6 +38,7 @@ impl Input {
     }
 
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
+        if self.mouse_buttons_locked { return false }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_is_down[i]
         } else {
@@ -44,6 +47,7 @@ impl Input {
     }
 
     pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
+        if self.mouse_buttons_locked { return false }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_just_pressed[i]
         } else {
@@ -52,11 +56,20 @@ impl Input {
     }
 
     pub fn mouse_button_just_released(&self, button: MouseButton) -> bool {
+        if self.mouse_buttons_locked { return false }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_just_released[i]
         } else {
             false
         }
+    }
+
+    pub fn lock_mouse_buttons(&mut self) {
+        self.mouse_buttons_locked = true;
+    }
+
+    pub fn unlock_mouse_buttons(&mut self) {
+        self.mouse_buttons_locked = false;
     }
 
     pub fn process_event(&mut self, event: &WindowEvent) {
