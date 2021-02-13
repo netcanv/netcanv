@@ -214,16 +214,11 @@ impl Ui {
         canvas.restore();
     }
 
-    pub fn abs_mouse_position(&self, input: &InputState) -> Point {
-        let PhysicalPosition { x: xd, y: yd } = input.mouse_position();
-        Point::new(xd as f32, yd as f32)
+    pub fn mouse_position(&self, input: &Input) -> Point {
+        input.mouse_position() - self.top().rect.to_quad()[0]
     }
 
-    pub fn mouse_position(&self, input: &InputState) -> Point {
-        self.abs_mouse_position(input) - self.top().rect.to_quad()[0]
-    }
-
-    pub fn has_mouse(&self, input: &InputState) -> bool {
+    pub fn has_mouse(&self, input: &Input) -> bool {
         let mouse = self.mouse_position(input);
         let Size { width, height } = self.top().rect.size();
         mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height

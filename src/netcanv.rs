@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use skulpin::app::{AppHandler, AppUpdateArgs, AppDrawArgs, AppError, MouseButton};
+use skulpin::CoordinateSystemHelper;
 use skulpin::skia_safe::*;
 
 use crate::paint_canvas::*;
@@ -23,7 +23,6 @@ pub struct NetCanv<'a> {
 
     mouse_over_panel: bool,
     paint_mode: PaintMode,
-    previous_mouse: Point,
     paint_color: Color4f,
     brush_size_slider: Slider,
 }
@@ -47,6 +46,8 @@ const COLOR_PALETTE: &'static [u32] = &[
 
 impl NetCanv<'_> {
 
+    const BAR_SIZE: f32 = 32.0;
+
     pub fn new() -> Self {
         NetCanv {
             font_sans: new_rc_font(SANS_TTF, 15.0),
@@ -57,61 +58,34 @@ impl NetCanv<'_> {
 
             mouse_over_panel: false,
             paint_mode: PaintMode::None,
-            previous_mouse: Point::new(0.0, 0.0),
             paint_color: hex_color4f(COLOR_PALETTE[0]),
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
         }
     }
 
-    pub fn process(
-        &mut self,
-        canvas: &mut Canvas,
-        input: &Input,
-    ) -> Result<(), Box<dyn Error>> {
-        canvas.clear(Color::BLACK);
+    fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
+        self.ui.push_group((self.ui.width(), self.ui.height() - Self::BAR_SIZE), Layout::Freeform);
 
-        println!("mouse position: {:?}", input.mouse_position());
-        println!(
-            "left down: {}, just pressed: {}, just released: {}",
-            input.mouse_button_is_down(MouseButton::Left),
-            input.mouse_button_just_pressed(MouseButton::Left),
-            input.mouse_button_just_released(MouseButton::Left),
-        );
+        // input
 
-        Ok(())
-    }
-
-}
-
-impl AppHandler for NetCanv<'_> {
-
-    fn update(
-        &mut self,
-        AppUpdateArgs {
-            app_control: _,
-            input_state: input,
-            time_state: _,
-        }: AppUpdateArgs
-    ) {
-        let mouse = self.ui.abs_mouse_position(&input);
-
-        if !self.mouse_over_panel {
-            if input.is_mouse_just_down(MouseButton::Left) {
+        if self.ui.has_mouse(input) {
+            if input.mouse_button_just_pressed(MouseButton::Left) {
                 self.paint_mode = PaintMode::Paint;
-            } else if input.is_mouse_just_down(MouseButton::Right) {
+            } else if input.mouse_button_just_pressed(MouseButton::Right) {
                 self.paint_mode = PaintMode::Erase;
             }
         }
-        if input.is_mouse_just_up(MouseButton::Left) || input.is_mouse_just_up(MouseButton::Right) {
+        if input.mouse_button_just_released(MouseButton::Left) || input.mouse_button_just_released(MouseButton::Right) {
             self.paint_mode = PaintMode::None;
         }
+
         let brush_size = self.brush_size_slider.value();
         match self.paint_mode {
             PaintMode::None => (),
             PaintMode::Paint =>
                 self.paint_canvas.stroke(
-                    self.previous_mouse,
-                    mouse,
+                    input.previous_mouse_position(),
+                    input.mouse_position(),
                     &Brush::Draw {
                         color: self.paint_color.clone(),
                         stroke_width: brush_size,
@@ -119,39 +93,15 @@ impl AppHandler for NetCanv<'_> {
                 ),
             PaintMode::Erase =>
                 self.paint_canvas.stroke(
-                    self.previous_mouse,
-                    mouse,
+                    input.previous_mouse_position(),
+                    input.mouse_position(),
                     &Brush::Erase {
                         stroke_width: brush_size,
                     },
                 ),
         }
 
-        self.previous_mouse = mouse;
-    }
-
-    fn draw(
-        &mut self,
-        AppDrawArgs {
-            app_control: _,
-            input_state: input,
-            time_state: _,
-            canvas,
-            coordinate_system_helper,
-        }: AppDrawArgs
-    ) {
-        canvas.clear(Color::WHITE);
-
-        let window_size: (f32, f32) = {
-            let logical_size = coordinate_system_helper.window_logical_size();
-            (logical_size.width as f32, logical_size.height as f32)
-        };
-        self.ui.begin(window_size, Layout::Vertical);
-        self.ui.set_font(self.font_sans.clone());
-        self.ui.set_font_size(14.0);
-
-        // drawing area
-        self.ui.push_group((self.ui.width(), self.ui.height() - 32.0), Layout::Freeform);
+        // rendering
         self.ui.draw_on_canvas(canvas, |canvas| {
             canvas.draw_bitmap(
                 &self.paint_canvas,
@@ -166,9 +116,11 @@ impl AppHandler for NetCanv<'_> {
             outline.set_blend_mode(BlendMode::Difference);
             canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
         });
-        self.ui.pop_group();
 
-        // bar
+        self.ui.pop_group();
+    }
+
+    fn process_bar(&mut self, canvas: &mut Canvas, input: &Input) {
 
         self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Horizontal);
         self.mouse_over_panel = self.ui.has_mouse(&input);
@@ -176,6 +128,7 @@ impl AppHandler for NetCanv<'_> {
         self.ui.pad((16.0, 0.0));
 
         // palette
+
         for hex_color in COLOR_PALETTE {
             let color = hex_color4f(*hex_color);
             self.ui.push_group((16.0, self.ui.height()), Layout::Freeform);
@@ -185,7 +138,7 @@ impl AppHandler for NetCanv<'_> {
                 else { 0.8 };
             if self.paint_mode == PaintMode::None &&
                self.ui.has_mouse(&input) &&
-               input.is_mouse_down(MouseButton::Left) {
+               input.mouse_button_is_down(MouseButton::Left) {
                 self.paint_color = color.clone();
             }
             self.ui.draw_on_canvas(canvas, |canvas| {
@@ -214,10 +167,55 @@ impl AppHandler for NetCanv<'_> {
         self.ui.pop_group();
 
         self.ui.pop_group();
+
     }
 
-    fn fatal_error(&mut self, error: &AppError) {
-        println!("Fatal error: {}", error);
+    pub fn process(
+        &mut self,
+        canvas: &mut Canvas,
+        coordinate_system_helper: &CoordinateSystemHelper,
+        input: &Input,
+    ) -> Result<(), Box<dyn Error>> {
+        canvas.clear(Color::WHITE);
+
+        let window_size: (f32, f32) = {
+            let logical_size = coordinate_system_helper.window_logical_size();
+            (logical_size.width as _, logical_size.height as _)
+        };
+        self.ui.begin(window_size, Layout::Vertical);
+        self.ui.set_font(self.font_sans.clone());
+        self.ui.set_font_size(14.0);
+
+        // canvas
+        self.process_canvas(canvas, input);
+
+        // bar
+        self.process_bar(canvas, input);
+
+        Ok(())
     }
 
 }
+
+// impl AppHandler for NetCanv<'_> {
+
+
+//     fn draw(
+//         &mut self,
+//         AppDrawArgs {
+//             app_control: _,
+//             input_state: input,
+//             time_state: _,
+//             canvas,
+//             coordinate_system_helper,
+//         }: AppDrawArgs
+//     ) {
+//         canvas.clear(Color::WHITE);
+
+//     }
+
+//     fn fatal_error(&mut self, error: &AppError) {
+//         println!("Fatal error: {}", error);
+//     }
+
+// }

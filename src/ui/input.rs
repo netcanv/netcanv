@@ -8,6 +8,7 @@ const MOUSE_BUTTON_COUNT: usize = 8;
 
 pub struct Input {
     mouse_position: Point,
+    previous_mouse_position: Point,
 
     mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
     mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
@@ -19,6 +20,7 @@ impl Input {
     pub fn new() -> Self {
         Self {
             mouse_position: Point::new(0.0, 0.0),
+            previous_mouse_position: Point::new(0.0, 0.0),
             mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
@@ -27,6 +29,10 @@ impl Input {
 
     pub fn mouse_position(&self) -> Point {
         self.mouse_position
+    }
+
+    pub fn previous_mouse_position(&self) -> Point {
+        self.previous_mouse_position
     }
 
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
@@ -77,6 +83,7 @@ impl Input {
         for state in &mut self.mouse_button_just_released {
             *state = false;
         }
+        self.previous_mouse_position = self.mouse_position;
     }
 
     fn mouse_button_index(button: MouseButton) -> Option<usize> {

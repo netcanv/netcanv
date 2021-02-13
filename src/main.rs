@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             Event::MainEventsCleared => {
                 renderer.draw(&window, |canvas, coordinate_system_helper| {
-                    app.process(canvas, &input).unwrap();
+                    app.process(canvas, &coordinate_system_helper, &input).unwrap();
                 }).unwrap();
                 input.finish_frame();
             },

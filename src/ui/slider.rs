@@ -16,7 +16,6 @@ pub struct Slider {
     step: SliderStep,
 }
 
-
 impl Slider {
 
     pub fn new(value: f32, min: f32, max: f32, step: SliderStep) -> Self {
@@ -40,13 +39,13 @@ impl Slider {
         &mut self,
         ui: &mut Ui,
         canvas: &mut Canvas,
-        input: &InputState,
+        input: &Input,
         group_width: f32,
         color: impl Into<Color4f>
     ) {
         ui.push_group((group_width, ui.height()), Layout::Freeform);
 
-        if ui.has_mouse(input) && input.is_mouse_down(MouseButton::Left) {
+        if ui.has_mouse(input) && input.mouse_button_is_down(MouseButton::Left) {
             self.value = ui.mouse_position(input).x / ui.width();
         }
 
