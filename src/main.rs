@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build(&window)?;
 
     let mut app = NetCanv::new();
+    let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
         let window = WinitWindow::new(&winit_window);
@@ -52,13 +53,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             } => {
                 if let WindowEvent::CloseRequested = event {
                     *control_flow = ControlFlow::Exit;
+                } else {
+                    input.process_event(&event);
                 }
             },
 
             Event::MainEventsCleared => {
                 renderer.draw(&window, |canvas, coordinate_system_helper| {
-                    app.process(canvas).unwrap();
+                    app.process(canvas, &input).unwrap();
                 }).unwrap();
+                input.finish_frame();
             },
 
             _ => (),

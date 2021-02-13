@@ -1,11 +1,11 @@
-pub use skulpin::app::InputState;
-use skulpin::app::PhysicalPosition;
 use skulpin::skia_safe::*;
 
 use crate::util::RcFont;
 
 pub mod input;
 mod slider;
+
+pub use input::*;
 pub use slider::*;
 
 #[derive(Copy, Clone, Debug)]

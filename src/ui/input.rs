@@ -6,7 +6,7 @@ use winit::event::WindowEvent;
 
 const MOUSE_BUTTON_COUNT: usize = 8;
 
-struct Input {
+pub struct Input {
     mouse_position: Point,
 
     mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
@@ -23,6 +23,10 @@ impl Input {
             mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
         }
+    }
+
+    pub fn mouse_position(&self) -> Point {
+        self.mouse_position
     }
 
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {

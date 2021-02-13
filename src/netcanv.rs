@@ -66,8 +66,18 @@ impl NetCanv<'_> {
     pub fn process(
         &mut self,
         canvas: &mut Canvas,
+        input: &Input,
     ) -> Result<(), Box<dyn Error>> {
         canvas.clear(Color::BLACK);
+
+        println!("mouse position: {:?}", input.mouse_position());
+        println!(
+            "left down: {}, just pressed: {}, just released: {}",
+            input.mouse_button_is_down(MouseButton::Left),
+            input.mouse_button_just_pressed(MouseButton::Left),
+            input.mouse_button_just_released(MouseButton::Left),
+        );
+
         Ok(())
     }
 
