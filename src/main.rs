@@ -1,7 +1,6 @@
 use std::error::Error;
 
 use skulpin::*;
-use skulpin::skia_safe::*;
 
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -17,13 +16,6 @@ use netcanv::*;
 use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
-//     let window_size = LogicalSize::new(1024, 600);
-//     AppBuilder::new()
-//         .window_title("netCanv")
-//         .app_name(CString::new("netCanv").unwrap())
-//         .inner_size(window_size)
-//         .use_vulkan_debug_layer(false)
-//         .run(NetCanv::new());
 
     let event_loop = EventLoop::new();
     let winit_window = WindowBuilder::new()

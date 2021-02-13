@@ -137,7 +137,7 @@ impl NetCanv<'_> {
                 if self.paint_color == color { 0.5 }
                 else if self.ui.has_mouse(&input) { 0.7 }
                 else { 0.8 };
-            if self.ui.has_mouse(&input) && input.mouse_button_is_down(MouseButton::Left) {
+            if self.ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
                 self.paint_color = color.clone();
             }
             self.ui.draw_on_canvas(canvas, |canvas| {

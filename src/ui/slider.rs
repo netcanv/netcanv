@@ -14,6 +14,7 @@ pub struct Slider {
     min: f32,
     max: f32,
     step: SliderStep,
+    sliding: bool,
 }
 
 impl Slider {
@@ -24,6 +25,7 @@ impl Slider {
             min,
             max,
             step,
+            sliding: false,
         }
     }
 
@@ -45,8 +47,16 @@ impl Slider {
     ) {
         ui.push_group((group_width, ui.height()), Layout::Freeform);
 
-        if ui.has_mouse(input) && input.mouse_button_is_down(MouseButton::Left) {
+        if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Left) {
+            self.sliding = true;
+        }
+        if input.mouse_button_just_released(MouseButton::Left) {
+            self.sliding = false;
+        }
+
+        if self.sliding {
             self.value = ui.mouse_position(input).x / ui.width();
+            self.value = self.value.clamp(0.0, 1.0);
         }
 
         ui.draw_on_canvas(canvas, |canvas| {
