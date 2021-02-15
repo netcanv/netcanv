@@ -7,12 +7,13 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
-mod netcanv;
+mod app;
+mod assets;
 mod paint_canvas;
 mod ui;
 mod util;
 
-use netcanv::*;
+use app::*;
 use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -30,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .use_vulkan_debug_layer(false)
         .build(&window)?;
 
-    let mut app = NetCanv::new();
+    let mut app: Box<dyn AppState> = Box::new(paint::State::new()) as _;
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
@@ -51,8 +52,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             },
 
             Event::MainEventsCleared => {
-                renderer.draw(&window, |canvas, coordinate_system_helper| {
-                    app.process(canvas, &coordinate_system_helper, &mut input).unwrap();
+                renderer.draw(&window, |canvas, csh| {
+                    let next = app.process(StateArgs {
+                        canvas,
+                        coordinate_system_helper: &csh,
+                        input: &mut input,
+                    });
+                    if let Some(state) = next {
+                        app = state;
+                    }
                 }).unwrap();
                 input.finish_frame();
             },

@@ -1,8 +1,8 @@
-use std::error::Error;
-
-use skulpin::CoordinateSystemHelper;
 use skulpin::skia_safe::*;
+use skulpin::skia_safe::paint as skpaint;
 
+use crate::app::*;
+use crate::assets::*;
 use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::util::*;
@@ -14,7 +14,7 @@ enum PaintMode {
     Erase,
 }
 
-pub struct NetCanv<'a> {
+pub struct State<'a> {
     pub font_sans: RcFont,
     pub font_sans_bold: RcFont,
 
@@ -25,9 +25,6 @@ pub struct NetCanv<'a> {
     paint_color: Color4f,
     brush_size_slider: Slider,
 }
-
-const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
-const SANS_BOLD_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 
 const DEFAULT_CANVAS_SIZE: (u32, u32) = (1024, 600);
 
@@ -43,12 +40,12 @@ const COLOR_PALETTE: &'static [u32] = &[
     0xffffffff,
 ];
 
-impl NetCanv<'_> {
+impl State<'_> {
 
     const BAR_SIZE: f32 = 32.0;
 
     pub fn new() -> Self {
-        NetCanv {
+        State {
             font_sans: new_rc_font(SANS_TTF, 15.0),
             font_sans_bold: new_rc_font(SANS_BOLD_TTF, 15.0),
 
@@ -110,7 +107,7 @@ impl NetCanv<'_> {
             let mouse = self.ui.mouse_position(&input);
             let mut outline = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
             outline.set_anti_alias(true);
-            outline.set_style(paint::Style::Stroke);
+            outline.set_style(skpaint::Style::Stroke);
             outline.set_blend_mode(BlendMode::Difference);
             canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
         });
@@ -171,12 +168,18 @@ impl NetCanv<'_> {
 
     }
 
-    pub fn process(
+}
+
+impl AppState for State<'_> {
+
+    fn process(
         &mut self,
-        canvas: &mut Canvas,
-        coordinate_system_helper: &CoordinateSystemHelper,
-        input: &mut Input,
-    ) -> Result<(), Box<dyn Error>> {
+        StateArgs {
+            canvas,
+            coordinate_system_helper,
+            input,
+        }: StateArgs,
+    ) -> Option<Box<dyn AppState>> {
         canvas.clear(Color::WHITE);
 
         let window_size: (f32, f32) = {
@@ -193,7 +196,7 @@ impl NetCanv<'_> {
         // bar
         self.process_bar(canvas, input);
 
-        Ok(())
+        None
     }
 
 }
