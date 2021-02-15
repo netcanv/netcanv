@@ -15,11 +15,11 @@ enum PaintMode {
 }
 
 pub struct State<'a> {
-    pub font_sans: RcFont,
-    pub font_sans_bold: RcFont,
+    font_sans: RcFont,
+    font_sans_bold: RcFont,
 
-    pub ui: Ui,
-    pub paint_canvas: PaintCanvas<'a>,
+    ui: Ui,
+    paint_canvas: PaintCanvas<'a>,
 
     paint_mode: PaintMode,
     paint_color: Color4f,
