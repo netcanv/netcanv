@@ -24,9 +24,10 @@ pub struct State<'a> {
     paint_mode: PaintMode,
     paint_color: Color4f,
     brush_size_slider: Slider,
-}
 
-const DEFAULT_CANVAS_SIZE: (u32, u32) = (1024, 600);
+    panning: bool,
+    pan: Vector,
+}
 
 const COLOR_PALETTE: &'static [u32] = &[
     0x100820ff,
@@ -50,18 +51,25 @@ impl State<'_> {
             font_sans_bold: new_rc_font(SANS_BOLD_TTF, 15.0),
 
             ui: Ui::new(),
-            paint_canvas: PaintCanvas::new(DEFAULT_CANVAS_SIZE),
+            paint_canvas: PaintCanvas::new(),
 
             paint_mode: PaintMode::None,
             paint_color: hex_color4f(COLOR_PALETTE[0]),
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
+
+            panning: false,
+            pan: Vector::new(0.0, 0.0),
         }
     }
 
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
         self.ui.push_group((self.ui.width(), self.ui.height() - Self::BAR_SIZE), Layout::Freeform);
 
+        //
         // input
+        //
+
+        // drawing
 
         if self.ui.has_mouse(input) {
             if input.mouse_button_just_pressed(MouseButton::Left) {
@@ -79,8 +87,8 @@ impl State<'_> {
             PaintMode::None => (),
             PaintMode::Paint =>
                 self.paint_canvas.stroke(
-                    input.previous_mouse_position(),
-                    input.mouse_position(),
+                    input.previous_mouse_position() - self.pan,
+                    input.mouse_position() - self.pan,
                     &Brush::Draw {
                         color: self.paint_color.clone(),
                         stroke_width: brush_size,
@@ -88,21 +96,38 @@ impl State<'_> {
                 ),
             PaintMode::Erase =>
                 self.paint_canvas.stroke(
-                    input.previous_mouse_position(),
-                    input.mouse_position(),
+                    input.previous_mouse_position() - self.pan,
+                    input.mouse_position() - self.pan,
                     &Brush::Erase {
                         stroke_width: brush_size,
                     },
                 ),
         }
 
+        // panning
+
+        if self.ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
+            self.panning = true;
+        }
+        if input.mouse_button_just_released(MouseButton::Middle) {
+            self.panning = false;
+        }
+
+        if self.panning {
+            let delta_pan = input.mouse_position() - input.previous_mouse_position();
+            self.pan.offset(delta_pan);
+        }
+
+        //
         // rendering
+        //
+
+        let paint_canvas = &self.paint_canvas;
         self.ui.draw_on_canvas(canvas, |canvas| {
-            canvas.draw_bitmap(
-                &self.paint_canvas,
-                (0.0, 0.0),
-                None,
-            );
+            canvas.save();
+            canvas.translate(self.pan);
+            paint_canvas.draw_to(canvas);
+            canvas.restore();
 
             let mouse = self.ui.mouse_position(&input);
             let mut outline = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
