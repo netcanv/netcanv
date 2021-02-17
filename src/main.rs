@@ -14,6 +14,7 @@ mod ui;
 mod util;
 
 use app::*;
+use assets::*;
 use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -23,15 +24,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_inner_size(LogicalSize::new(1024, 600))
         .with_title("NetCanv")
         .with_resizable(true)
-        .build(&event_loop)
-        .unwrap();
+        .build(&event_loop)?;
 
     let window = WinitWindow::new(&winit_window);
     let mut renderer = RendererBuilder::new()
         .use_vulkan_debug_layer(false)
         .build(&window)?;
 
-    let mut app: Box<dyn AppState> = Box::new(paint::State::new()) as _;
+    let assets = Assets::new();
+    let mut app: Box<dyn AppState> = Box::new(paint::State::new(assets)) as _;
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {

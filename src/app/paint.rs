@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use skulpin::skia_safe::*;
 use skulpin::skia_safe::paint as skpaint;
 
@@ -15,8 +17,7 @@ enum PaintMode {
 }
 
 pub struct State<'a> {
-    font_sans: RcFont,
-    font_sans_bold: RcFont,
+    assets: Assets,
 
     ui: Ui,
     paint_canvas: PaintCanvas<'a>,
@@ -41,14 +42,13 @@ const COLOR_PALETTE: &'static [u32] = &[
     0xffffffff,
 ];
 
-impl State<'_> {
+impl<'a> State<'a> {
 
     const BAR_SIZE: f32 = 32.0;
 
-    pub fn new() -> Self {
-        State {
-            font_sans: new_rc_font(SANS_TTF, 15.0),
-            font_sans_bold: new_rc_font(SANS_BOLD_TTF, 15.0),
+    pub fn new(assets: Assets) -> Self {
+        Self {
+            assets,
 
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(),
@@ -135,7 +135,16 @@ impl State<'_> {
             outline.set_style(skpaint::Style::Stroke);
             outline.set_blend_mode(BlendMode::Difference);
             canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
+
         });
+        if self.panning {
+            let position = format!("{}, {}", f32::floor(self.pan.x / 256.0), f32::floor(self.pan.y / 256.0));
+            self.ui.pad((32.0, 32.0));
+            self.ui.push_group((72.0, 32.0), Layout::Freeform);
+            self.ui.fill(canvas, Color::BLACK.with_a(128));
+            self.ui.text(canvas, &position, Color::WHITE, (AlignH::Center, AlignV::Middle));
+            self.ui.pop_group();
+        }
 
         self.ui.pop_group();
     }
@@ -183,7 +192,7 @@ impl State<'_> {
 
         let brush_size_string = self.brush_size_slider.value().to_string();
         self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
-        self.ui.set_font(self.font_sans_bold.clone());
+        self.ui.set_font(self.assets.sans_bold.clone());
         self.ui.text(canvas, brush_size_string.as_str(), Color::BLACK, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
@@ -212,7 +221,7 @@ impl AppState for State<'_> {
             (logical_size.width as _, logical_size.height as _)
         };
         self.ui.begin(window_size, Layout::Vertical);
-        self.ui.set_font(self.font_sans.clone());
+        self.ui.set_font(self.assets.sans.clone());
         self.ui.set_font_size(14.0);
 
         // canvas
