@@ -1162,30 +1162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdl2"
-version = "0.34.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29fb006600d16da4f1f1e5c7b398f44af2f1b476ff5f2e555651bd78cf4c18d8"
-dependencies = [
- "bitflags",
- "lazy_static",
- "libc",
- "raw-window-handle",
- "sdl2-sys",
-]
-
-[[package]]
-name = "sdl2-sys"
-version = "0.34.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ed17d6d46b62b7df12134513bcc4f071268963e8c9bc8bf7ad983fbfb2bc3cc"
-dependencies = [
- "cfg-if 0.1.10",
- "libc",
- "version-compare",
-]
-
-[[package]]
 name = "semver"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1280,7 +1256,6 @@ dependencies = [
  "log",
  "skulpin-app-winit",
  "skulpin-renderer",
- "skulpin-renderer-sdl2",
  "skulpin-renderer-winit",
 ]
 
@@ -1305,20 +1280,6 @@ dependencies = [
  "log",
  "skia-bindings",
  "skia-safe",
-]
-
-[[package]]
-name = "skulpin-renderer-sdl2"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5d7bc1b0abe6753483eb15dc312a72ea6e1287eb139b68786aaf85ddd4e5dc1"
-dependencies = [
- "ash-window",
- "log",
- "raw-window-handle",
- "sdl2",
- "sdl2-sys",
- "skulpin-renderer",
 ]
 
 [[package]]
@@ -1636,12 +1597,6 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
-
-[[package]]
-name = "version-compare"
-version = "0.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d63556a25bae6ea31b52e640d7c41d1ab27faba4ccb600013837a3d0b3994ca1"
 
 [[package]]
 name = "version_check"
