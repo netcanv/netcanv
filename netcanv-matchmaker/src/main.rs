@@ -24,7 +24,7 @@ struct Host {
 struct Matchmaker {
     hosts: HashMap<SocketAddr, Host>,
     rooms: HashMap<u32, Host>,
-    response_queue: Vec<Packet>,
+    tx_queues: HashMap<SocketAddr, Vec<Packet>>,
 }
 
 #[derive(Debug)]
@@ -40,16 +40,19 @@ impl Matchmaker {
         Self {
             hosts: HashMap::new(),
             rooms: HashMap::new(),
-            response_queue: Vec::new(),
+            tx_queues: HashMap::new(),
         }
     }
 
-    fn enqueue_response(&mut self, packet: Packet) {
-        self.response_queue.push(packet);
+    fn enqueue_response(&mut self, dest_addr: SocketAddr, packet: Packet) {
+        if !self.tx_queues.contains_key(&dest_addr) {
+            self.tx_queues.insert(dest_addr, Vec::new());
+        }
+        self.tx_queues.get_mut(&dest_addr).unwrap().push(packet);
     }
 
-    fn enqueue_error(&mut self, message: &str) {
-        self.response_queue.push(error_packet(message));
+    fn enqueue_error(&mut self, dest_addr: SocketAddr, message: &str) {
+        self.enqueue_response(dest_addr, error_packet(message));
     }
 
     fn find_free_room_id(&self) -> Option<u32> {
@@ -70,9 +73,9 @@ impl Matchmaker {
                 let host = Host { addr, room_id };
                 self.hosts.insert(addr, host.clone());
                 self.rooms.insert(room_id, host);
-                self.enqueue_response(Packet::RoomId(room_id));
+                self.enqueue_response(addr, Packet::RoomId(room_id));
             },
-            None => self.enqueue_error("Could not find any more free rooms. Try again"),
+            None => self.enqueue_error(addr, "Could not find any more free rooms. Try again"),
         }
     }
 

@@ -9,7 +9,7 @@ members = ["netcanv-matchmaker"]
 
 [dependencies]
 winit = "0.22.2"
-skulpin = "0.11.2"
+skulpin = { version = "0.11.2", default-features = false, features = ["skia_complete", "skulpin_winit", "winit-22"] }
 laminar = "0.4.0"
 serde = "1.0.123"
 bincode = "1.3.2"
