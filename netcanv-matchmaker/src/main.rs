@@ -6,6 +6,9 @@ use std::error;
 use std::net::SocketAddr;
 
 use laminar::{Socket, SocketEvent};
+use thiserror::Error;
+
+use netcanv::net::txqueues::{SendQueue, SendError};
 
 mod packet;
 
@@ -24,13 +27,18 @@ struct Host {
 struct Matchmaker {
     hosts: HashMap<SocketAddr, Host>,
     rooms: HashMap<u32, Host>,
-    tx_queues: HashMap<SocketAddr, Vec<Packet>>,
+    send_queue: SendQueue<Packet>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum Error {
+    #[error("Couldn't receive packet")]
     Recv,
+    #[error("Couldn't send packet")]
+    Send(#[from] SendError),
+    #[error("Unrecognized or unimplemented packet")]
     InvalidPacket,
+    #[error("Invalid packet (bad encoding)")]
     Deserialize,
 }
 
@@ -40,15 +48,12 @@ impl Matchmaker {
         Self {
             hosts: HashMap::new(),
             rooms: HashMap::new(),
-            tx_queues: HashMap::new(),
+            send_queue: SendQueue::new(),
         }
     }
 
     fn enqueue_response(&mut self, dest_addr: SocketAddr, packet: Packet) {
-        if !self.tx_queues.contains_key(&dest_addr) {
-            self.tx_queues.insert(dest_addr, Vec::new());
-        }
-        self.tx_queues.get_mut(&dest_addr).unwrap().push(packet);
+        self.send_queue.enqueue(dest_addr, packet);
     }
 
     fn enqueue_error(&mut self, dest_addr: SocketAddr, message: &str) {
@@ -96,26 +101,27 @@ impl Matchmaker {
         }
     }
 
-    fn incoming_event(&mut self, event: SocketEvent) -> (Result<(), Error>, SocketAddr) {
+    fn incoming_event(&mut self, event: SocketEvent) -> Result<(), Error> {
         match event {
             SocketEvent::Packet(packet) => {
-                let payload = packet.payload();
-                match bincode::deserialize(payload) {
-                    Ok(decoded) => (self.incoming_packet(packet.addr(), decoded), packet.addr()),
-                    Err(error) => {
+                bincode::deserialize(packet.payload())
+                    .map_err(|_| Error::Deserialize)
+                    .and_then(|decoded| {
+                        self.incoming_packet(packet.addr(), decoded)
+                    })
+                    .or_else(|error| {
                         eprintln!("! error/packet decode from {}: {}", packet.addr(), error);
-                        (Err(Error::Deserialize), packet.addr())
-                    },
-                }
+                        Err(error)
+                    })
             },
             SocketEvent::Connect(addr) => {
                 eprintln!("* connected: {}", addr);
-                (Ok(()), addr)
+                Ok(())
             },
             SocketEvent::Timeout(addr) | SocketEvent::Disconnect(addr) => {
                 eprintln!("* disconnected: {}", addr);
                 self.disconnect(addr);
-                (Ok(()), addr)
+                Ok(())
             },
         }
     }
@@ -133,38 +139,27 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     let mut state = Matchmaker::new();
 
-    let error_response_payload = bincode::serialize(&[0u32])?;
-
     eprintln!("Listening for incoming connections");
 
     loop {
         // receive
-        let result = rx.recv()
+        rx.recv()
             .map_err(|_| Error::Recv)
             .and_then(|event| {
                 // process
                 let has_response = matches!(&event, SocketEvent::Packet(_));
-                let (result, addr) = state.incoming_event(event);
+                let result = state.incoming_event(event);
                 // transmit
                 if has_response {
-                    assert!(state.response_queue.len() > 0);
-                    let packet: laminar::Packet = match bincode::serialize(&state.response_queue) {
-                        Ok(response_payload) =>
-                            laminar::Packet::reliable_ordered(addr, response_payload, None),
-                        Err(error) => {
-                            eprintln!("! error/send: {}", error);
-                            laminar::Packet::reliable_ordered(addr, error_response_payload.clone(), None)
-                        },
-                    };
-                    tx.send(packet).expect("failed to send packet to the receiving channel. not my fault.");
+                    state.send_queue.send(&tx)?;
                 }
                 result
-            });
-        if let Err(error) = result {
-            eprintln!("! error/recv: {:?}", error);
-        }
-
-        state.response_queue.clear();
+            })
+            .or_else(|error| -> Result<_, ()> {
+                eprintln!("! error/recv: {:?}", error);
+                Ok(())
+            })
+            .unwrap();
     }
 }
 
