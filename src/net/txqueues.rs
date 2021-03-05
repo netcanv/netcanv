@@ -6,16 +6,16 @@ use laminar::Packet;
 use serde::Serialize;
 use thiserror::Error;
 
-pub struct SendQueue<T: Serialize> {
-    queued_packets: HashMap<SocketAddr, Vec<T>>,
-}
-
 #[derive(Error, Debug)]
 pub enum SendError {
     #[error("Couldn't serialize a queue")]
     Serialize(#[from] bincode::Error),
     #[error("The sender is closed")]
     Send,
+}
+
+pub struct SendQueue<T: Serialize> {
+    queued_packets: HashMap<SocketAddr, Vec<T>>,
 }
 
 impl<T: Serialize> SendQueue<T> {
@@ -33,12 +33,25 @@ impl<T: Serialize> SendQueue<T> {
         self.queued_packets.get_mut(&dest_addr).unwrap().push(packet);
     }
 
+    pub fn serialize(&self, addr: SocketAddr) -> Option<Vec<u8>> {
+        let queue = self.queued_packets.get(&addr)?;
+        bincode::serialize(queue).ok()
+    }
+
+    pub fn clear(&mut self) {
+        for (_, queue) in &mut self.queued_packets {
+            queue.clear();
+        }
+    }
+
     pub fn send(&mut self, tx: &Sender<Packet>) -> Result<(), SendError> {
         for (addr, queue) in &mut self.queued_packets {
-            let payload = bincode::serialize(queue)?;
-            let packet = Packet::reliable_ordered(*addr, payload, None);
-            tx.send(packet).map_err(|_| SendError::Send)?;
-            queue.clear();
+            if !queue.is_empty() {
+                let payload = bincode::serialize(queue)?;
+                let packet = Packet::reliable_ordered(*addr, payload, None);
+                tx.send(packet).map_err(|_| SendError::Send)?;
+                queue.clear();
+            }
         }
         Ok(())
     }

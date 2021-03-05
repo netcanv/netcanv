@@ -14,10 +14,6 @@ pub enum Packet {
     HostAddress(String),
     // notification from the matchmaker to the host with a connecting client's IP address and port
     ClientAddress(String),
-    // request from the client to the host to join a room, the string is the nickname
-    Join(String),
-    // ack from the host to the client that they are permitted to join the room. the u8 is the client's ID
-    JoinAck(u8),
 
     // an error occured
     Error(String),
