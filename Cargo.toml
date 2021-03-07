@@ -5,14 +5,15 @@ authors = ["lqdev <liquidekgaming@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["netcanv-matchmaker"]
+members = ["netcanv-matchmaker", "netcanv-protocol"]
 
 [dependencies]
-winit = "0.22.2"
-skulpin = { version = "0.11.2", default-features = false, features = ["skia_complete", "skulpin_winit", "winit-22"] }
+winit = "0.24.0"
+skulpin = { version = "0.11.2", default-features = false, features = ["skia_complete", "skulpin_winit", "winit-24"] }
 laminar = "0.4.0"
 serde = { version = "1.0.123", features = ["derive"] }
 bincode = "1.3.2"
 crossbeam-channel = "0.4.4"
 thiserror = "1.0.24"
 
+netcanv-protocol = { path = "netcanv-protocol" }

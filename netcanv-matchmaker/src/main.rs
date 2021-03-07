@@ -9,10 +9,7 @@ use laminar::{Socket, SocketEvent};
 use thiserror::Error;
 
 use netcanv::net::txqueues::{SendQueue, SendError};
-
-mod packet;
-
-pub use packet::*;
+use netcanv_protocol::matchmaker::*;
 
 const PORT: u16 = 62137;
 
