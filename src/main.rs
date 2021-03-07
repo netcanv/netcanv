@@ -31,8 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .use_vulkan_debug_layer(false)
         .build(&window)?;
 
-    let assets = Assets::new();
-    let mut app: Box<dyn AppState> = Box::new(paint::State::new(assets)) as _;
+    let assets = Assets::new(ColorScheme::light());
+    let mut app: Box<dyn AppState> = Box::new(lobby::State::new(assets)) as _;
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {

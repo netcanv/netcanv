@@ -156,7 +156,7 @@ impl<'a> State<'a> {
         }
 
         self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Horizontal);
-        self.ui.fill(canvas, Color4f::new(0.9, 0.9, 0.9, 1.0));
+        self.ui.fill(canvas, self.assets.colors.panel);
         self.ui.pad((16.0, 0.0));
 
         // palette
@@ -183,17 +183,17 @@ impl<'a> State<'a> {
         // brush size
 
         self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
-        self.ui.text(canvas, "Brush size", Color::BLACK, (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, "Brush size", self.assets.colors.text, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
         self.ui.space(8.0);
-        self.brush_size_slider.process(&mut self.ui, canvas, &input, 192.0, Color::BLACK);
+        self.brush_size_slider.process(&mut self.ui, canvas, &input, 192.0, self.assets.colors.slider);
         self.ui.space(8.0);
 
         let brush_size_string = self.brush_size_slider.value().to_string();
         self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
         self.ui.set_font(self.assets.sans_bold.clone());
-        self.ui.text(canvas, brush_size_string.as_str(), Color::BLACK, (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, brush_size_string.as_str(), self.assets.colors.text, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
 
         self.ui.pop_group();
@@ -216,11 +216,7 @@ impl AppState for State<'_> {
     ) -> Option<Box<dyn AppState>> {
         canvas.clear(Color::WHITE);
 
-        let window_size: (f32, f32) = {
-            let logical_size = coordinate_system_helper.window_logical_size();
-            (logical_size.width as _, logical_size.height as _)
-        };
-        self.ui.begin(window_size, Layout::Vertical);
+        self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Vertical);
         self.ui.set_font(self.assets.sans.clone());
         self.ui.set_font_size(14.0);
 

@@ -24,7 +24,7 @@ pub enum AlignV {
 
 pub type Alignment = (AlignH, AlignV);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Layout {
     Freeform,
     Horizontal,
@@ -119,6 +119,27 @@ impl Ui {
         self.group_stack.pop();
     }
 
+    pub fn align(&mut self, alignment: Alignment) {
+        assert!(self.group_stack.len() >= 2, "at least two groups (parent and child) must be present for alignment");
+
+        let mut iter = self.group_stack.iter_mut();
+        let child = iter.next_back().unwrap();
+        let parent = iter.next_back().unwrap();
+        assert!(parent.layout == Layout::Freeform, "the parent must have Freeform layout");
+
+        let x = match alignment.0 {
+            AlignH::Left => parent.rect.left,
+            AlignH::Center => parent.rect.center_x() - child.rect.width() / 2.0,
+            AlignH::Right => parent.rect.right - child.rect.width(),
+        };
+        let y = match alignment.1 {
+            AlignV::Top => parent.rect.top,
+            AlignV::Middle => parent.rect.center_y() - child.rect.height() / 2.0,
+            AlignV::Bottom => parent.rect.bottom - child.rect.height(),
+        };
+        child.rect.set_xywh(x, y, child.rect.width(), child.rect.height());
+    }
+
     pub fn pad(&mut self, padding: (f32, f32)) {
         self.top_mut().rect.left += padding.0 / 2.0;
         self.top_mut().rect.right -= padding.0 / 2.0;
@@ -140,6 +161,14 @@ impl Ui {
         canvas.draw_rect(self.top().rect, &paint);
     }
 
+    pub fn stroke(&self, canvas: &mut Canvas, color: impl Into<Color4f>, thickness: f32) {
+        let mut paint = Paint::new(color.into(), None);
+        paint.set_anti_alias(false);
+        paint.set_style(paint::Style::Stroke);
+        paint.set_stroke_width(thickness);
+        canvas.draw_rect(self.top().rect, &paint);
+    }
+
     fn text_size_impl(&self, text: &str, font: &mut Font) -> Size {
         let original_size = font.size();
         font.set_size(self.top().font_size);
@@ -149,6 +178,7 @@ impl Ui {
     }
 
     fn recalculate_font_metrics(&mut self) {
+        // ↓ hell on earth
         let font = self.top().font.as_ref()
             .expect("a font must be provided first")
             .borrow()
@@ -174,7 +204,6 @@ impl Ui {
     pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) {
         assert!(self.top().font_size >= 0.0, "font size must be provided");
 
-        // ↓ hell on earth
         let mut font = self.top().font.as_ref()
             .expect("cannot draw text without a font")
             .borrow_mut();

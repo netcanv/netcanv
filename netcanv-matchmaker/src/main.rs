@@ -85,7 +85,8 @@ impl Matchmaker {
         let host = match self.rooms.get(&room_id) {
             Some(host) => host,
             None => {
-                self.enqueue_error(client_addr, "No room found with the given ID. Check spelling of the ID");
+                self.enqueue_error(client_addr,
+                    "No room found with the given ID. Check whether you spelled the ID correctly");
                 return;
             },
         }.clone();

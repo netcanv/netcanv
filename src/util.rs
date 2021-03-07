@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use skulpin::CoordinateSystemHelper;
 use skulpin::skia_safe::*;
 
 // colors
@@ -11,6 +12,13 @@ pub fn hex_color4f(hex: u32) -> Color4f {
     let b = ((hex >> 8) & 0xFF) as f32 / 255.0;
     let a = (hex & 0xFF) as f32 / 255.0;
     Color4f::new(r, g, b, a)
+}
+
+// conversions
+
+pub fn get_window_size(coordinate_system_helper: &CoordinateSystemHelper) -> (f32, f32) {
+    let logical_size = coordinate_system_helper.window_logical_size();
+    (logical_size.width as _, logical_size.height as _)
 }
 
 // resources
