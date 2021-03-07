@@ -4,9 +4,11 @@ use crate::util::RcFont;
 
 pub mod input;
 mod slider;
+mod textfield;
 
 pub use input::*;
 pub use slider::*;
+pub use textfield::*;
 
 #[derive(Copy, Clone, Debug)]
 pub enum AlignH {
@@ -161,12 +163,8 @@ impl Ui {
         canvas.draw_rect(self.top().rect, &paint);
     }
 
-    pub fn stroke(&self, canvas: &mut Canvas, color: impl Into<Color4f>, thickness: f32) {
-        let mut paint = Paint::new(color.into(), None);
-        paint.set_anti_alias(false);
-        paint.set_style(paint::Style::Stroke);
-        paint.set_stroke_width(thickness);
-        canvas.draw_rect(self.top().rect, &paint);
+    pub fn clip(&self, canvas: &mut Canvas) {
+        canvas.clip_rect(self.top().rect, ClipOp::Intersect, false);
     }
 
     fn text_size_impl(&self, text: &str, font: &mut Font) -> Size {
@@ -175,6 +173,14 @@ impl Ui {
         let (advance, _) = font.measure_str(text, None);
         font.set_size(original_size);
         Size::new(advance, self.top().font_height_in_pixels)
+    }
+
+    pub fn font(&self) -> Option<&RcFont> {
+        self.top().font.as_ref()
+    }
+
+    pub fn font_size(&self) -> f32 {
+        self.top().font_size
     }
 
     fn recalculate_font_metrics(&mut self) {

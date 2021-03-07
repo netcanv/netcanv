@@ -1,5 +1,6 @@
 use skulpin::skia_safe::Color;
 
+use crate::ui::TextFieldColors;
 use crate::util::{RcFont, new_rc_font};
 
 const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -11,6 +12,7 @@ pub struct ColorScheme {
     pub panel2: Color,
     pub separator: Color,
     pub slider: Color,
+    pub text_field: TextFieldColors,
 }
 
 pub struct Assets {
@@ -41,6 +43,13 @@ impl ColorScheme {
             panel2: Color::new(0xffffffff),
             separator: Color::new(0xff202020),
             slider: Color::new(0xff000000),
+            text_field: TextFieldColors {
+                fill: Color::new(0xffffffff),
+                outline: Color::new(0xff303030),
+                text: Color::new(0xff000000),
+                text_hint: Color::new(0x7f000000),
+                label: Color::new(0xff000000),
+            },
         }
     }
 

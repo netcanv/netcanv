@@ -8,6 +8,10 @@ use crate::util::get_window_size;
 pub struct State {
     assets: Assets,
     ui: Ui,
+
+    nickname_field: TextField,
+    matchmaker_field: TextField,
+    room_id_field: TextField,
 }
 
 impl State {
@@ -16,6 +20,9 @@ impl State {
         Self {
             assets,
             ui: Ui::new(),
+            nickname_field: TextField::new(None),
+            matchmaker_field: TextField::new(Some("netcanv.org")),
+            room_id_field: TextField::new(None),
         }
     }
 
@@ -40,7 +47,30 @@ impl State {
     }
 
     fn process_menu(&mut self, canvas: &mut Canvas, input: &Input) -> Option<Box<dyn AppState>> {
-        self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Freeform);
+        self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Vertical);
+
+        // nickname, matchmaker
+        self.ui.push_group((self.ui.width(), TextField::labelled_height(&self.ui)), Layout::Horizontal);
+        self.nickname_field.process_with_label(
+            &mut self.ui,
+            canvas,
+            input,
+            160.0,
+            &self.assets.colors.text_field,
+            "Nickname",
+            Some("Name shown to others"),
+        );
+        self.ui.space(16.0);
+        self.matchmaker_field.process_with_label(
+            &mut self.ui,
+            canvas,
+            input,
+            160.0,
+            &self.assets.colors.text_field,
+            "Matchmaker",
+            Some("IP address and port"),
+        );
+        self.ui.pop_group();
 
         self.ui.pop_group();
 
@@ -70,7 +100,8 @@ impl AppState for State {
         self.ui.push_group((self.ui.width(), 420.0), Layout::Vertical);
         self.ui.align((AlignH::Left, AlignV::Middle));
         self.process_header(canvas);
-        self.ui.space(16.0);
+        self.ui.space(24.0);
+        self.process_menu(canvas, input);
         self.ui.pop_group();
 
         None
