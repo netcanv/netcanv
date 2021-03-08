@@ -74,6 +74,8 @@ impl State {
 
         self.ui.pop_group();
 
+        chain_focus(input, &mut [&mut self.nickname_field, &mut self.matchmaker_field]);
+
         None
     }
 

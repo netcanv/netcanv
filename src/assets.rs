@@ -44,8 +44,9 @@ impl ColorScheme {
             separator: Color::new(0xff202020),
             slider: Color::new(0xff000000),
             text_field: TextFieldColors {
+                outline: Color::new(0xff808080),
+                outline_focus: Color::new(0xff303030),
                 fill: Color::new(0xffffffff),
-                outline: Color::new(0xff303030),
                 text: Color::new(0xff000000),
                 text_hint: Color::new(0x7f000000),
                 label: Color::new(0xff000000),

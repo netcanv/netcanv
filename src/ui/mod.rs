@@ -1,3 +1,5 @@
+use std::cell::{Ref, RefMut};
+
 use skulpin::skia_safe::*;
 
 use crate::util::RcFont;
@@ -167,12 +169,12 @@ impl Ui {
         canvas.clip_rect(self.top().rect, ClipOp::Intersect, false);
     }
 
-    fn text_size_impl(&self, text: &str, font: &mut Font) -> Size {
+    fn text_size_impl(&self, text: &str, font: &mut Font) -> (f32, f32) {
         let original_size = font.size();
         font.set_size(self.top().font_size);
         let (advance, _) = font.measure_str(text, None);
         font.set_size(original_size);
-        Size::new(advance, self.top().font_height_in_pixels)
+        (advance, self.top().font_height_in_pixels)
     }
 
     pub fn font(&self) -> Option<&RcFont> {
@@ -183,11 +185,22 @@ impl Ui {
         self.top().font_size
     }
 
-    fn recalculate_font_metrics(&mut self) {
-        // ↓ hell on earth
-        let font = self.top().font.as_ref()
+    fn borrow_font(&self) -> Ref<Font> {
+        self.top()
+            .font.as_ref()
             .expect("a font must be provided first")
             .borrow()
+    }
+
+    fn borrow_font_mut(&self) -> RefMut<Font> {
+        self.top()
+            .font.as_ref()
+            .expect("a font must be provided first")
+            .borrow_mut()
+    }
+
+    fn recalculate_font_metrics(&mut self) {
+        let font = self.borrow_font()
             .with_size(self.top().font_size)
             .unwrap();
         let (_, metrics) = font.metrics();
@@ -207,17 +220,10 @@ impl Ui {
         self.recalculate_font_metrics();
     }
 
-    pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) {
-        assert!(self.top().font_size >= 0.0, "font size must be provided");
-
-        let mut font = self.top().font.as_ref()
-            .expect("cannot draw text without a font")
-            .borrow_mut();
-        let original_size = font.size();
-        font.set_size(self.top().font_size);
-
+    fn text_origin_impl(&self, text: &str, alignment: Alignment, font: &mut Font) -> (Point, f32) {
         let rect = self.top().rect;
-        let Size { width: text_width, height: text_height } = self.text_size_impl(text, &mut font);
+
+        let (text_width, text_height) = self.text_size_impl(text, font);
         let x = match alignment.0 {
             AlignH::Left => rect.left,
             AlignH::Center => rect.center_x() - text_width / 2.0,
@@ -228,17 +234,32 @@ impl Ui {
             AlignV::Middle => rect.center_y() + text_height / 2.0,
             AlignV::Bottom => rect.bottom,
         };
+        (Point::new(x, y), text_width)
+    }
+
+    pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) -> f32 {
+        assert!(self.top().font_size >= 0.0, "font size must be provided");
+
+        let mut font = self.borrow_font_mut();
+        let original_size = font.size();
+        font.set_size(self.top().font_size);
 
         let mut paint = Paint::new(color.into(), None);
+        let (origin, advance) = self.text_origin_impl(text, alignment, &mut font);
         paint.set_anti_alias(true);
-        canvas.draw_str(
-            text,
-            Point::new(x, y),
-            &font,
-            &paint,
-        );
+        canvas.draw_str(text, origin, &font, &paint);
 
         font.set_size(original_size);
+
+        advance
+    }
+
+    pub fn text_size(&self, text: &str) -> (f32, f32) {
+        self.text_size_impl(text, &mut self.borrow_font_mut())
+    }
+
+    pub fn text_origin(&self, text: &str, alignment: Alignment) -> Point {
+        self.text_origin_impl(text, alignment, &mut self.borrow_font_mut()).0
     }
 
     pub fn draw_on_canvas(&self, canvas: &mut Canvas, callback: impl FnOnce(&mut Canvas)) {
@@ -259,4 +280,28 @@ impl Ui {
         mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
     }
 
+}
+
+pub trait Focus {
+    fn focused(&self) -> bool;
+    fn set_focus(&mut self, focused: bool);
+}
+
+pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
+    if input.key_just_typed(VirtualKeyCode::Tab) {
+        let mut had_focus = false;
+        for text_field in fields.iter_mut() {
+            if had_focus {
+                text_field.set_focus(true);
+                return
+            }
+            if text_field.focused() {
+                text_field.set_focus(false);
+                had_focus = true;
+            }
+        }
+        if !fields.is_empty() {
+            fields[0].set_focus(true);
+        }
+    }
 }

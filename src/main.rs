@@ -5,6 +5,7 @@ use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::platform::unix::WindowBuilderExtUnix;
 use winit::window::WindowBuilder;
 
 mod app;
@@ -20,11 +21,17 @@ use ui::input::*;
 fn main() -> Result<(), Box<dyn Error>> {
 
     let event_loop = EventLoop::new();
-    let winit_window = WindowBuilder::new()
-        .with_inner_size(LogicalSize::new(1024, 600))
-        .with_title("NetCanv")
-        .with_resizable(true)
-        .build(&event_loop)?;
+    let winit_window = {
+        let mut b = WindowBuilder::new()
+            .with_inner_size(LogicalSize::new(1024, 600))
+            .with_title("NetCanv")
+            .with_resizable(true);
+        #[cfg(target_os = "linux")]
+        {
+            b = b.with_app_id("netcanv".into())
+        }
+        b
+    }.build(&event_loop)?;
 
     let window = WinitWindow::new(&winit_window);
     let mut renderer = RendererBuilder::new()
