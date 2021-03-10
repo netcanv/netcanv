@@ -5,9 +5,11 @@ use skulpin::skia_safe::*;
 use crate::util::RcFont;
 
 pub mod input;
+mod expand;
 mod slider;
 mod textfield;
 
+pub use expand::*;
 pub use input::*;
 pub use slider::*;
 pub use textfield::*;
@@ -260,6 +262,28 @@ impl Ui {
 
     pub fn text_origin(&self, text: &str, alignment: Alignment) -> Point {
         self.text_origin_impl(text, alignment, &mut self.borrow_font_mut()).0
+    }
+
+    pub fn icon(
+        &mut self,
+        canvas: &mut Canvas,
+        icon: &Image,
+        color: impl Into<Color4f>,
+        group_size: Option<(f32, f32)>
+    ) {
+        let group_size = group_size.unwrap_or((icon.width() as f32, icon.height() as f32));
+        self.push_group(group_size, Layout::Freeform);
+
+        // probably quite horrible but there aren't that many icons drawn to the screen at once in the first place
+        let image_bounds = IRect::new(0, 0, icon.width(), icon.height());
+        let color_filter = color_filters::blend(color.into().to_color(), BlendMode::SrcATop).unwrap();
+        let filter = image_filters::color_filter(color_filter, None, None).unwrap();
+        let colored_icon = icon.new_with_filter(None, &filter, image_bounds, image_bounds).unwrap().0;
+
+        let x = self.top().rect.left + self.width() / 2.0 - icon.width() as f32 / 2.0;
+        let y = self.top().rect.top + self.height() / 2.0 - icon.height() as f32 / 2.0;
+        canvas.draw_image(colored_icon, (x, y), None);
+        self.pop_group();
     }
 
     pub fn draw_on_canvas(&self, canvas: &mut Canvas, callback: impl FnOnce(&mut Canvas)) {

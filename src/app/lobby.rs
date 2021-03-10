@@ -72,6 +72,10 @@ impl State {
         );
         self.ui.pop_group();
 
+        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::BLACK, None);
+        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::WHITE, None);
+        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::CYAN, None);
+
         self.ui.pop_group();
 
         chain_focus(input, &mut [&mut self.nickname_field, &mut self.matchmaker_field]);

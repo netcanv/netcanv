@@ -1,10 +1,13 @@
-use skulpin::skia_safe::Color;
+use skulpin::skia_safe::*;
 
 use crate::ui::TextFieldColors;
 use crate::util::{RcFont, new_rc_font};
 
-const SANS_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
-const SANS_BOLD_TTF: &'static [u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
+const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
+const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
+
+const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
+const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 
 pub struct ColorScheme {
     pub text: Color,
@@ -15,20 +18,52 @@ pub struct ColorScheme {
     pub text_field: TextFieldColors,
 }
 
+pub struct Icons {
+    pub chevron_right: Image,
+    pub chevron_down: Image,
+}
+
 pub struct Assets {
     pub sans: RcFont,
     pub sans_bold: RcFont,
 
     pub colors: ColorScheme,
+    pub icons: Icons,
 }
 
 impl Assets {
+
+    fn load_icon(data: &[u8]) -> Image {
+        use usvg::{FitTo, NodeKind, Tree};
+
+        let tree = Tree::from_data(data, &Default::default())
+            .expect("error while loading the SVG file");
+        let size = match *tree.root().borrow() {
+            NodeKind::Svg(svg) => svg.size,
+            _ => panic!("the root node of the SVG is not <svg/>"),
+        };
+        let mut pixmap = tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
+        resvg::render(&tree, FitTo::Original, pixmap.as_mut());
+
+        let image_info = ImageInfo::new(
+            (size.width() as i32, size.height() as i32),
+            ColorType::RGBA8888,
+            AlphaType::Premul,
+            ColorSpace::new_srgb(),
+        );
+        let stride = pixmap.width() as usize * 4;
+        Image::from_raster_data(&image_info, Data::new_copy(pixmap.data()), stride).unwrap()
+    }
 
     pub fn new(colors: ColorScheme) -> Self {
         Self {
             sans: new_rc_font(SANS_TTF, 14.0),
             sans_bold: new_rc_font(SANS_BOLD_TTF, 14.0),
             colors,
+            icons: Icons {
+                chevron_right: Self::load_icon(CHEVRON_RIGHT_SVG),
+                chevron_down: Self::load_icon(CHEVRON_DOWN_SVG),
+            },
         }
     }
 
