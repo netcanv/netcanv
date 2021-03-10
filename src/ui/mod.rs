@@ -87,6 +87,10 @@ impl Ui {
         self.size().1 - self.top().layout_position.y
     }
 
+    pub fn remaining_size(&self) -> (f32, f32) {
+        (self.remaining_width(), self.remaining_height())
+    }
+
     pub fn begin(&mut self, window_size: (f32, f32), layout: Layout) {
         self.group_stack.clear();
         let group = Group {
@@ -109,6 +113,11 @@ impl Ui {
             font: self.top().font.clone(),
             .. *self.top()
         };
+        self.group_stack.push(group);
+    }
+
+    pub fn pop_group(&mut self) {
+        let group = self.group_stack.pop().expect("unbalanced group stack");
         match self.top().layout {
             Layout::Freeform => (),
             Layout::Horizontal => {
@@ -118,11 +127,6 @@ impl Ui {
                 self.top_mut().layout_position.y += group.rect.height();
             },
         }
-        self.group_stack.push(group);
-    }
-
-    pub fn pop_group(&mut self) {
-        self.group_stack.pop();
     }
 
     pub fn align(&mut self, alignment: Alignment) {
@@ -159,6 +163,21 @@ impl Ui {
             Layout::Horizontal => self.top_mut().layout_position.x += offset,
             Layout::Vertical => self.top_mut().layout_position.y += offset,
         }
+    }
+
+    pub fn offset(&mut self, vector: impl Into<Vector>) {
+        self.top_mut().layout_position.offset(vector.into());
+    }
+
+    pub fn fit(&mut self) {
+        let (x, y) = (self.top().rect.left, self.top().rect.top);
+        let (mut width, mut height) = self.size();
+        match self.top().layout {
+            Layout::Freeform => panic!("fit can only be used on Horizontal and Vertical layouts"),
+            Layout::Horizontal => width = self.top().layout_position.x,
+            Layout::Vertical => height = self.top().layout_position.y,
+        }
+        self.top_mut().rect.set_xywh(x, y, width, height);
     }
 
     pub fn fill(&self, canvas: &mut Canvas, color: impl Into<Color4f>) {
@@ -283,6 +302,27 @@ impl Ui {
         let x = self.top().rect.left + self.width() / 2.0 - icon.width() as f32 / 2.0;
         let y = self.top().rect.top + self.height() / 2.0 - icon.height() as f32 / 2.0;
         canvas.draw_image(colored_icon, (x, y), None);
+        self.pop_group();
+    }
+
+    pub fn paragraph(
+        &mut self,
+        canvas: &mut Canvas,
+        color: impl Into<Color4f>,
+        alignment: AlignH,
+        line_spacing: Option<f32>,
+        text: &[&str],
+    ) {
+        let line_spacing = line_spacing.unwrap_or(1.2);
+        let line_height = self.font_size() * line_spacing;
+        let height = (line_height * text.len() as f32).round();
+        let color = color.into();
+        self.push_group((self.width(), height), Layout::Vertical);
+        for line in text {
+            self.push_group((self.width(), line_height), Layout::Freeform);
+            self.text(canvas, line, color.clone(), (alignment, AlignV::Middle));
+            self.pop_group();
+        }
         self.pop_group();
     }
 

@@ -74,7 +74,7 @@ impl State {
         });
         self.ui.space(16.0);
         self.matchmaker_field.process_with_label(&mut self.ui, canvas, input, "Matchmaker", TextFieldArgs {
-            hint: Some("IP address and port"),
+            hint: Some("IP address"),
             .. textfield
         });
         self.ui.pop_group();
@@ -84,20 +84,55 @@ impl State {
         if self.join_expand.process(&mut self.ui, canvas, input, ExpandArgs {
             label: "Join an existing room",
             .. expand
-        }) {
+        })
+            .mutually_exclude(&mut self.host_expand)
+            .expanded()
+        {
+            self.ui.push_group(self.ui.remaining_size(), Layout::Vertical);
+            self.ui.offset((32.0, 8.0));
+
+            self.ui.paragraph(canvas, self.assets.colors.text, AlignH::Left, None, &[
+                "Ask your friend for the Room ID",
+                "and enter it into the text field below."
+            ]);
+            self.ui.space(16.0);
+            self.room_id_field.process_with_label(&mut self.ui, canvas, input, "Room ID", TextFieldArgs {
+                hint: Some("4–6 digits"),
+                .. textfield
+            });
+
+            self.ui.fit();
+            self.ui.pop_group();
         }
         self.ui.space(16.0);
 
         // host room
         if self.host_expand.process(&mut self.ui, canvas, input, ExpandArgs {
-                label: "Host a new room",
-                .. expand
-        }) {
+            label: "Host a new room",
+            .. expand
+        })
+            .mutually_exclude(&mut self.join_expand)
+            .expanded()
+        {
+            self.ui.push_group(self.ui.remaining_size(), Layout::Vertical);
+            self.ui.offset((32.0, 8.0));
+
+            self.ui.paragraph(canvas, self.assets.colors.text, AlignH::Left, None, &[
+                "Click 'Host' and share the Room ID",
+                "with your friends.",
+            ]);
+
+            self.ui.fit();
+            self.ui.pop_group();
         }
 
         self.ui.pop_group();
 
-        chain_focus(input, &mut [&mut self.nickname_field, &mut self.matchmaker_field]);
+        chain_focus(input, &mut [
+            &mut self.nickname_field,
+            &mut self.matchmaker_field,
+            &mut self.room_id_field,
+        ]);
 
         None
     }
