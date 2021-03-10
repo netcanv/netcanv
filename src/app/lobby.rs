@@ -12,6 +12,9 @@ pub struct State {
     nickname_field: TextField,
     matchmaker_field: TextField,
     room_id_field: TextField,
+
+    join_expand: Expand,
+    host_expand: Expand,
 }
 
 impl State {
@@ -23,6 +26,8 @@ impl State {
             nickname_field: TextField::new(None),
             matchmaker_field: TextField::new(Some("netcanv.org")),
             room_id_field: TextField::new(None),
+            join_expand: Expand::new(true),
+            host_expand: Expand::new(false),
         }
     }
 
@@ -46,35 +51,49 @@ impl State {
         self.ui.pop_group();
     }
 
-    fn process_menu(&mut self, canvas: &mut Canvas, input: &Input) -> Option<Box<dyn AppState>> {
+    fn process_menu(&mut self, canvas: &mut Canvas, input: &mut Input) -> Option<Box<dyn AppState>> {
         self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Vertical);
+
+        let textfield = TextFieldArgs {
+            width: 160.0,
+            colors: &self.assets.colors.text_field,
+            hint: None,
+        };
+        let expand = ExpandArgs {
+            label: "",
+            font_size: 22.0,
+            icons: &self.assets.icons.expand,
+            colors: &self.assets.colors.expand,
+        };
 
         // nickname, matchmaker
         self.ui.push_group((self.ui.width(), TextField::labelled_height(&self.ui)), Layout::Horizontal);
-        self.nickname_field.process_with_label(
-            &mut self.ui,
-            canvas,
-            input,
-            160.0,
-            &self.assets.colors.text_field,
-            "Nickname",
-            Some("Name shown to others"),
-        );
+        self.nickname_field.process_with_label(&mut self.ui, canvas, input, "Nickname", TextFieldArgs {
+            hint: Some("Name shown to others"),
+            .. textfield
+        });
         self.ui.space(16.0);
-        self.matchmaker_field.process_with_label(
-            &mut self.ui,
-            canvas,
-            input,
-            160.0,
-            &self.assets.colors.text_field,
-            "Matchmaker",
-            Some("IP address and port"),
-        );
+        self.matchmaker_field.process_with_label(&mut self.ui, canvas, input, "Matchmaker", TextFieldArgs {
+            hint: Some("IP address and port"),
+            .. textfield
+        });
         self.ui.pop_group();
+        self.ui.space(32.0);
 
-        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::BLACK, None);
-        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::WHITE, None);
-        self.ui.icon(canvas, &self.assets.icons.chevron_down, Color::CYAN, None);
+        // join room
+        if self.join_expand.process(&mut self.ui, canvas, input, ExpandArgs {
+            label: "Join an existing room",
+            .. expand
+        }) {
+        }
+        self.ui.space(16.0);
+
+        // host room
+        if self.host_expand.process(&mut self.ui, canvas, input, ExpandArgs {
+                label: "Host a new room",
+                .. expand
+        }) {
+        }
 
         self.ui.pop_group();
 

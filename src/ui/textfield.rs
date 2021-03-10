@@ -21,6 +21,13 @@ pub struct TextFieldColors {
     pub label: Color,
 }
 
+#[derive(Clone, Copy)]
+pub struct TextFieldArgs<'a, 'b> {
+    pub width: f32,
+    pub colors: &'a TextFieldColors,
+    pub hint: Option<&'b str>,
+}
+
 impl TextField {
 
     const BLINK_PERIOD: f32 = 1.0;
@@ -49,9 +56,7 @@ impl TextField {
         ui: &mut Ui,
         canvas: &mut Canvas,
         input: &Input,
-        width: f32,
-        colors: &TextFieldColors,
-        hint: Option<&str>,
+        TextFieldArgs { width, colors, hint }: TextFieldArgs,
     ) {
         ui.push_group((width, Self::height(ui)), Layout::Freeform);
 
@@ -147,20 +152,18 @@ impl TextField {
         ui: &mut Ui,
         canvas: &mut Canvas,
         input: &Input,
-        width: f32,
-        colors: &TextFieldColors,
         label: &str,
-        hint: Option<&str>,
+        args: TextFieldArgs,
     ) {
-        ui.push_group((width, Self::labelled_height(ui)), Layout::Vertical);
+        ui.push_group((args.width, Self::labelled_height(ui)), Layout::Vertical);
 
         // label
-        ui.push_group((width, 16.0), Layout::Freeform);
-        ui.text(canvas, label, colors.label, (AlignH::Left, AlignV::Top));
+        ui.push_group((args.width, 16.0), Layout::Freeform);
+        ui.text(canvas, label, args.colors.label, (AlignH::Left, AlignV::Top));
         ui.pop_group();
 
         // field
-        self.process(ui, canvas, input, width, colors, hint);
+        self.process(ui, canvas, input, args);
 
         ui.pop_group();
     }

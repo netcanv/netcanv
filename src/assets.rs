@@ -1,6 +1,6 @@
 use skulpin::skia_safe::*;
 
-use crate::ui::TextFieldColors;
+use crate::ui::{ExpandColors, ExpandIcons, TextFieldColors};
 use crate::util::{RcFont, new_rc_font};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -15,12 +15,12 @@ pub struct ColorScheme {
     pub panel2: Color,
     pub separator: Color,
     pub slider: Color,
+    pub expand: ExpandColors,
     pub text_field: TextFieldColors,
 }
 
 pub struct Icons {
-    pub chevron_right: Image,
-    pub chevron_down: Image,
+    pub expand: ExpandIcons,
 }
 
 pub struct Assets {
@@ -61,8 +61,10 @@ impl Assets {
             sans_bold: new_rc_font(SANS_BOLD_TTF, 14.0),
             colors,
             icons: Icons {
-                chevron_right: Self::load_icon(CHEVRON_RIGHT_SVG),
-                chevron_down: Self::load_icon(CHEVRON_DOWN_SVG),
+                expand: ExpandIcons {
+                    expand: Self::load_icon(CHEVRON_RIGHT_SVG),
+                    shrink: Self::load_icon(CHEVRON_DOWN_SVG),
+                },
             },
         }
     }
@@ -78,6 +80,12 @@ impl ColorScheme {
             panel2: Color::new(0xffffffff),
             separator: Color::new(0xff202020),
             slider: Color::new(0xff000000),
+            expand: ExpandColors {
+                icon: Color::new(0xff000000),
+                text: Color::new(0xff000000),
+                hover: Color::new(0x4f000000),
+                pressed: Color::new(0x7f000000),
+            },
             text_field: TextFieldColors {
                 outline: Color::new(0xff808080),
                 outline_focus: Color::new(0xff303030),

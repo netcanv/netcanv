@@ -17,6 +17,12 @@ pub struct Slider {
     sliding: bool,
 }
 
+#[derive(Clone, Copy)]
+pub struct SliderArgs {
+    pub width: f32,
+    pub color: Color,
+}
+
 impl Slider {
 
     pub fn new(value: f32, min: f32, max: f32, step: SliderStep) -> Self {
@@ -42,10 +48,9 @@ impl Slider {
         ui: &mut Ui,
         canvas: &mut Canvas,
         input: &Input,
-        group_width: f32,
-        color: impl Into<Color4f>
+        SliderArgs { width, color }: SliderArgs,
     ) {
-        ui.push_group((group_width, ui.height()), Layout::Freeform);
+        ui.push_group((width, ui.height()), Layout::Freeform);
 
         if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.sliding = true;
@@ -60,7 +65,7 @@ impl Slider {
         }
 
         ui.draw_on_canvas(canvas, |canvas| {
-            let transparent = Color4f::from(color.into().to_color().with_a(96));
+            let transparent = Color4f::from(color.with_a(96));
             let mut paint = Paint::new(transparent, None);
             let mut x = self.value * ui.width();
             let y = ui.height() / 2.0;

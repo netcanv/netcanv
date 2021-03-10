@@ -150,7 +150,6 @@ impl<'a> State<'a> {
     }
 
     fn process_bar(&mut self, canvas: &mut Canvas, input: &mut Input) {
-
         if self.paint_mode != PaintMode::None {
             input.lock_mouse_buttons();
         }
@@ -187,7 +186,10 @@ impl<'a> State<'a> {
         self.ui.pop_group();
 
         self.ui.space(8.0);
-        self.brush_size_slider.process(&mut self.ui, canvas, &input, 192.0, self.assets.colors.slider);
+        self.brush_size_slider.process(&mut self.ui, canvas, input, SliderArgs {
+            width: 192.0,
+            color: self.assets.colors.slider,
+        });
         self.ui.space(8.0);
 
         let brush_size_string = self.brush_size_slider.value().to_string();
