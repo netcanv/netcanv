@@ -147,7 +147,7 @@ impl TextField {
         16.0 + TextField::height(ui)
     }
 
-    pub fn process_with_label(
+    pub fn with_label(
         &mut self,
         ui: &mut Ui,
         canvas: &mut Canvas,

@@ -54,6 +54,10 @@ impl State {
     fn process_menu(&mut self, canvas: &mut Canvas, input: &mut Input) -> Option<Box<dyn AppState>> {
         self.ui.push_group((self.ui.width(), self.ui.remaining_height()), Layout::Vertical);
 
+        let button = ButtonArgs {
+            height: 32.0,
+            colors: &self.assets.colors.button,
+        };
         let textfield = TextFieldArgs {
             width: 160.0,
             colors: &self.assets.colors.text_field,
@@ -68,12 +72,12 @@ impl State {
 
         // nickname, matchmaker
         self.ui.push_group((self.ui.width(), TextField::labelled_height(&self.ui)), Layout::Horizontal);
-        self.nickname_field.process_with_label(&mut self.ui, canvas, input, "Nickname", TextFieldArgs {
+        self.nickname_field.with_label(&mut self.ui, canvas, input, "Nickname", TextFieldArgs {
             hint: Some("Name shown to others"),
             .. textfield
         });
         self.ui.space(16.0);
-        self.matchmaker_field.process_with_label(&mut self.ui, canvas, input, "Matchmaker", TextFieldArgs {
+        self.matchmaker_field.with_label(&mut self.ui, canvas, input, "Matchmaker", TextFieldArgs {
             hint: Some("IP address"),
             .. textfield
         });
@@ -96,10 +100,16 @@ impl State {
                 "and enter it into the text field below."
             ]);
             self.ui.space(16.0);
-            self.room_id_field.process_with_label(&mut self.ui, canvas, input, "Room ID", TextFieldArgs {
+            self.ui.push_group((0.0, TextField::labelled_height(&self.ui)), Layout::Horizontal);
+            self.room_id_field.with_label(&mut self.ui, canvas, input, "Room ID", TextFieldArgs {
                 hint: Some("4–6 digits"),
                 .. textfield
             });
+            self.ui.offset((16.0, 16.0));
+            if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
+                // todo: join room
+            }
+            self.ui.pop_group();
 
             self.ui.fit();
             self.ui.pop_group();
@@ -121,6 +131,10 @@ impl State {
                 "Click 'Host' and share the Room ID",
                 "with your friends.",
             ]);
+            self.ui.space(16.0);
+            if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
+                // todo: host room
+            }
 
             self.ui.fit();
             self.ui.pop_group();

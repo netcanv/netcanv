@@ -5,10 +5,12 @@ use skulpin::skia_safe::*;
 use crate::util::RcFont;
 
 pub mod input;
+mod button;
 mod expand;
 mod slider;
 mod textfield;
 
+pub use button::*;
 pub use expand::*;
 pub use input::*;
 pub use slider::*;
@@ -184,6 +186,17 @@ impl Ui {
         let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(false);
         canvas.draw_rect(self.top().rect, &paint);
+    }
+
+    pub fn outline(&self, canvas: &mut Canvas, color: impl Into<Color4f>, thickness: f32) {
+        let mut paint = Paint::new(color.into(), None);
+        paint.set_anti_alias(false);
+        paint.set_style(paint::Style::Stroke);
+        paint.set_stroke_width(thickness);
+        let mut rect = self.top().rect;
+        rect.left += 1.0;
+        rect.top += 1.0;
+        canvas.draw_rect(rect, &paint);
     }
 
     pub fn clip(&self, canvas: &mut Canvas) {
