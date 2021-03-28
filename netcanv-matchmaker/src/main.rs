@@ -3,10 +3,8 @@
 
 use std::collections::{HashMap};
 use std::error;
-use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
 
@@ -29,10 +27,8 @@ struct Matchmaker {
 
 #[derive(Debug, Error)]
 enum Error {
-    #[error("An I/O error occured: {0}")]
+    #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Couldn't receive packet")]
-    Recv,
     #[error("Unrecognized or unimplemented packet")]
     InvalidPacket,
     #[error("Invalid packet (bad encoding)")]
@@ -130,8 +126,7 @@ impl Matchmaker {
                 let mut buf = [0; 1];
                 if let Ok(n) = stream.peek(&mut buf) {
                     if n == 0 {
-                        let addr = stream.peer_addr().unwrap();
-                        mm.lock().unwrap().disconnect(addr);
+                        mm.lock().unwrap().disconnect(peer_addr);
                         break
                     }
                 }
