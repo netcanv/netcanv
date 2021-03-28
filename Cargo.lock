@@ -1031,7 +1031,6 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "crossbeam-channel",
- "laminar",
  "netcanv",
  "netcanv-protocol",
  "rand 0.8.3",

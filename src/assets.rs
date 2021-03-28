@@ -8,12 +8,15 @@ const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
+const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
+const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 
 pub struct ColorScheme {
     pub text: Color,
     pub panel: Color,
     pub panel2: Color,
     pub separator: Color,
+    pub error: Color,
 
     pub button: ButtonColors,
     pub expand: ExpandColors,
@@ -21,8 +24,14 @@ pub struct ColorScheme {
     pub text_field: TextFieldColors,
 }
 
+pub struct StatusIcons {
+    pub info: Image,
+    pub error: Image,
+}
+
 pub struct Icons {
     pub expand: ExpandIcons,
+    pub status: StatusIcons,
 }
 
 pub struct Assets {
@@ -67,6 +76,10 @@ impl Assets {
                     expand: Self::load_icon(CHEVRON_RIGHT_SVG),
                     shrink: Self::load_icon(CHEVRON_DOWN_SVG),
                 },
+                status: StatusIcons {
+                    info: Self::load_icon(INFO_SVG),
+                    error: Self::load_icon(ERROR_SVG),
+                },
             },
         }
     }
@@ -81,6 +94,7 @@ impl ColorScheme {
             panel: Color::new(0xffeeeeee),
             panel2: Color::new(0xffffffff),
             separator: Color::new(0xff202020),
+            error: Color::new(0xff7f0000),
 
             button: ButtonColors {
                 outline: Color::new(0x40000000),

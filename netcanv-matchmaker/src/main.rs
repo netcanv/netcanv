@@ -3,58 +3,51 @@
 
 use std::collections::{HashMap};
 use std::error;
-use std::net::SocketAddr;
+use std::io;
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use laminar::{Socket, SocketEvent};
 use thiserror::Error;
 
-use netcanv::net::txqueues::{SendQueue, SendError};
 use netcanv_protocol::matchmaker::*;
 
 const PORT: u16 = 62137;
 
 const MAX_ROOM_ID: u32 = 9999;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Host {
-    addr: SocketAddr,
+    stream: Arc<TcpStream>,
     room_id: u32,
 }
 
 struct Matchmaker {
-    hosts: HashMap<SocketAddr, Host>,
     rooms: HashMap<u32, Host>,
-    send_queue: SendQueue<Packet>,
+    host_rooms: HashMap<SocketAddr, u32>
 }
 
 #[derive(Debug, Error)]
 enum Error {
+    #[error("An I/O error occured: {0}")]
+    Io(#[from] std::io::Error),
     #[error("Couldn't receive packet")]
     Recv,
-    #[error("Couldn't send packet")]
-    Send(#[from] SendError),
     #[error("Unrecognized or unimplemented packet")]
     InvalidPacket,
     #[error("Invalid packet (bad encoding)")]
     Deserialize,
+    #[error("Serialization error: {0}")]
+    Serialize(#[from] bincode::Error),
 }
 
 impl Matchmaker {
 
     fn new() -> Self {
         Self {
-            hosts: HashMap::new(),
             rooms: HashMap::new(),
-            send_queue: SendQueue::new(),
+            host_rooms: HashMap::new(),
         }
-    }
-
-    fn enqueue_packet(&mut self, dest_addr: SocketAddr, packet: Packet) {
-        self.send_queue.enqueue(dest_addr, packet);
-    }
-
-    fn enqueue_error(&mut self, dest_addr: SocketAddr, message: &str) {
-        self.enqueue_packet(dest_addr, error_packet(message));
     }
 
     fn find_free_room_id(&self) -> Option<u32> {
@@ -69,171 +62,117 @@ impl Matchmaker {
         None
     }
 
-    fn host(&mut self, host_addr: SocketAddr) {
-        match self.find_free_room_id() {
+    fn send_packet(stream: &TcpStream, packet: Packet) -> Result<(), Error> {
+        bincode::serialize_into(stream, &packet)?;
+        Ok(())
+    }
+
+    fn send_error(stream: &TcpStream, error: &str) -> Result<(), Error> {
+        Self::send_packet(stream, error_packet(error))
+    }
+
+    fn host(mm: Arc<Mutex<Self>>, stream: Arc<TcpStream>) -> Result<(), Error> {
+        match mm.lock().unwrap().find_free_room_id() {
             Some(room_id) => {
-                let host = Host { addr: host_addr, room_id };
-                self.hosts.insert(host_addr, host.clone());
-                self.rooms.insert(room_id, host);
-                self.enqueue_packet(host_addr, Packet::RoomId(room_id));
+                let host = Host { stream: stream.clone(), room_id };
+                {
+                    let mut mm = mm.lock().unwrap();
+                    let host_addr = host.stream.peer_addr().unwrap();
+                    mm.rooms.insert(room_id, host);
+                    mm.host_rooms.insert(host_addr, room_id);
+                }
+                Self::send_packet(&stream, Packet::RoomId(room_id))?;
             },
-            None => self.enqueue_error(host_addr, "Could not find any more free rooms. Try again"),
-        }
-    }
-
-    fn join(&mut self, client_addr: SocketAddr, room_id: u32) {
-        let host = match self.rooms.get(&room_id) {
-            Some(host) => host,
-            None => {
-                self.enqueue_error(client_addr,
-                    "No room found with the given ID. Check whether you spelled the ID correctly");
-                return;
-            },
-        }.clone();
-        self.enqueue_packet(host.addr, Packet::ClientAddress(client_addr.to_string()));
-        self.enqueue_packet(client_addr, Packet::HostAddress(host.addr.to_string()));
-    }
-
-    fn incoming_packet(&mut self, addr: SocketAddr, packet: Packet) -> Result<(), Error> {
-        match packet {
-            Packet::Host => self.host(addr),
-            Packet::GetHost(room_id) => self.join(addr, room_id),
-            _ => {
-                eprintln!("! error/invalid packet: {:?}", packet);
-                return Err(Error::InvalidPacket);
-            },
+            None => Self::send_error(&stream, "Could not find any more free rooms. Try again")?,
         }
         Ok(())
     }
 
-    fn disconnect(&mut self, addr: SocketAddr) {
-        if let Some(host) = self.hosts.remove(&addr) {
-            self.rooms.remove(&host.room_id);
+    fn join(mm: Arc<Mutex<Self>>, stream: &TcpStream, room_id: u32) -> Result<(), Error> {
+        let mm = mm.lock().unwrap();
+        let host = match mm.rooms.get(&room_id) {
+            Some(host) => host,
+            None => {
+                Self::send_error(stream,
+                    "No room found with the given ID. Check whether you spelled the ID correctly")?;
+                return Ok(());
+            },
+        };
+        let client_addr = stream.peer_addr()?;
+        let host_addr = host.stream.peer_addr()?;
+        Self::send_packet(&host.stream, Packet::ClientAddress(client_addr.to_string()))?;
+        Self::send_packet(stream, Packet::HostAddress(host_addr.to_string()))
+    }
+
+    fn incoming_packet(mm: Arc<Mutex<Self>>, stream: Arc<TcpStream>, packet: Packet) -> Result<(), Error> {
+        match packet {
+            Packet::Host => Self::host(mm, stream),
+            Packet::GetHost(room_id) => Self::join(mm, &stream, room_id),
+            _ => {
+                eprintln!("! error/invalid packet: {:?}", packet);
+                Err(Error::InvalidPacket)
+            },
         }
     }
 
-    fn incoming_event(&mut self, event: SocketEvent) -> Result<(), Error> {
-        match event {
-            SocketEvent::Packet(packet) => {
-                bincode::deserialize(packet.payload())
+    fn disconnect(&mut self, addr: SocketAddr) {
+        if let Some(room_id) = self.host_rooms.remove(&addr) {
+            self.rooms.remove(&room_id);
+        }
+    }
+
+    fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
+        let peer_addr = stream.peer_addr()?;
+        let stream = Arc::new(stream);
+        eprintln!("* connected: {}", peer_addr);
+        let _ = std::thread::spawn(move || {
+            loop {
+                let mut buf = [0; 1];
+                if let Ok(n) = stream.peek(&mut buf) {
+                    if n == 0 {
+                        let addr = stream.peer_addr().unwrap();
+                        mm.lock().unwrap().disconnect(addr);
+                        break
+                    }
+                }
+                bincode::deserialize_from(&*stream) // what
                     .map_err(|_| Error::Deserialize)
                     .and_then(|decoded| {
-                        self.incoming_packet(packet.addr(), decoded)
+                        Self::incoming_packet(mm.clone(), stream.clone(), decoded)
                     })
-                    .or_else(|error| {
-                        eprintln!("! error/packet decode from {}: {}", packet.addr(), error);
-                        Err(error)
+                    .or_else(|error| -> Result<_, ()> {
+                        eprintln!("! error/packet decode from {}: {}", peer_addr, error);
+                        Ok(())
                     })
-            },
-            SocketEvent::Connect(addr) => {
-                eprintln!("* connected: {}", addr);
-                Ok(())
-            },
-            SocketEvent::Timeout(addr) | SocketEvent::Disconnect(addr) => {
-                eprintln!("* disconnected: {}", addr);
-                self.disconnect(addr);
-                Ok(())
-            },
-        }
+                    .unwrap();
+            }
+        });
+        Ok(())
     }
 
 }
 
 fn main() -> Result<(), Box<dyn error::Error>> {
-
     eprintln!("NetCanv Matchmaker: starting on port {}", PORT);
 
     let localhost = SocketAddr::from(([127, 0, 0, 1], PORT));
-    let mut socket = Socket::bind(localhost)?;
-    let (tx, rx) = (socket.get_packet_sender(), socket.get_event_receiver());
-    let _thread = std::thread::spawn(move || socket.start_polling());
+    let listener = TcpListener::bind(localhost)?;
 
-    let mut state = Matchmaker::new();
+    let state = Arc::new(Mutex::new(Matchmaker::new()));
 
     eprintln!("Listening for incoming connections");
 
-    loop {
-        // receive
-        rx.recv()
-            .map_err(|_| Error::Recv)
-            .and_then(|event| {
-                // process
-                let has_response = matches!(&event, SocketEvent::Packet(_));
-                let result = state.incoming_event(event);
-                // transmit
-                if has_response {
-                    state.send_queue.send(&tx)?;
-                }
-                result
-            })
+    for connection in listener.incoming() {
+        connection
+            .map_err(|error| Error::from(error))
+            .and_then(|stream| Matchmaker::start_client_thread(state.clone(), stream))
             .or_else(|error| -> Result<_, ()> {
-                eprintln!("! error/recv: {:?}", error);
+                eprintln!("! error/connect: {}", error);
                 Ok(())
             })
-            .unwrap();
+            .unwrap(); // silence, compiler
     }
+
+    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn forge_packet_event(addr: SocketAddr, from: Packet) -> SocketEvent {
-        let payload = bincode::serialize(&from).unwrap();
-        SocketEvent::Packet(laminar::Packet::reliable_ordered(addr, payload, None))
-    }
-
-    // this also tests whether the responses can be serialized correctly
-    fn get_responses(state: &mut Matchmaker, addr: SocketAddr) -> Vec<Packet> {
-        let encoded = state.send_queue.serialize(addr).unwrap();
-        let decoded: Vec<Packet> = bincode::deserialize(&encoded).unwrap();
-        decoded
-    }
-
-    const HOST_ADDRESS: ([u8; 4], u16) = ([192, 168, 1, 24], 62137);
-    const CLIENT_ADDRESS: ([u8; 4], u16) = ([192, 168, 1, 25], 62137);
-
-    #[test]
-    fn create_room() {
-        let host = SocketAddr::from(HOST_ADDRESS);
-        let mut state = Matchmaker::new();
-        let packet = forge_packet_event(host, Packet::Host);
-        state.incoming_event(packet).unwrap();
-        let responses = get_responses(&mut state, host);
-        assert!(matches!(responses[0], Packet::RoomId(0..=MAX_ROOM_ID)));
-    }
-
-    #[test]
-    fn join_room() {
-        let host = SocketAddr::from(HOST_ADDRESS);
-        let client = SocketAddr::from(CLIENT_ADDRESS);
-
-        let mut state = Matchmaker::new();
-
-        let host_packet = forge_packet_event(host, Packet::Host);
-        state.incoming_event(host_packet).unwrap();
-        let room_id_packet = get_responses(&mut state, host)[0].clone();
-        let room_id =
-            if let Packet::RoomId(id) = room_id_packet { id }
-            else { unreachable!() };
-        state.send_queue.clear();
-
-        let get_host_packet = forge_packet_event(client, Packet::GetHost(room_id));
-        state.incoming_event(get_host_packet).unwrap();
-        let host_addr_packet = get_responses(&mut state, client)[0].clone();
-        let client_addr_packet = get_responses(&mut state, host)[0].clone();
-        state.send_queue.clear();
-
-        if let
-           (Packet::HostAddress(host_addr_string), Packet::ClientAddress(client_addr_string))
-           = (host_addr_packet, client_addr_packet)
-        {
-            let host_address: SocketAddr = host_addr_string.parse().unwrap();
-            let client_address: SocketAddr = client_addr_string.parse().unwrap();
-            assert_eq!(host, host_address);
-            assert_eq!(client, client_address);
-        } else {
-            unreachable!();
-        }
-    }
-}

@@ -1,13 +1,33 @@
+use std::error::Error;
+use std::fmt::Display;
+use std::net::SocketAddr;
+
 use skulpin::skia_safe::*;
 
 use crate::app::{AppState, StateArgs, paint};
 use crate::assets::Assets;
 use crate::ui::*;
 use crate::util::get_window_size;
+use netcanv::net::{Message, Peer};
+
+#[derive(Debug)]
+enum Status {
+    None,
+    Info(String),
+    Error(String),
+}
+
+impl<T: Error + Display> From<T> for Status {
+    fn from(error: T) -> Self {
+        Self::Error(format!("{}", error))
+    }
+}
 
 pub struct State {
     assets: Assets,
     ui: Ui,
+
+    // UI elements
 
     nickname_field: TextField,
     matchmaker_field: TextField,
@@ -15,6 +35,18 @@ pub struct State {
 
     join_expand: Expand,
     host_expand: Expand,
+
+    // net
+    status: Status,
+    net: Option<Net>,
+}
+
+/// connection stuff
+// needed to yeet this into another struct because compiler complained:
+// "something something mutable borrow something something you're an idiot something"
+// is what it said idk i wasn't paying attention
+struct Net {
+    me: Peer,
 }
 
 impl State {
@@ -24,10 +56,12 @@ impl State {
             assets,
             ui: Ui::new(),
             nickname_field: TextField::new(None),
-            matchmaker_field: TextField::new(Some("netcanv.org")),
+            matchmaker_field: TextField::new(Some("internetcanv.as:62137")),
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
+            status: Status::None,
+            net: None,
         }
     }
 
@@ -107,7 +141,13 @@ impl State {
             });
             self.ui.offset((16.0, 16.0));
             if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
-                // todo: join room
+                match Self::join_room(self.matchmaker_field.text(), self.room_id_field.text()) {
+                    Ok(net) => {
+                        self.net = Some(net);
+                        self.status = Status::None;
+                    },
+                    Err(status) => self.status = status,
+                }
             }
             self.ui.pop_group();
 
@@ -133,7 +173,13 @@ impl State {
             ]);
             self.ui.space(16.0);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
-                // todo: host room
+                match Self::host_room(self.matchmaker_field.text()) {
+                    Ok(net) => {
+                        self.net = Some(net);
+                        self.status = Status::None;
+                    },
+                    Err(status) => self.status = status,
+                }
             }
 
             self.ui.fit();
@@ -151,6 +197,66 @@ impl State {
         None
     }
 
+    fn process_status(&mut self, canvas: &mut Canvas) {
+        if !matches!(self.status, Status::None) {
+            self.ui.push_group((self.ui.width(), 24.0), Layout::Horizontal);
+            let icon =
+                match self.status {
+                    Status::None => unreachable!(),
+                    Status::Info(_) => &self.assets.icons.status.info,
+                    Status::Error(_) => &self.assets.icons.status.error,
+                };
+            let color =
+                match self.status {
+                    Status::None => unreachable!(),
+                    Status::Info(_) => self.assets.colors.text,
+                    Status::Error(_) => self.assets.colors.error,
+                };
+            self.ui.icon(canvas, icon, color, Some((self.ui.height(), self.ui.height())));
+            self.ui.space(8.0);
+            self.ui.push_group((self.ui.remaining_width(), self.ui.height()), Layout::Freeform);
+            let text =
+                match &self.status {
+                    Status::None => unreachable!(),
+                    Status::Info(text) | Status::Error(text) => text,
+                };
+            self.ui.text(canvas, text, color, (AlignH::Left, AlignV::Middle));
+            self.ui.pop_group();
+            self.ui.pop_group();
+        }
+    }
+
+    fn host_room(matchmaker_addr_str: &str) -> Result<Net, Status> {
+        Ok(Net {
+            me: Peer::host_room(matchmaker_addr_str)?,
+        })
+    }
+
+    fn join_room(matchmaker_addr_str: &str, room_id_str: &str) -> Result<Net, Status> {
+        if !matches!(room_id_str.len(), 4..=6) {
+            return Err(Status::Error("Room ID must be a number with 4–6 digits".into()))
+        }
+        let room_id: u32 = room_id_str.parse()
+            .map_err(|_| Status::Error("Room ID must be an integer".into()))?;
+        Ok(Net {
+            me: Peer::join_room(matchmaker_addr_str, room_id)?,
+        })
+    }
+
+}
+
+impl Net {
+
+    fn poll(&mut self) -> Option<Status> {
+        while let Some(message) = self.me.next_message() {
+            match message {
+                Message::Info(msg) => return Some(Status::Info(msg)),
+                _ => ()
+            }
+        }
+        None
+    }
+
 }
 
 impl AppState for State {
@@ -165,17 +271,25 @@ impl AppState for State {
     ) -> Option<Box<dyn AppState>> {
         canvas.clear(self.assets.colors.panel);
 
+        if let Some(net) = &mut self.net {
+            if let Some(status) = net.poll() {
+                self.status = status;
+            }
+        }
+
         self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Freeform);
         self.ui.set_font(self.assets.sans.clone());
         self.ui.set_font_size(14.0);
 
         self.ui.pad((64.0, 64.0));
 
-        self.ui.push_group((self.ui.width(), 420.0), Layout::Vertical);
+        self.ui.push_group((self.ui.width(), 384.0), Layout::Vertical);
         self.ui.align((AlignH::Left, AlignV::Middle));
         self.process_header(canvas);
         self.ui.space(24.0);
         self.process_menu(canvas, input);
+        self.ui.space(24.0);
+        self.process_status(canvas);
         self.ui.pop_group();
 
         None
