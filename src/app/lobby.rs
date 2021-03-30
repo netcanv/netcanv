@@ -38,15 +38,7 @@ pub struct State {
 
     // net
     status: Status,
-    net: Option<Net>,
-}
-
-/// connection stuff
-// needed to yeet this into another struct because compiler complained:
-// "something something mutable borrow something something you're an idiot something"
-// is what it said idk i wasn't paying attention
-struct Net {
-    me: Peer,
+    peer: Option<Peer>,
 }
 
 impl State {
@@ -61,7 +53,7 @@ impl State {
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
             status: Status::None,
-            net: None,
+            peer: None,
         }
     }
 
@@ -142,8 +134,8 @@ impl State {
             self.ui.offset((16.0, 16.0));
             if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
                 match Self::join_room(self.matchmaker_field.text(), self.room_id_field.text()) {
-                    Ok(net) => {
-                        self.net = Some(net);
+                    Ok(peer) => {
+                        self.peer = Some(peer);
                         self.status = Status::None;
                     },
                     Err(status) => self.status = status,
@@ -174,8 +166,8 @@ impl State {
             self.ui.space(16.0);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
                 match Self::host_room(self.matchmaker_field.text()) {
-                    Ok(net) => {
-                        self.net = Some(net);
+                    Ok(peer) => {
+                        self.peer = Some(peer);
                         self.status = Status::None;
                     },
                     Err(status) => self.status = status,
@@ -226,35 +218,17 @@ impl State {
         }
     }
 
-    fn host_room(matchmaker_addr_str: &str) -> Result<Net, Status> {
-        Ok(Net {
-            me: Peer::host_room(matchmaker_addr_str)?,
-        })
+    fn host_room(matchmaker_addr_str: &str) -> Result<Peer, Status> {
+        Ok(Peer::host(matchmaker_addr_str)?)
     }
 
-    fn join_room(matchmaker_addr_str: &str, room_id_str: &str) -> Result<Net, Status> {
+    fn join_room(matchmaker_addr_str: &str, room_id_str: &str) -> Result<Peer, Status> {
         if !matches!(room_id_str.len(), 4..=6) {
             return Err(Status::Error("Room ID must be a number with 4–6 digits".into()))
         }
         let room_id: u32 = room_id_str.parse()
             .map_err(|_| Status::Error("Room ID must be an integer".into()))?;
-        Ok(Net {
-            me: Peer::join_room(matchmaker_addr_str, room_id)?,
-        })
-    }
-
-}
-
-impl Net {
-
-    fn poll(&mut self) -> Option<Status> {
-        while let Some(message) = self.me.next_message() {
-            match message {
-                Message::Info(msg) => return Some(Status::Info(msg)),
-                _ => ()
-            }
-        }
-        None
+        Ok(Peer::join(matchmaker_addr_str, room_id)?)
     }
 
 }
@@ -271,9 +245,17 @@ impl AppState for State {
     ) -> Option<Box<dyn AppState>> {
         canvas.clear(self.assets.colors.panel);
 
-        if let Some(net) = &mut self.net {
-            if let Some(status) = net.poll() {
-                self.status = status;
+        if let Some(peer) = &mut self.peer {
+            match peer.tick() {
+                Ok(messages) => for message in messages {
+                    match message {
+                        Message::Error(error) => self.status = Status::Error(error.into()),
+                        Message::RoomId(room_id) => self.status = Status::Info(format!("Room ID obtained: {}", room_id)),
+                    }
+                },
+                Err(error) => {
+                    self.status = error.into();
+                },
             }
         }
 

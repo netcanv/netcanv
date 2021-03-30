@@ -1,4 +1,4 @@
 mod peer;
-pub mod txqueues;
+pub mod socket;
 
 pub use peer::*;

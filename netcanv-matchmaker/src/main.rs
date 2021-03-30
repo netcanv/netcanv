@@ -59,6 +59,7 @@ impl Matchmaker {
     }
 
     fn send_packet(stream: &TcpStream, packet: Packet) -> Result<(), Error> {
+        eprintln!("- sending packet {} -> {:?}", stream.peer_addr().unwrap(), packet);
         bincode::serialize_into(stream, &packet)?;
         Ok(())
     }
@@ -68,15 +69,16 @@ impl Matchmaker {
     }
 
     fn host(mm: Arc<Mutex<Self>>, stream: Arc<TcpStream>) -> Result<(), Error> {
-        match mm.lock().unwrap().find_free_room_id() {
+        let mut mm = mm.lock().unwrap();
+        match mm.find_free_room_id() {
             Some(room_id) => {
                 let host = Host { stream: stream.clone(), room_id };
                 {
-                    let mut mm = mm.lock().unwrap();
                     let host_addr = host.stream.peer_addr().unwrap();
                     mm.rooms.insert(room_id, host);
                     mm.host_rooms.insert(host_addr, room_id);
                 }
+                drop(mm);
                 Self::send_packet(&stream, Packet::RoomId(room_id))?;
             },
             None => Self::send_error(&stream, "Could not find any more free rooms. Try again")?,
@@ -101,6 +103,7 @@ impl Matchmaker {
     }
 
     fn incoming_packet(mm: Arc<Mutex<Self>>, stream: Arc<TcpStream>, packet: Packet) -> Result<(), Error> {
+        eprintln!("- incoming packet: {:?}", packet);
         match packet {
             Packet::Host => Self::host(mm, stream),
             Packet::GetHost(room_id) => Self::join(mm, &stream, room_id),
@@ -120,7 +123,7 @@ impl Matchmaker {
     fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
         let peer_addr = stream.peer_addr()?;
         let stream = Arc::new(stream);
-        eprintln!("* connected: {}", peer_addr);
+        eprintln!("* mornin' mr. {}", peer_addr);
         let _ = std::thread::spawn(move || {
             loop {
                 let mut buf = [0; 1];
@@ -130,7 +133,7 @@ impl Matchmaker {
                         break
                     }
                 }
-                bincode::deserialize_from(&*stream) // what
+                let _ = bincode::deserialize_from(&*stream) // what
                     .map_err(|_| Error::Deserialize)
                     .and_then(|decoded| {
                         Self::incoming_packet(mm.clone(), stream.clone(), decoded)
@@ -138,9 +141,9 @@ impl Matchmaker {
                     .or_else(|error| -> Result<_, ()> {
                         eprintln!("! error/packet decode from {}: {}", peer_addr, error);
                         Ok(())
-                    })
-                    .unwrap();
+                    });
             }
+            eprintln!("* bye bye mr. {} it was nice to see ya", peer_addr);
         });
         Ok(())
     }
