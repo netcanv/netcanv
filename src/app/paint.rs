@@ -16,11 +16,11 @@ enum PaintMode {
     Erase,
 }
 
-pub struct State<'a> {
+pub struct State {
     assets: Assets,
 
     ui: Ui,
-    paint_canvas: PaintCanvas<'a>,
+    paint_canvas: PaintCanvas<'static>,
 
     paint_mode: PaintMode,
     paint_color: Color4f,
@@ -42,7 +42,7 @@ const COLOR_PALETTE: &'static [u32] = &[
     0xffffffff,
 ];
 
-impl<'a> State<'a> {
+impl State {
 
     const BAR_SIZE: f32 = 32.0;
 
@@ -206,7 +206,7 @@ impl<'a> State<'a> {
 
 }
 
-impl AppState for State<'_> {
+impl AppState for State {
 
     fn process(
         &mut self,
@@ -215,7 +215,7 @@ impl AppState for State<'_> {
             coordinate_system_helper,
             input,
         }: StateArgs,
-    ) -> Option<Box<dyn AppState>> {
+    ) {
         canvas.clear(Color::WHITE);
 
         self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Vertical);
@@ -227,8 +227,10 @@ impl AppState for State<'_> {
 
         // bar
         self.process_bar(canvas, input);
+    }
 
-        None
+    fn next_state(self: Box<Self>) -> Box<dyn AppState> {
+        self
     }
 
 }

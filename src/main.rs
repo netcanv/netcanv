@@ -39,7 +39,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build(&window)?;
 
     let assets = Assets::new(ColorScheme::light());
-    let mut app: Box<dyn AppState> = Box::new(lobby::State::new(assets)) as _;
+    // let mut app: Box<dyn AppState> = Box::new(lobby::State::new(assets)) as _;
+    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
@@ -61,14 +62,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             Event::MainEventsCleared => {
                 renderer.draw(&window, |canvas, csh| {
-                    let next = app.process(StateArgs {
+                    // unwrap always succeeds here as app is never None
+                    // i don't really like this method chaining tho
+                    app.as_mut().unwrap().process(StateArgs {
                         canvas,
                         coordinate_system_helper: &csh,
                         input: &mut input,
                     });
-                    if let Some(state) = next {
-                        app = state;
-                    }
+                    app = Some(app.take().unwrap().next_state());
                 }).unwrap();
                 input.finish_frame();
             },

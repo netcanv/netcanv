@@ -242,7 +242,7 @@ impl AppState for State {
             coordinate_system_helper,
             input,
         }: StateArgs,
-    ) -> Option<Box<dyn AppState>> {
+    ) {
         canvas.clear(self.assets.colors.panel);
 
         if let Some(peer) = &mut self.peer {
@@ -273,8 +273,10 @@ impl AppState for State {
         self.ui.space(24.0);
         self.process_status(canvas);
         self.ui.pop_group();
+    }
 
-        None
+    fn next_state(self: Box<Self>) -> Box<dyn AppState> {
+        self
     }
 
 }

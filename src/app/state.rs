@@ -10,10 +10,10 @@ pub struct StateArgs<'a, 'b, 'c> {
 }
 
 pub trait AppState {
-    // if this returns None, this means that the current app state should continue
-    // if this returns Some(state), this means that the app state should be switched to `state`
     fn process(
         &mut self,
         args: StateArgs,
-    ) -> Option<Box<dyn AppState>>;
+    );
+
+    fn next_state(self: Box<Self>) -> Box<dyn AppState>;
 }
