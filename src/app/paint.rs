@@ -8,6 +8,7 @@ use crate::assets::*;
 use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::util::*;
+use netcanv::net::Peer;
 
 #[derive(PartialEq, Eq)]
 enum PaintMode {
@@ -21,6 +22,7 @@ pub struct State {
 
     ui: Ui,
     paint_canvas: PaintCanvas<'static>,
+    peer: Peer,
 
     paint_mode: PaintMode,
     paint_color: Color4f,
@@ -46,12 +48,13 @@ impl State {
 
     const BAR_SIZE: f32 = 32.0;
 
-    pub fn new(assets: Assets) -> Self {
+    pub fn new(assets: Assets, peer: Peer) -> Self {
         Self {
             assets,
 
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(),
+            peer,
 
             paint_mode: PaintMode::None,
             paint_color: hex_color4f(COLOR_PALETTE[0]),
@@ -195,8 +198,35 @@ impl State {
         let brush_size_string = self.brush_size_slider.value().to_string();
         self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
         self.ui.set_font(self.assets.sans_bold.clone());
-        self.ui.text(canvas, brush_size_string.as_str(), self.assets.colors.text, (AlignH::Center, AlignV::Middle));
+        self.ui.text(canvas, &brush_size_string, self.assets.colors.text, (AlignH::Center, AlignV::Middle));
         self.ui.pop_group();
+
+        //
+        // right side
+        //
+
+        // room ID
+
+        if self.peer.is_host() {
+            self.ui.push_group((self.ui.remaining_width(), self.ui.height()), Layout::Freeform);
+            self.ui.push_group((128.0, self.ui.height()), Layout::Horizontal);
+            self.ui.align((AlignH::Right, AlignV::Top));
+
+            // "Room ID" text
+            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
+            self.ui.text(canvas, "Room ID", self.assets.colors.text, (AlignH::Center, AlignV::Middle));
+            self.ui.pop_group();
+
+            // the room ID itself
+            let id_text = format!("{:04}", self.peer.room_id().unwrap());
+            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
+            self.ui.set_font(self.assets.sans_bold.clone());
+            self.ui.text(canvas, &id_text, self.assets.colors.text, (AlignH::Center, AlignV::Middle));
+            self.ui.pop_group();
+
+            self.ui.pop_group();
+            self.ui.pop_group();
+        }
 
         self.ui.pop_group();
 

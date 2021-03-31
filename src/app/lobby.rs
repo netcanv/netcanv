@@ -39,6 +39,7 @@ pub struct State {
     // net
     status: Status,
     peer: Option<Peer>,
+    connected: bool, // when this is true, the state is transitioned to paint::State
 }
 
 impl State {
@@ -54,6 +55,7 @@ impl State {
             host_expand: Expand::new(false),
             status: Status::None,
             peer: None,
+            connected: false,
         }
     }
 
@@ -250,7 +252,7 @@ impl AppState for State {
                 Ok(messages) => for message in messages {
                     match message {
                         Message::Error(error) => self.status = Status::Error(error.into()),
-                        Message::RoomId(room_id) => self.status = Status::Info(format!("Room ID obtained: {}", room_id)),
+                        Message::Connected => self.connected = true,
                     }
                 },
                 Err(error) => {
@@ -276,7 +278,11 @@ impl AppState for State {
     }
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
-        self
+        if self.connected {
+            Box::new(paint::State::new(self.assets, self.peer.unwrap()))
+        } else {
+            self
+        }
     }
 
 }

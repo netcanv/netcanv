@@ -38,10 +38,10 @@ impl<P: Serialize + DeserializeOwned + Send + 'static> Remote<P> {
 
     pub fn new(addr: impl ToSocketAddrs) -> Result<Self, Error> {
         let stream = Arc::new(TcpStream::connect(addr)?);
-//         stream.set_nonblocking(true)?;
         // we don't actually want fully non-blocking I/O so as not to spinlock the network thread
-        stream.set_write_timeout(Some(Duration::from_millis(10)))?;
-        stream.set_read_timeout(Some(Duration::from_millis(10)))?;
+        const TIMEOUT: u64 = 10;
+        stream.set_write_timeout(Some(Duration::from_millis(TIMEOUT)))?;
+        stream.set_read_timeout(Some(Duration::from_millis(TIMEOUT)))?;
         stream.set_nodelay(true)?;
 
         let (to_thread, from_main) = crossbeam_channel::unbounded();
