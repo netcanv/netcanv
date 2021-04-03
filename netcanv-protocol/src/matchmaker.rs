@@ -33,6 +33,10 @@ pub enum Packet {
     // relayed payload. the String is the client that requested the relay
     Relayed(SocketAddr, Vec<u8>),
 
+    // a relay client has disconnected. sent out to relay clients because they can't normally tell if one of their
+    // peers has disconnected
+    Disconnected(SocketAddr),
+
     //
     // other
     //

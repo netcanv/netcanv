@@ -127,13 +127,13 @@ impl State {
                     },
             };
             self.paint_canvas.stroke(from, to, &brush);
-            if self.stroke_buffer.is_empty() || to != self.stroke_buffer.last().unwrap().point {
-                if self.stroke_buffer.is_empty() {
-                    self.stroke_buffer.push(StrokePoint {
-                        point: from,
-                        brush: brush.clone(),
-                    });
-                }
+            if self.stroke_buffer.is_empty() {
+                self.stroke_buffer.push(StrokePoint {
+                    point: from,
+                    brush: brush.clone(),
+                });
+            }
+            else if to != self.stroke_buffer.last().unwrap().point {
                 self.stroke_buffer.push(StrokePoint {
                     point: to,
                     brush,
@@ -147,7 +147,6 @@ impl State {
                 ok_or_log!(self.peer.send_cursor(to, brush_size));
             }
             if !self.stroke_buffer.is_empty() {
-                println!("sending {} points", self.stroke_buffer.len());
                 ok_or_log!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
             }
         }
@@ -175,23 +174,28 @@ impl State {
             canvas.save();
             canvas.translate(self.pan);
 
-            let mut outline = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
-            outline.set_anti_alias(true);
-            outline.set_style(skpaint::Style::Stroke);
-            outline.set_blend_mode(BlendMode::Difference);
+            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
+            paint.set_anti_alias(true);
+            paint.set_blend_mode(BlendMode::Difference);
 
             paint_canvas.draw_to(canvas);
             for (_, mate) in self.peer.mates() {
-                canvas.draw_circle(mate.cursor, mate.brush_size * 0.5, &outline);
+                let text_position =
+                    mate.cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
+                paint.set_style(skpaint::Style::Fill);
+                canvas.draw_str(&mate.nickname, text_position, &self.assets.sans.borrow(), &paint);
+                paint.set_style(skpaint::Style::Stroke);
+                canvas.draw_circle(mate.cursor, mate.brush_size * 0.5, &paint);
             }
 
             canvas.restore();
 
             let mouse = self.ui.mouse_position(&input);
-            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
+            paint.set_style(skpaint::Style::Stroke);
+            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &paint);
         });
         if self.panning {
-            let position = format!("{}, {}", f32::floor(self.pan.x / 256.0), f32::floor(self.pan.y / 256.0));
+            let position = format!("{}, {}", -f32::floor(self.pan.x / 256.0), -f32::floor(self.pan.y / 256.0));
             self.ui.push_group(self.ui.size(), Layout::Freeform);
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);

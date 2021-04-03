@@ -64,7 +64,10 @@ impl Matchmaker {
     }
 
     fn send_packet(stream: &TcpStream, packet: Packet) -> Result<(), Error> {
-        eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet);
+        match &packet {
+            Packet::Relayed(..) => (),
+            packet => eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet),
+        }
         bincode::serialize_into(stream, &packet)?;
         Ok(())
     }
@@ -132,43 +135,46 @@ impl Matchmaker {
         Ok(())
     }
 
-    fn relay(mm: Arc<Mutex<Self>>, stream: &Arc<TcpStream>, to: Option<SocketAddr>, data: &[u8]) -> Result<(), Error> {
+    fn relay(
+        mm: Arc<Mutex<Self>>,
+        addr: SocketAddr,
+        stream: &Arc<TcpStream>,
+        to: Option<SocketAddr>,
+        data: &[u8]
+    ) -> Result<(), Error> {
         // XXX: this can bottleneck the server if there are many relays running at the same time
         // because the mutex is locked for the entire duration of the server relaying packets!!!
-        let addr = stream.peer_addr().unwrap();
-        {
-            let mut mm = mm.lock().unwrap();
-            let room_id =
-                match mm.relay_clients.get(&addr) {
-                    Some(id) => *id,
-                    None => {
-                        Self::send_error(stream, "Only relay clients may send Relay packets")?;
-                        return Ok(())
-                    },
-                };
-            match mm.rooms.get_mut(&room_id) {
-                Some(room) => {
-                    let mut nclients = 0;
-                    room.clients.retain(|client| client.upgrade().is_some());
-                    for client in &room.clients {
-                        let client = &client.upgrade().unwrap();
-                        if !Arc::ptr_eq(client, stream) {
-                            if let Some(addr) = to {
-                                if client.peer_addr()? != addr {
-                                    continue;
-                                }
-                            }
-                            Self::send_packet(client, Packet::Relayed(addr, Vec::from(data)))?;
-                            nclients += 1;
-                        }
-                    }
-                    eprintln!("- relayed to {} clients", nclients);
-                },
+        let mut mm = mm.lock().unwrap();
+        let room_id =
+            match mm.relay_clients.get(&addr) {
+                Some(id) => *id,
                 None => {
-                    Self::send_error(stream, "The host seems to have disconnected")?;
+                    Self::send_error(stream, "Only relay clients may send Relay packets")?;
                     return Ok(())
                 },
             };
+        match mm.rooms.get_mut(&room_id) {
+            Some(room) => {
+                let mut nclients = 0;
+                room.clients.retain(|client| client.upgrade().is_some());
+                for client in &room.clients {
+                    let client = &client.upgrade().unwrap();
+                    if !Arc::ptr_eq(client, stream) {
+                        if let Some(addr) = to {
+                            if client.peer_addr()? != addr {
+                                continue;
+                            }
+                        }
+                        Self::send_packet(client, Packet::Relayed(addr, Vec::from(data)))?;
+                        nclients += 1;
+                    }
+                }
+                eprintln!("- relayed from {} to {} clients", addr, nclients);
+            },
+            None => {
+                Self::send_error(stream, "The host seems to have disconnected")?;
+                return Ok(())
+            },
         }
 
         Ok(())
@@ -180,14 +186,15 @@ impl Matchmaker {
         stream: Arc<TcpStream>,
         packet: Packet
     ) -> Result<(), Error> {
-        eprintln!("- incoming packet: {:?}", packet);
+        match &packet {
+            Packet::Relay(..) => (),
+            packet => eprintln!("- incoming packet: {:?}", packet),
+        }
         match packet {
             Packet::Host => Self::host(mm, peer_addr, stream),
             Packet::GetHost(room_id) => Self::join(mm, &stream, room_id),
-            Packet::RequestRelay(host_addr) => {
-                Self::add_relay(mm, stream, host_addr)
-            },
-            Packet::Relay(to, data) => Self::relay(mm, &stream, to, &data),
+            Packet::RequestRelay(host_addr) => Self::add_relay(mm, stream, host_addr),
+            Packet::Relay(to, data) => Self::relay(mm, peer_addr, &stream, to, &data),
             _ => {
                 eprintln!("! error/invalid packet: {:?}", packet);
                 Err(Error::InvalidPacket)
@@ -195,11 +202,21 @@ impl Matchmaker {
         }
     }
 
-    fn disconnect(&mut self, addr: SocketAddr) {
+    fn disconnect(&mut self, addr: SocketAddr) -> Result<(), Error> {
         if let Some(room_id) = self.host_rooms.remove(&addr) {
             self.rooms.remove(&room_id);
         }
-        self.relay_clients.remove(&addr);
+        if let Some(room_id) = self.relay_clients.remove(&addr) {
+            if let Some(room) = self.rooms.get_mut(&room_id) {
+                for client in &room.clients {
+                    let client = client.upgrade();
+                    if client.is_none() { continue; }
+                    let client = client.unwrap();
+                    Self::send_packet(&client, Packet::Disconnected(addr))?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
@@ -211,7 +228,11 @@ impl Matchmaker {
                 let mut buf = [0; 1];
                 if let Ok(n) = stream.peek(&mut buf) {
                     if n == 0 {
-                        mm.lock().unwrap().disconnect(peer_addr);
+                        let _ = mm.lock().unwrap().disconnect(peer_addr)
+                            .or_else(|error| -> Result<_, ()> {
+                                eprintln!("! error/while disconnecting {}: {}", peer_addr, error);
+                                Ok(())
+                            });
                         break
                     }
                 }
