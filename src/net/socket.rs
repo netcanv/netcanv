@@ -34,7 +34,7 @@ pub enum Error {
     ThreadRecv,
 }
 
-impl<P: Serialize + DeserializeOwned + Send + 'static> Remote<P> {
+impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {
 
     pub fn new(addr: impl ToSocketAddrs) -> Result<Self, Error> {
         let stream = Arc::new(TcpStream::connect(addr)?);

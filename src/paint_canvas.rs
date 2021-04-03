@@ -3,10 +3,16 @@ use std::collections::HashSet;
 
 use skulpin::skia_safe::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Brush {
     Draw { color: Color4f, stroke_width: f32 },
     Erase { stroke_width: f32 },
+}
+
+#[derive(Debug)]
+pub struct StrokePoint {
+    pub point: Point,
+    pub brush: Brush,
 }
 
 impl Brush {

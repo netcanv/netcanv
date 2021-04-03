@@ -8,7 +8,7 @@ use crate::app::{AppState, StateArgs, paint};
 use crate::assets::Assets;
 use crate::ui::*;
 use crate::util::get_window_size;
-use netcanv::net::{Message, Peer};
+use crate::net::{Message, Peer};
 
 #[derive(Debug)]
 enum Status {
@@ -48,7 +48,7 @@ impl State {
         Self {
             assets,
             ui: Ui::new(),
-            nickname_field: TextField::new(None),
+            nickname_field: TextField::new(Some("Anon")),
             matchmaker_field: TextField::new(Some("internetcanv.as:62137")),
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
@@ -135,7 +135,11 @@ impl State {
             });
             self.ui.offset((16.0, 16.0));
             if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
-                match Self::join_room(self.matchmaker_field.text(), self.room_id_field.text()) {
+                match Self::join_room(
+                    self.nickname_field.text(),
+                    self.matchmaker_field.text(),
+                    self.room_id_field.text()
+                ) {
                     Ok(peer) => {
                         self.peer = Some(peer);
                         self.status = Status::None;
@@ -167,7 +171,7 @@ impl State {
             ]);
             self.ui.space(16.0);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
-                match Self::host_room(self.matchmaker_field.text()) {
+                match Self::host_room(self.nickname_field.text(), self.matchmaker_field.text()) {
                     Ok(peer) => {
                         self.peer = Some(peer);
                         self.status = Status::None;
@@ -220,17 +224,29 @@ impl State {
         }
     }
 
-    fn host_room(matchmaker_addr_str: &str) -> Result<Peer, Status> {
-        Ok(Peer::host(matchmaker_addr_str)?)
+    fn validate_nickname(nickname: &str) -> Result<(), Status> {
+        if nickname.is_empty() {
+            return Err(Status::Error("Nickname must not be empty".into()))
+        }
+        if nickname.len() > 16 {
+            return Err(Status::Error("The maximum length of a nickname is 16 characters".into()))
+        }
+        Ok(())
     }
 
-    fn join_room(matchmaker_addr_str: &str, room_id_str: &str) -> Result<Peer, Status> {
+    fn host_room(nickname: &str, matchmaker_addr_str: &str) -> Result<Peer, Status> {
+        Self::validate_nickname(nickname)?;
+        Ok(Peer::host(nickname, matchmaker_addr_str)?)
+    }
+
+    fn join_room(nickname: &str, matchmaker_addr_str: &str, room_id_str: &str) -> Result<Peer, Status> {
         if !matches!(room_id_str.len(), 4..=6) {
             return Err(Status::Error("Room ID must be a number with 4–6 digits".into()))
         }
+        Self::validate_nickname(nickname)?;
         let room_id: u32 = room_id_str.parse()
             .map_err(|_| Status::Error("Room ID must be an integer".into()))?;
-        Ok(Peer::join(matchmaker_addr_str, room_id)?)
+        Ok(Peer::join(nickname, matchmaker_addr_str, room_id)?)
     }
 
 }
@@ -253,6 +269,7 @@ impl AppState for State {
                     match message {
                         Message::Error(error) => self.status = Status::Error(error.into()),
                         Message::Connected => self.connected = true,
+                        _ => (),
                     }
                 },
                 Err(error) => {

@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::time::Duration;
 
 use skulpin::skia_safe::*;
 use skulpin::skia_safe::paint as skpaint;
@@ -8,7 +9,7 @@ use crate::assets::*;
 use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::util::*;
-use netcanv::net::Peer;
+use crate::net::{Message, Peer, Timer};
 
 #[derive(PartialEq, Eq)]
 enum PaintMode {
@@ -23,10 +24,12 @@ pub struct State {
     ui: Ui,
     paint_canvas: PaintCanvas<'static>,
     peer: Peer,
+    update_timer: Timer,
 
     paint_mode: PaintMode,
     paint_color: Color4f,
     brush_size_slider: Slider,
+    stroke_buffer: Vec<StrokePoint>,
 
     panning: bool,
     pan: Vector,
@@ -44,9 +47,19 @@ const COLOR_PALETTE: &'static [u32] = &[
     0xffffffff,
 ];
 
+macro_rules! ok_or_log {
+    ($exp:expr) => {
+        match $exp {
+            Ok(x) => x,
+            Err(e) => eprintln!("{}", e),
+        }
+    };
+}
+
 impl State {
 
     const BAR_SIZE: f32 = 32.0;
+    const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
     pub fn new(assets: Assets, peer: Peer) -> Self {
         Self {
@@ -55,13 +68,25 @@ impl State {
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(),
             peer,
+            update_timer: Timer::new(Self::TIME_PER_UPDATE),
 
             paint_mode: PaintMode::None,
             paint_color: hex_color4f(COLOR_PALETTE[0]),
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
+            stroke_buffer: Vec::new(),
 
             panning: false,
             pan: Vector::new(0.0, 0.0),
+        }
+    }
+
+    fn fellow_stroke(canvas: &mut PaintCanvas, points: &[StrokePoint]) {
+        if points.is_empty() { return; } // failsafe
+
+        let mut from = points[0].point;
+        for point in &points[1..] {
+            canvas.stroke(from, point.point, &point.brush);
+            from = point.point;
         }
     }
 
@@ -86,25 +111,45 @@ impl State {
         }
 
         let brush_size = self.brush_size_slider.value();
-        match self.paint_mode {
-            PaintMode::None => (),
-            PaintMode::Paint =>
-                self.paint_canvas.stroke(
-                    input.previous_mouse_position() - self.pan,
-                    input.mouse_position() - self.pan,
-                    &Brush::Draw {
+        let from = input.previous_mouse_position() - self.pan;
+        let to = input.mouse_position() - self.pan;
+        loop { // give me back my labelled blocks
+            let brush = match self.paint_mode {
+                PaintMode::None => break,
+                PaintMode::Paint =>
+                    Brush::Draw {
                         color: self.paint_color.clone(),
                         stroke_width: brush_size,
                     },
-                ),
-            PaintMode::Erase =>
-                self.paint_canvas.stroke(
-                    input.previous_mouse_position() - self.pan,
-                    input.mouse_position() - self.pan,
-                    &Brush::Erase {
+                PaintMode::Erase =>
+                    Brush::Erase {
                         stroke_width: brush_size,
                     },
-                ),
+            };
+            self.paint_canvas.stroke(from, to, &brush);
+            if self.stroke_buffer.is_empty() || to != self.stroke_buffer.last().unwrap().point {
+                if self.stroke_buffer.is_empty() {
+                    self.stroke_buffer.push(StrokePoint {
+                        point: from,
+                        brush: brush.clone(),
+                    });
+                }
+                self.stroke_buffer.push(StrokePoint {
+                    point: to,
+                    brush,
+                });
+            }
+            break;
+        }
+
+        for _ in self.update_timer.tick() {
+            if from != to {
+                ok_or_log!(self.peer.send_cursor(to, brush_size));
+            }
+            if !self.stroke_buffer.is_empty() {
+                println!("sending {} points", self.stroke_buffer.len());
+                ok_or_log!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
+            }
         }
 
         // panning
@@ -129,23 +174,30 @@ impl State {
         self.ui.draw_on_canvas(canvas, |canvas| {
             canvas.save();
             canvas.translate(self.pan);
-            paint_canvas.draw_to(canvas);
-            canvas.restore();
 
-            let mouse = self.ui.mouse_position(&input);
             let mut outline = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
             outline.set_anti_alias(true);
             outline.set_style(skpaint::Style::Stroke);
             outline.set_blend_mode(BlendMode::Difference);
-            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
 
+            paint_canvas.draw_to(canvas);
+            for (_, mate) in self.peer.mates() {
+                canvas.draw_circle(mate.cursor, mate.brush_size * 0.5, &outline);
+            }
+
+            canvas.restore();
+
+            let mouse = self.ui.mouse_position(&input);
+            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &outline);
         });
         if self.panning {
             let position = format!("{}, {}", f32::floor(self.pan.x / 256.0), f32::floor(self.pan.y / 256.0));
+            self.ui.push_group(self.ui.size(), Layout::Freeform);
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);
             self.ui.fill(canvas, Color::BLACK.with_a(128));
             self.ui.text(canvas, &position, Color::WHITE, (AlignH::Center, AlignV::Middle));
+            self.ui.pop_group();
             self.ui.pop_group();
         }
 
@@ -248,6 +300,20 @@ impl AppState for State {
     ) {
         canvas.clear(Color::WHITE);
 
+        // network
+        match self.peer.tick() {
+            Ok(messages) => for message in messages {
+                match message {
+                    Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                    x => eprintln!("{:?}", x),
+                }
+            },
+            Err(error) => {
+                eprintln!("{}", error);
+            },
+        }
+
+        // UI setup
         self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Vertical);
         self.ui.set_font(self.assets.sans.clone());
         self.ui.set_font_size(14.0);

@@ -10,6 +10,7 @@ use winit::window::WindowBuilder;
 
 mod app;
 mod assets;
+mod net;
 mod paint_canvas;
 mod ui;
 mod util;
@@ -26,8 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .with_inner_size(LogicalSize::new(1024, 600))
             .with_title("NetCanv")
             .with_resizable(true);
-        #[cfg(target_os = "linux")]
-        {
+        if cfg!(target_os = "linux") {
             b = b.with_app_id("netcanv".into())
         }
         b

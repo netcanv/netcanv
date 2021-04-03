@@ -19,3 +19,6 @@ crossbeam-channel = "0.4.4"
 thiserror = "1.0.24"
 
 netcanv-protocol = { path = "netcanv-protocol" }
+
+[profile.release]
+lto = true

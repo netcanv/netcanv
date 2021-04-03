@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 
-netcanv = { path = ".." }
 netcanv-protocol = { path = "../netcanv-protocol" }
 
 serde = { version = "1.0.123", features = ["derive"] }
