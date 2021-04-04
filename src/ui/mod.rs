@@ -36,7 +36,9 @@ pub type Alignment = (AlignH, AlignV);
 pub enum Layout {
     Freeform,
     Horizontal,
+    HorizontalRev,
     Vertical,
+    VerticalRev,
 }
 
 struct Group {
@@ -107,9 +109,19 @@ impl Ui {
     }
 
     pub fn push_group(&mut self, size: (f32, f32), layout: Layout) {
-        let top_position = Point::new(self.top().rect.left, self.top().rect.top);
+        let top_rect = self.top().rect;
+        let position = match self.top().layout {
+            Layout::Freeform | Layout::Horizontal | Layout::Vertical =>
+                Point::new(top_rect.left, top_rect.top) + self.top().layout_position,
+            Layout::HorizontalRev =>
+                Point::new(top_rect.right, top_rect.top) + self.top().layout_position
+                - Point::new(size.0, 0.0),
+            Layout::VerticalRev =>
+                Point::new(top_rect.left, top_rect.bottom) + self.top().layout_position
+                - Point::new(0.0, size.1),
+        };
         let group = Group {
-            rect: Rect::from_point_and_size(top_position + self.top().layout_position, size),
+            rect: Rect::from_point_and_size(position, size),
             layout,
             layout_position: Point::new(0.0, 0.0),
             font: self.top().font.clone(),
@@ -125,8 +137,14 @@ impl Ui {
             Layout::Horizontal => {
                 self.top_mut().layout_position.x += group.rect.width();
             },
+            Layout::HorizontalRev => {
+                self.top_mut().layout_position.x -= group.rect.width();
+            },
             Layout::Vertical => {
                 self.top_mut().layout_position.y += group.rect.height();
+            },
+            Layout::VerticalRev => {
+                self.top_mut().layout_position.y -= group.rect.height();
             },
         }
     }
@@ -137,7 +155,6 @@ impl Ui {
         let mut iter = self.group_stack.iter_mut();
         let child = iter.next_back().unwrap();
         let parent = iter.next_back().unwrap();
-        assert!(parent.layout == Layout::Freeform, "the parent must have Freeform layout");
 
         let x = match alignment.0 {
             AlignH::Left => parent.rect.left,
@@ -163,7 +180,9 @@ impl Ui {
         match self.top().layout {
             Layout::Freeform => panic!("only Vertical and Horizontal layouts can be spaced"),
             Layout::Horizontal => self.top_mut().layout_position.x += offset,
+            Layout::HorizontalRev => self.top_mut().layout_position.x -= offset,
             Layout::Vertical => self.top_mut().layout_position.y += offset,
+            Layout::VerticalRev => self.top_mut().layout_position.y -= offset,
         }
     }
 
@@ -175,9 +194,9 @@ impl Ui {
         let (x, y) = (self.top().rect.left, self.top().rect.top);
         let (mut width, mut height) = self.size();
         match self.top().layout {
-            Layout::Freeform => panic!("fit can only be used on Horizontal and Vertical layouts"),
             Layout::Horizontal => width = self.top().layout_position.x,
             Layout::Vertical => height = self.top().layout_position.y,
+            _ => panic!("fit can only be used on Horizontal and Vertical layouts"),
         }
         self.top_mut().rect.set_xywh(x, y, width, height);
     }

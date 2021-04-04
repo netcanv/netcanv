@@ -69,7 +69,6 @@ impl Expand {
         ui.pop_group();
         ui.pop_group();
 
-
         // visible area
         ui.push_group((width, ui.height()), Layout::Freeform);
         if ui.has_mouse(input) {

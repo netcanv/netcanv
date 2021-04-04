@@ -10,6 +10,7 @@ const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg"
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
+const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 
 pub struct ColorScheme {
     pub text: Color,
@@ -19,6 +20,7 @@ pub struct ColorScheme {
     pub error: Color,
 
     pub button: ButtonColors,
+    pub tool_button: ButtonColors,
     pub expand: ExpandColors,
     pub slider: Color,
     pub text_field: TextFieldColors,
@@ -29,9 +31,14 @@ pub struct StatusIcons {
     pub error: Image,
 }
 
+pub struct FileIcons {
+    pub save: Image,
+}
+
 pub struct Icons {
     pub expand: ExpandIcons,
     pub status: StatusIcons,
+    pub file: FileIcons,
 }
 
 pub struct Assets {
@@ -80,6 +87,9 @@ impl Assets {
                     info: Self::load_icon(INFO_SVG),
                     error: Self::load_icon(ERROR_SVG),
                 },
+                file: FileIcons {
+                    save: Self::load_icon(SAVE_SVG),
+                },
             },
         }
     }
@@ -98,6 +108,12 @@ impl ColorScheme {
 
             button: ButtonColors {
                 outline: Color::new(0x40000000),
+                text: Color::new(0xff000000),
+                hover: Color::new(0x20000000),
+                pressed: Color::new(0x50000000),
+            },
+            tool_button: ButtonColors {
+                outline: Color::new(0x00000000),
                 text: Color::new(0xff000000),
                 hover: Color::new(0x20000000),
                 pressed: Color::new(0x50000000),

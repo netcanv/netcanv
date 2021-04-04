@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
+use native_dialog::FileDialog;
 use skulpin::skia_safe::*;
 use skulpin::skia_safe::paint as skpaint;
 
@@ -307,15 +308,24 @@ impl State {
 
         // room ID
 
+        self.ui.push_group((self.ui.remaining_width(), self.ui.height()), Layout::HorizontalRev);
+        // note that the elements go from right to left
         if self.peer.is_host() {
-            self.ui.push_group((self.ui.remaining_width(), self.ui.height()), Layout::Freeform);
-            self.ui.push_group((128.0, self.ui.height()), Layout::Horizontal);
-            self.ui.align((AlignH::Right, AlignV::Top));
-
-            // "Room ID" text
-            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
-            self.ui.text(canvas, "Room ID", self.assets.colors.text, (AlignH::Center, AlignV::Middle));
-            self.ui.pop_group();
+            // the save button
+            if Button::with_icon(&mut self.ui, canvas, input, ButtonArgs {
+                height: 32.0,
+                colors: &self.assets.colors.tool_button,
+            }, &self.assets.icons.file.save).clicked() {
+                match FileDialog::new()
+                    .set_filename("canvas.png")
+                    .add_filter("PNG image", &["png"])
+                    .show_save_single_file()
+                {
+                    Ok(Some(path)) => ok_or_log!(self.log, self.paint_canvas.save(&path)),
+                    Err(error) => log!(self.log, "Error while selecting file: {}", error),
+                    _ => (),
+                }
+            }
 
             // the room ID itself
             let id_text = format!("{:04}", self.peer.room_id().unwrap());
@@ -324,9 +334,12 @@ impl State {
             self.ui.text(canvas, &id_text, self.assets.colors.text, (AlignH::Center, AlignV::Middle));
             self.ui.pop_group();
 
-            self.ui.pop_group();
+            // "Room ID" text
+            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
+            self.ui.text(canvas, "Room ID", self.assets.colors.text, (AlignH::Center, AlignV::Middle));
             self.ui.pop_group();
         }
+        self.ui.pop_group();
 
         self.ui.pop_group();
 

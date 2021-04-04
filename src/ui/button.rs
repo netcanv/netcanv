@@ -28,9 +28,11 @@ impl Button {
         canvas: &mut Canvas,
         input: &Input,
         ButtonArgs { height, colors }: ButtonArgs,
+        width_hint: Option<f32>,
         extra: impl FnOnce(&mut Ui, &mut Canvas),
     ) -> ButtonProcessResult {
-        ui.push_group((0.0, height), Layout::Horizontal);  // horizontal because we need to fit() later
+        // horizontal because we need to fit() later
+        ui.push_group((width_hint.unwrap_or(0.0), height), Layout::Horizontal);
 
         extra(ui, canvas);
         ui.fit();
@@ -57,12 +59,24 @@ impl Button {
         args: ButtonArgs,
         text: &str,
     ) -> ButtonProcessResult {
-        Self::process(ui, canvas, input, args, |ui, canvas| {
+        Self::process(ui, canvas, input, args, None, |ui, canvas| {
             let text_width = ui.text_size(text).0;
             let padding = args.height;
             ui.push_group((text_width + padding, ui.height()), Layout::Freeform);
             ui.text(canvas, text, args.colors.text, (AlignH::Center, AlignV::Middle));
             ui.pop_group();
+        })
+    }
+
+    pub fn with_icon(
+        ui: &mut Ui,
+        canvas: &mut Canvas,
+        input: &Input,
+        args: ButtonArgs,
+        icon: &Image,
+    ) -> ButtonProcessResult {
+        Self::process(ui, canvas, input, args, Some(args.height), |ui, canvas| {
+            ui.icon(canvas, icon, args.colors.text, Some((args.height, args.height)));
         })
     }
 

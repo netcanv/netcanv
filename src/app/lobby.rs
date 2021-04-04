@@ -49,7 +49,7 @@ impl State {
             assets,
             ui: Ui::new(),
             nickname_field: TextField::new(Some("Anon")),
-            matchmaker_field: TextField::new(None),
+            matchmaker_field: TextField::new(Some("localhost:62137")),
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
@@ -169,8 +169,8 @@ impl State {
             self.ui.offset((32.0, 8.0));
 
             self.ui.paragraph(canvas, self.assets.colors.text, AlignH::Left, None, &[
-                "Click 'Host' and share the Room ID",
-                "with your friends.",
+                "Create a blank canvas, or load one from file,",
+                "and share the Room ID with your friends.",
             ]);
             self.ui.space(16.0);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {

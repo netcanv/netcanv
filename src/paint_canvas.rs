@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet, hash_map};
+use std::path::Path;
 use std::io::Cursor;
 
 use skulpin::skia_safe::*;
-use ::image::{ColorType, ImageDecoder, ImageError, codecs::png::{PngDecoder, PngEncoder}};
+use ::image::{ColorType, ImageDecoder, ImageBuffer, ImageError, Rgba, codecs::png::{PngDecoder, PngEncoder}};
 
 #[derive(Clone, Debug)]
 pub enum Brush {
@@ -75,6 +76,20 @@ impl<'a> Chunk<'a> {
             let rawptr = self.bitmap.pixels() as *mut u8;
             std::slice::from_raw_parts_mut(rawptr, self.bitmap.compute_byte_size())
         }
+    }
+
+    fn pixels(&self) -> &'a [u8] {
+        unsafe {
+            // i hope *even more* that _this_ is correct, as sus at it looks everything should be fine.
+            // ~ top 10 quotes said before tragedy
+            let bitmap = &self.bitmap as *const Bitmap as *mut Bitmap;
+            let rawptr = (*bitmap).pixels() as *const u8;
+            std::slice::from_raw_parts(rawptr, self.bitmap.compute_byte_size())
+        }
+    }
+
+    fn as_image_buffer(&self) -> ImageBuffer<Rgba<u8>, &'a [u8]> {
+        ImageBuffer::from_raw(Self::SIZE.0 as u32, Self::SIZE.1 as u32, self.pixels()).unwrap()
     }
 
     // reencodes PNG data if necessary.
@@ -182,10 +197,7 @@ impl<'a> PaintCanvas<'a> {
 
     }
 
-    pub fn draw_to(
-        &self,
-        canvas: &mut Canvas,
-    ) {
+    pub fn draw_to(&self, canvas: &mut Canvas) {
         for (chunk_position, chunk) in &self.chunks {
             let screen_position = Chunk::screen_position(*chunk_position);
             canvas.draw_bitmap(&chunk.bitmap, screen_position, None);
@@ -202,6 +214,44 @@ impl<'a> PaintCanvas<'a> {
         self.ensure_chunk_exists(to_chunk);
         let chunk = self.chunks.get_mut(&to_chunk).unwrap();
         chunk.decode_png_data(data)
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
+        use ::image::{GenericImage, RgbaImage};
+
+        let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+        for (chunk_position, _) in &self.chunks {
+            left = left.min(chunk_position.0);
+            top = top.min(chunk_position.1);
+            right = right.max(chunk_position.0);
+            bottom = bottom.max(chunk_position.1);
+        }
+        eprintln!("left={}, top={}, right={}, bottom={}", left, top, right, bottom);
+        if left == i32::MAX {
+            anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
+        }
+        let width = ((right - left + 1) * Chunk::SIZE.0) as u32;
+        let height = ((bottom - top + 1) * Chunk::SIZE.1) as u32;
+        eprintln!("size: {:?}", (width, height));
+        let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+        for (chunk_position, chunk) in &self.chunks {
+            eprintln!("writing chunk {:?}", chunk_position);
+            let pixel_position = (
+                (Chunk::SIZE.0 * (chunk_position.0 - left)) as u32,
+                (Chunk::SIZE.1 * (chunk_position.1 - top)) as u32,
+            );
+            eprintln!("   - pixel position: {:?}", pixel_position);
+            let chunk_image = chunk.as_image_buffer();
+            let mut sub_image = image.sub_image(
+                pixel_position.0,
+                pixel_position.1,
+                Chunk::SIZE.0 as u32,
+                Chunk::SIZE.1 as u32,
+            );
+            sub_image.copy_from(&chunk_image, 0, 0)?;
+        }
+        image.save(path)?;
+        Ok(())
     }
 
 }
