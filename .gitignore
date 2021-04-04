@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 .lite_project.lua
+
+appimage/out
+appimage/linuxdeploy-*

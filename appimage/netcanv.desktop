@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=netcanv
+Comment=Multiplayer Paint
+Exec=netcanv
+Icon=netcanv
+Categories=Graphics;Network
