@@ -39,7 +39,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build(&window)?;
 
     let assets = Assets::new(ColorScheme::light());
-    // let mut app: Box<dyn AppState> = Box::new(lobby::State::new(assets)) as _;
     let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, None)) as _);
     let mut input = Input::new();
 

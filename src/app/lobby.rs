@@ -49,7 +49,7 @@ impl State {
             assets,
             ui: Ui::new(),
             nickname_field: TextField::new(Some("Anon")),
-            matchmaker_field: TextField::new(Some("internetcanv.as:62137")),
+            matchmaker_field: TextField::new(None),
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
