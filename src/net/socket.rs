@@ -13,13 +13,52 @@ struct Finished;
 struct Abort;
 struct Tick;
 
+struct ControllableThread {
+    finished: Receiver<Finished>,
+    abort: Sender<Abort>,
+}
+
+impl ControllableThread {
+    fn new<F, T>(name: &'static str, f: F) -> ControllableThread
+        where F: FnOnce(Receiver<Abort>) -> Result<(), T> + Send + 'static,
+              T: std::fmt::Display,
+    {
+        let (tx_finished, rx_finished) = crossbeam_channel::unbounded();
+        let (tx_abort, rx_abort) = crossbeam_channel::unbounded();
+
+        let _ = std::thread::Builder::new().name(name.into()).spawn(move || {
+            match f(rx_abort) {
+                Err(error) => eprintln!("thread '{}' returned with error: {}", name, error),
+                _ => (),
+            }
+            let _ = tx_finished.send(Finished);
+        });
+
+        ControllableThread {
+            finished: rx_finished,
+            abort: tx_abort,
+        }
+    }
+
+    fn tick(&self) -> Result<bool, Error> {
+        match self.finished.try_recv() {
+            Ok(_) => Ok(true),
+            Err(TryRecvError::Empty) => Ok(false),
+            Err(TryRecvError::Disconnected) => Err(Error::ThreadRecv),
+        }
+    }
+
+    fn abort(&self) -> Result<(), Error> {
+        self.abort.send(Abort).map_err(|_| Error::ThreadSend)
+    }
+}
+
 // P is the packet type
 pub struct Remote<P: Serialize + DeserializeOwned + Send + 'static> {
     rx: Receiver<P>,
     tx: Sender<P>,
-    finished: Receiver<Finished>,
-    abort: Sender<Abort>,
-    tick: Sender<Tick>,
+    send: ControllableThread,
+    recv: ControllableThread,
 }
 
 #[derive(Debug, Error)]
@@ -37,73 +76,42 @@ pub enum Error {
 impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {
 
     pub fn new(addr: impl ToSocketAddrs) -> Result<Self, Error> {
-        let stream = Arc::new(TcpStream::connect(addr)?);
-        // we don't actually want fully non-blocking I/O so as not to spinlock the network thread
-        const TIMEOUT: u64 = 10;
-        stream.set_write_timeout(Some(Duration::from_millis(TIMEOUT)))?;
-        stream.set_read_timeout(Some(Duration::from_millis(TIMEOUT)))?;
-        stream.set_nodelay(true)?;
+        let stream_arc = Arc::new(TcpStream::connect(addr)?);
+        stream_arc.set_nodelay(true)?;
 
         let (to_thread, from_main) = crossbeam_channel::unbounded();
         let (to_main, from_thread) = crossbeam_channel::unbounded();
-        let (tx_finished, rx_finished) = crossbeam_channel::unbounded();
-        let (tx_abort, rx_abort) = crossbeam_channel::unbounded();
-        let (tx_tick, rx_tick) = crossbeam_channel::unbounded();
 
-        let _send_thread = std::thread::spawn(move || -> Result<(), Error> {
-            'outer: loop {
-                macro_rules! ok_or_break {
-                    ($e:expr) => {
-                        match $e {
-                            Err(_) => { break 'outer },
-                            _ => (),
-                        }
-                    };
-                }
-
-                // wait until the main thread calls tick()
-                let _ = rx_tick.recv();
-                // abort if requested
-                if let Ok(_) = rx_abort.try_recv() {
+        let stream = stream_arc.clone();
+        let send = ControllableThread::new("network send thread", move |abort| -> Result<(), Error> {
+            loop {
+                if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break;
                 }
-
-                // otherwise send/receive packets
-                use bincode::ErrorKind as BincodeError;
-                use std::io::ErrorKind as IoError;
                 while let Ok(packet) = from_main.try_recv() {
-                    loop {
-                        if let Err(error) = bincode::serialize_into(&*stream, &packet) {
-                            match *error {
-                                BincodeError::Io(error) if error.kind() == IoError::WouldBlock => {
-                                    // repeat until it stops blocking
-                                    continue;
-                                },
-                                _ => (),
-                            }
-                        }
-                        break;
-                    }
-                }
-                loop {
-                    match bincode::deserialize_from::<_, P>(&*stream) {
-                        // finish the thread if the channel is disconnected
-                        Ok(packet) => { ok_or_break!(to_main.send(packet)); },
-                        _ => (),
-                    }
-                    break;
+                    bincode::serialize_into(&*stream, &packet)?;
                 }
             }
+            Ok(())
+        });
 
-            tx_finished.send(Finished).map_err(|_| Error::ThreadSend)
+        let stream = stream_arc.clone();
+        let recv = ControllableThread::new("network recv thread", move |abort| -> Result<(), Error> {
+            loop {
+                if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
+                    break;
+                }
+                let packet = bincode::deserialize_from(&*stream)?;
+                to_main.send(packet).map_err(|_| Error::ThreadSend)?;
+            }
+            Ok(())
         });
 
         Ok(Self {
             rx: from_thread,
             tx: to_thread,
-            finished: rx_finished,
-            abort: tx_abort,
-            tick: tx_tick,
+            send,
+            recv,
         })
     }
 
@@ -111,21 +119,12 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         self.tx.send(packet).map_err(|_| Error::ThreadSend)
     }
 
-    pub fn recv(&self) -> Result<P, Error> {
-        Ok(self.rx.recv().map_err(|_| Error::ThreadRecv)?)
-    }
-
     pub fn try_recv(&self) -> Option<P> {
         self.rx.try_recv().ok()
     }
 
     pub fn tick(&self) -> Result<bool, Error> {
-        self.tick.send(Tick).map_err(|_| Error::ThreadSend)?;
-        match self.finished.try_recv() {
-            Ok(_) => Ok(true),
-            Err(TryRecvError::Empty) => Ok(false),
-            Err(TryRecvError::Disconnected) => Err(Error::ThreadRecv),
-        }
+        Ok(self.send.tick()? && self.recv.tick()?)
     }
 
 }
@@ -136,7 +135,8 @@ impl<P: Serialize + DeserializeOwned + Send> Drop for Remote<P> {
         // intentionally ignore the result:
         // if the thread has already finished, this will fail with an error, because the receiving end has already
         // disconnected.
-        let _ = self.abort.send(Abort);
+        let _ = self.send.abort();
+        let _ = self.recv.abort();
     }
 
 }

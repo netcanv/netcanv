@@ -17,6 +17,7 @@ serde = { version = "1.0.123", features = ["derive"] }
 bincode = "1.3.2"
 crossbeam-channel = "0.4.4"
 thiserror = "1.0.24"
+image = "0.23.14"
 
 netcanv-protocol = { path = "netcanv-protocol" }
 

@@ -40,8 +40,14 @@ pub enum Message {
     // painting
     //
 
+    // a new mate has arrived in the room and needs canvas data
+    NewMate(SocketAddr),
+
     // stroke packet received
     Stroke(Vec<StrokePoint>),
+
+    // canvas data packet received
+    CanvasData((i32, i32), Vec<u8>)
 }
 
 pub struct Mate {
@@ -172,6 +178,9 @@ impl Peer {
                     }
                 }).collect()));
             },
+            cl::Packet::CanvasData(chunk, png_image) => {
+                return Some(Message::CanvasData(chunk, png_image));
+            },
         }
 
         None
@@ -209,7 +218,9 @@ impl Peer {
                             then = Then::SayHello;
                         }
                     },
+                    mm::Packet::ClientAddress(addr) => return Some(Message::NewMate(*addr)),
                     mm::Packet::Relayed(from, payload) => then = Then::ReadRelayed(*from, payload.to_vec()),
+                    mm::Packet::Disconnected(addr) => { self.mates.remove(&addr); },
                     mm::Packet::Error(message) => return Some(Message::Error(message.into())),
                     _ => return None,
                 }
@@ -262,6 +273,10 @@ impl Peer {
                 }),
             }
         }).collect()))
+    }
+
+    pub fn send_canvas_data(&self, to: SocketAddr, chunk: (i32, i32), png_data: Vec<u8>) -> Result<(), Error> {
+        self.send(Some(to), cl::Packet::CanvasData(chunk, png_data))
     }
 
     pub fn is_host(&self) -> bool {

@@ -30,7 +30,7 @@ pub enum Packet {
 
     // payload to be relayed. the first argument is an optional target to relay to
     Relay(Option<SocketAddr>, Vec<u8>),
-    // relayed payload. the String is the client that requested the relay
+    // relayed payload
     Relayed(SocketAddr, Vec<u8>),
 
     // a relay client has disconnected. sent out to relay clients because they can't normally tell if one of their

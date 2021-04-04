@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -30,6 +32,8 @@ pub struct State {
     paint_color: Color4f,
     brush_size_slider: Slider,
     stroke_buffer: Vec<StrokePoint>,
+
+    canvas_data_queue: VecDeque<SocketAddr>,
 
     panning: bool,
     pan: Vector,
@@ -75,6 +79,8 @@ impl State {
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
             stroke_buffer: Vec::new(),
 
+            canvas_data_queue: VecDeque::new(),
+
             panning: false,
             pan: Vector::new(0.0, 0.0),
         }
@@ -88,6 +94,11 @@ impl State {
             canvas.stroke(from, point.point, &point.brush);
             from = point.point;
         }
+    }
+
+    fn canvas_data(canvas: &mut PaintCanvas, chunk_position: (i32, i32), png_image: &[u8]) {
+        println!("received canvas data for chunk {:?}", chunk_position);
+        ok_or_log!(canvas.decode_png_data(chunk_position, png_image));
     }
 
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
@@ -132,8 +143,7 @@ impl State {
                     point: from,
                     brush: brush.clone(),
                 });
-            }
-            else if to != self.stroke_buffer.last().unwrap().point {
+            } else if to != self.stroke_buffer.last().unwrap().point {
                 self.stroke_buffer.push(StrokePoint {
                     point: to,
                     brush,
@@ -305,16 +315,26 @@ impl AppState for State {
         canvas.clear(Color::WHITE);
 
         // network
+
         match self.peer.tick() {
             Ok(messages) => for message in messages {
                 match message {
                     Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                    Message::NewMate(addr) => self.canvas_data_queue.push_back(addr),
+                    Message::CanvasData(chunk, png) => Self::canvas_data(&mut self.paint_canvas, chunk, &png),
                     x => eprintln!("{:?}", x),
                 }
             },
             Err(error) => {
                 eprintln!("{}", error);
             },
+        }
+
+        for addr in self.canvas_data_queue.drain(..) {
+            for (chunk_position, png_data) in self.paint_canvas.png_data() {
+                eprintln!("{:?}: sending…", chunk_position);
+                ok_or_log!(self.peer.send_canvas_data(addr, chunk_position, png_data));
+            }
         }
 
         // UI setup

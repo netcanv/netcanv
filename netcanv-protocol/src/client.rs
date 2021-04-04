@@ -27,13 +27,16 @@ pub enum Packet {
     // response from the other clients with their nicknames
     HiThere(String),
 
+    // image data sent to a client by the host when it first joins
+    CanvasData((i32, i32), Vec<u8>),
+
     //
     // painting
     // --------
     // these packets are sent 20 times per second
     //
 
-    // cursor packet containing fixed-point 29.3 coordinates
+    // cursor packet containing fixed-point 29.3 coordinates and a fixed-point 31.1 brush size
     Cursor(i32, i32, i16),
 
     // a paint stroke
