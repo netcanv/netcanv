@@ -2,7 +2,7 @@
 
 cargo build --release;
 
-cd netcanv-matchmaker;
+cd ../netcanv-matchmaker;
 cargo build --release;
 
 cd ..;
