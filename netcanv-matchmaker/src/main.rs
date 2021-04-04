@@ -261,7 +261,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     eprintln!("NetCanv Matchmaker: starting on port {}", port);
 
-    let localhost = SocketAddr::from(([127, 0, 0, 1], port));
+    let localhost = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(localhost)?;
 
     let state = Arc::new(Mutex::new(Matchmaker::new()));

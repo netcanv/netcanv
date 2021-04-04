@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     event_loop.run(move |event, _, control_flow| {
         let window = WinitWindow::new(&winit_window);
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
 
         match event {
 
