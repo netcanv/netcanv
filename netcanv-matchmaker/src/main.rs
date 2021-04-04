@@ -10,8 +10,6 @@ use thiserror::Error;
 
 use netcanv_protocol::matchmaker::*;
 
-const PORT: u16 = 62137;
-
 const MAX_ROOM_ID: u32 = 9999;
 
 #[derive(Clone, Debug)]
@@ -254,9 +252,16 @@ impl Matchmaker {
 }
 
 fn main() -> Result<(), Box<dyn error::Error>> {
-    eprintln!("NetCanv Matchmaker: starting on port {}", PORT);
+    let mut port: u16 = 62137;
+    let mut args = std::env::args();
+    args.next();
+    if let Some(port_str) = args.next() {
+        port = port_str.parse()?;
+    }
 
-    let localhost = SocketAddr::from(([127, 0, 0, 1], PORT));
+    eprintln!("NetCanv Matchmaker: starting on port {}", port);
+
+    let localhost = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = TcpListener::bind(localhost)?;
 
     let state = Arc::new(Mutex::new(Matchmaker::new()));
