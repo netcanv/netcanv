@@ -88,7 +88,7 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
                 if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break;
                 }
-                while let Ok(packet) = from_main.try_recv() {
+                while let Ok(packet) = from_main.recv() {
                     bincode::serialize_into(&*stream, &packet)?;
                 }
             }

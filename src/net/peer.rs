@@ -40,6 +40,12 @@ pub enum Message {
     // painting
     //
 
+    // someone has joined
+    Joined(String),
+
+    // someone has left
+    Left(String),
+
     // a new mate has arrived in the room and needs canvas data
     NewMate(SocketAddr),
 
@@ -148,7 +154,8 @@ impl Peer {
             cl::Packet::Hello(nickname) => {
                 eprintln!("{} ({}) joined", nickname, sender_addr);
                 try_or_message!(self.send(Some(sender_addr), cl::Packet::HiThere(self.nickname.clone())));
-                self.add_mate(sender_addr, nickname);
+                self.add_mate(sender_addr, nickname.clone());
+                return Some(Message::Joined(nickname))
             },
             cl::Packet::HiThere(nickname) => {
                 eprintln!("{} ({}) is in the room", nickname, sender_addr);
@@ -220,7 +227,11 @@ impl Peer {
                     },
                     mm::Packet::ClientAddress(addr) => return Some(Message::NewMate(*addr)),
                     mm::Packet::Relayed(from, payload) => then = Then::ReadRelayed(*from, payload.to_vec()),
-                    mm::Packet::Disconnected(addr) => { self.mates.remove(&addr); },
+                    mm::Packet::Disconnected(addr) => {
+                        if let Some(mate) = self.mates.remove(&addr) {
+                            return Some(Message::Left(mate.nickname))
+                        }
+                    },
                     mm::Packet::Error(message) => return Some(Message::Error(message.into())),
                     _ => return None,
                 }

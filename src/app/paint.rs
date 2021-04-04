@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
-use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use skulpin::skia_safe::*;
 use skulpin::skia_safe::paint as skpaint;
@@ -20,6 +19,8 @@ enum PaintMode {
     Erase,
 }
 
+type Log = Vec<(String, Instant)>;
+
 pub struct State {
     assets: Assets,
 
@@ -36,6 +37,7 @@ pub struct State {
     canvas_data_queue: VecDeque<SocketAddr>,
 
     error: Option<String>,
+    log: Log,
 
     panning: bool,
     pan: Vector,
@@ -53,11 +55,17 @@ const COLOR_PALETTE: &'static [u32] = &[
     0xffffffff,
 ];
 
+macro_rules! log {
+    ($log:expr, $($arg:tt)*) => {
+        $log.push((format!($($arg)*), Instant::now()))
+    };
+}
+
 macro_rules! ok_or_log {
-    ($exp:expr) => {
+    ($log:expr, $exp:expr) => {
         match $exp {
             Ok(x) => x,
-            Err(e) => eprintln!("{}", e),
+            Err(e) => log!($log, "{}", e),
         }
     };
 }
@@ -68,7 +76,7 @@ impl State {
     const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
     pub fn new(assets: Assets, peer: Peer) -> Self {
-        Self {
+        let mut this = Self {
             assets,
 
             ui: Ui::new(),
@@ -84,25 +92,45 @@ impl State {
             canvas_data_queue: VecDeque::new(),
 
             error: None,
+            log: Log::new(),
 
             panning: false,
             pan: Vector::new(0.0, 0.0),
+        };
+        if this.peer.is_host() {
+            log!(this.log, "Welcome to your room!");
+            log!(this.log, "To invite friends, send them the room ID shown in the bottom right corner of your screen.");
         }
+        this
     }
 
     fn fellow_stroke(canvas: &mut PaintCanvas, points: &[StrokePoint]) {
         if points.is_empty() { return; } // failsafe
 
         let mut from = points[0].point;
-        for point in &points[1..] {
+        let first_index = if points.len() > 1 { 1 } else { 0 };
+        for point in &points[first_index..] {
             canvas.stroke(from, point.point, &point.brush);
             from = point.point;
         }
     }
 
-    fn canvas_data(canvas: &mut PaintCanvas, chunk_position: (i32, i32), png_image: &[u8]) {
+    fn canvas_data(log: &mut Log, canvas: &mut PaintCanvas, chunk_position: (i32, i32), png_image: &[u8]) {
         println!("received canvas data for chunk {:?}", chunk_position);
-        ok_or_log!(canvas.decode_png_data(chunk_position, png_image));
+        ok_or_log!(log, canvas.decode_png_data(chunk_position, png_image));
+    }
+
+    fn process_log(&mut self, canvas: &mut Canvas) {
+        self.log.retain(|(_, time_created)| time_created.elapsed() < Duration::from_secs(5));
+        self.ui.draw_on_canvas(canvas, |canvas| {
+            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
+            paint.set_blend_mode(BlendMode::Difference);
+            let mut y = self.ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
+            for (entry, _) in &self.log {
+                canvas.draw_str(&entry, (8.0, y), &self.assets.sans.borrow(), &paint);
+                y += 16.0;
+            }
+        });
     }
 
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
@@ -157,11 +185,11 @@ impl State {
         }
 
         for _ in self.update_timer.tick() {
-            if from != to {
-                ok_or_log!(self.peer.send_cursor(to, brush_size));
+            if input.previous_mouse_position() != input.mouse_position() {
+                ok_or_log!(self.log, self.peer.send_cursor(to, brush_size));
             }
             if !self.stroke_buffer.is_empty() {
-                ok_or_log!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
+                ok_or_log!(self.log, self.peer.send_stroke(self.stroke_buffer.drain(..)));
             }
         }
 
@@ -218,6 +246,8 @@ impl State {
             self.ui.pop_group();
             self.ui.pop_group();
         }
+
+        self.process_log(canvas);
 
         self.ui.pop_group();
     }
@@ -324,8 +354,14 @@ impl AppState for State {
             Ok(messages) => for message in messages {
                 match message {
                     Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+
                     Message::NewMate(addr) => self.canvas_data_queue.push_back(addr),
-                    Message::CanvasData(chunk, png) => Self::canvas_data(&mut self.paint_canvas, chunk, &png),
+                    Message::CanvasData(chunk, png) =>
+                        Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk, &png),
+
+                    Message::Joined(nickname) => log!(self.log, "{} joined the room", nickname),
+                    Message::Left(nickname) => log!(self.log, "{} has left the room", nickname),
+
                     Message::Error(error) => self.error = Some(error),
                     x => eprintln!("unknown message: {:?}", x),
                 }
@@ -338,7 +374,7 @@ impl AppState for State {
         for addr in self.canvas_data_queue.drain(..) {
             for (chunk_position, png_data) in self.paint_canvas.png_data() {
                 eprintln!("sending chunk {:?}", chunk_position);
-                ok_or_log!(self.peer.send_canvas_data(addr, chunk_position, png_data));
+                ok_or_log!(self.log, self.peer.send_canvas_data(addr, chunk_position, png_data));
             }
         }
 
