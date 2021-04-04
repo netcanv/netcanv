@@ -44,7 +44,7 @@ pub struct State {
 
 impl State {
 
-    pub fn new(assets: Assets) -> Self {
+    pub fn new(assets: Assets, error: Option<&str>) -> Self {
         Self {
             assets,
             ui: Ui::new(),
@@ -53,7 +53,10 @@ impl State {
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
-            status: Status::None,
+            status: match error {
+                Some(err) => Status::Error(err.into()),
+                None => Status::None,
+            },
             peer: None,
             connected: false,
         }

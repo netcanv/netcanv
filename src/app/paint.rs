@@ -35,6 +35,8 @@ pub struct State {
 
     canvas_data_queue: VecDeque<SocketAddr>,
 
+    error: Option<String>,
+
     panning: bool,
     pan: Vector,
 }
@@ -80,6 +82,8 @@ impl State {
             stroke_buffer: Vec::new(),
 
             canvas_data_queue: VecDeque::new(),
+
+            error: None,
 
             panning: false,
             pan: Vector::new(0.0, 0.0),
@@ -322,7 +326,8 @@ impl AppState for State {
                     Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
                     Message::NewMate(addr) => self.canvas_data_queue.push_back(addr),
                     Message::CanvasData(chunk, png) => Self::canvas_data(&mut self.paint_canvas, chunk, &png),
-                    x => eprintln!("{:?}", x),
+                    Message::Error(error) => self.error = Some(error),
+                    x => eprintln!("unknown message: {:?}", x),
                 }
             },
             Err(error) => {
@@ -332,7 +337,7 @@ impl AppState for State {
 
         for addr in self.canvas_data_queue.drain(..) {
             for (chunk_position, png_data) in self.paint_canvas.png_data() {
-                eprintln!("{:?}: sending…", chunk_position);
+                eprintln!("sending chunk {:?}", chunk_position);
                 ok_or_log!(self.peer.send_canvas_data(addr, chunk_position, png_data));
             }
         }
@@ -350,7 +355,11 @@ impl AppState for State {
     }
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
-        self
+        if let Some(error) = self.error {
+            Box::new(lobby::State::new(self.assets, Some(&error)))
+        } else {
+            self
+        }
     }
 
 }
