@@ -5,8 +5,10 @@ use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::platform::unix::WindowBuilderExtUnix;
 use winit::window::WindowBuilder;
+
+#[cfg(target_os="linux")]
+use winit::platform::unix::WindowBuilderExtUnix;
 
 mod app;
 mod assets;
@@ -27,9 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .with_inner_size(LogicalSize::new(1024, 600))
             .with_title("NetCanv")
             .with_resizable(true);
-        if cfg!(target_os = "linux") {
+        
+        #[cfg(target_os = "linux")]
+        {
             b = b.with_app_id("netcanv".into())
         }
+
         b
     }.build(&event_loop)?;
 
