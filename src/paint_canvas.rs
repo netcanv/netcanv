@@ -232,6 +232,12 @@ impl<'a> PaintCanvas<'a> {
         chunk.decode_png_data(data)
     }
 
+    pub fn cleanup_empty_chunks(&mut self) {
+        self.chunks.retain(|_, chunk| {
+            chunk.pixels().iter().any(|x| *x != 0u8)
+        });
+    }
+
     // right now loading/saving only really works (well, was tested) on little-endian machines, so i make no guarantees
     // if it works on big-endian. most likely loading will screw up the channel order in pixels. thanks, skia!
 

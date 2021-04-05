@@ -324,7 +324,10 @@ impl State {
                 .add_filter("PNG image", &["png"])
                 .show_save_single_file()
             {
-                Ok(Some(path)) => ok_or_log!(self.log, self.paint_canvas.save(&path)),
+                Ok(Some(path)) => {
+                    self.paint_canvas.cleanup_empty_chunks();
+                    ok_or_log!(self.log, self.paint_canvas.save(&path))
+                },
                 Err(error) => log!(self.log, "Error while selecting file: {}", error),
                 _ => (),
             }

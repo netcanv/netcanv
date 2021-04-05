@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Encoding=UTF-8
-Name=netcanv
+Name=NetCanv
 Comment=Multiplayer Paint
 Exec=netcanv
 Icon=netcanv
