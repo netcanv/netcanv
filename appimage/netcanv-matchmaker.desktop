@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=netcanv matchmaker
+Comment=Server for Multiplayer Paint
+Exec=netcanv-matchmaker
+Icon=netcanv
+Categories=Graphics;Network
+Terminal=true
