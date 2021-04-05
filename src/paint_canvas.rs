@@ -1,9 +1,20 @@
 use std::collections::{HashMap, HashSet, hash_map};
-use std::path::Path;
 use std::io::Cursor;
+use std::ops::{Deref, DerefMut};
+use std::path::Path;
 
 use skulpin::skia_safe::*;
-use ::image::{ColorType, ImageDecoder, ImageBuffer, ImageError, Rgba, codecs::png::{PngDecoder, PngEncoder}};
+use ::image::{
+    ColorType,
+    GenericImage,
+    GenericImageView,
+    ImageDecoder,
+    ImageBuffer,
+    ImageError,
+    Rgba,
+    RgbaImage,
+    codecs::png::{PngDecoder, PngEncoder}
+};
 
 #[derive(Clone, Debug)]
 pub enum Brush {
@@ -51,6 +62,7 @@ pub struct Chunk<'a> {
 impl<'a> Chunk<'a> {
     const SIZE: (i32, i32) = (256, 256);
 
+
     fn new() -> Self {
         let mut bitmap = Bitmap::new();
         bitmap.alloc_n32_pixels(Self::SIZE, None);
@@ -90,6 +102,10 @@ impl<'a> Chunk<'a> {
 
     fn as_image_buffer(&self) -> ImageBuffer<Rgba<u8>, &'a [u8]> {
         ImageBuffer::from_raw(Self::SIZE.0 as u32, Self::SIZE.1 as u32, self.pixels()).unwrap()
+    }
+
+    fn as_image_buffer_mut(&mut self) -> ImageBuffer<Rgba<u8>, &'a mut [u8]> {
+        ImageBuffer::from_raw(Self::SIZE.0 as u32, Self::SIZE.1 as u32, self.pixels_mut()).unwrap()
     }
 
     // reencodes PNG data if necessary.
@@ -216,9 +232,27 @@ impl<'a> PaintCanvas<'a> {
         chunk.decode_png_data(data)
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
-        use ::image::{GenericImage, RgbaImage};
+    // right now loading/saving only really works (well, was tested) on little-endian machines, so i make no guarantees
+    // if it works on big-endian. most likely loading will screw up the channel order in pixels. thanks, skia!
 
+    fn fix_endianness<C>(image: &mut ImageBuffer<Rgba<u8>, C>)
+        where C: Deref<Target = [u8]> + DerefMut
+    {
+        #[cfg(target_endian = "little")]
+        {
+            use ::image::Pixel;
+            for pixel in image.pixels_mut() {
+                let bgra = pixel.to_bgra();
+                let channels = pixel.channels_mut();
+                channels[0] = bgra[0];
+                channels[1] = bgra[1];
+                channels[2] = bgra[2];
+                channels[3] = bgra[3];
+            }
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         for (chunk_position, _) in &self.chunks {
             left = left.min(chunk_position.0);
@@ -241,7 +275,9 @@ impl<'a> PaintCanvas<'a> {
                 (Chunk::SIZE.1 * (chunk_position.1 - top)) as u32,
             );
             eprintln!("   - pixel position: {:?}", pixel_position);
-            let chunk_image = chunk.as_image_buffer();
+            let pixels = Vec::from(chunk.pixels());
+            let mut chunk_image = RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
+            Self::fix_endianness(&mut chunk_image);
             let mut sub_image = image.sub_image(
                 pixel_position.0,
                 pixel_position.1,
@@ -251,6 +287,40 @@ impl<'a> PaintCanvas<'a> {
             sub_image.copy_from(&chunk_image, 0, 0)?;
         }
         image.save(path)?;
+        Ok(())
+    }
+
+    pub fn load_from_image_file(&mut self, path: &Path) -> Result<(), anyhow::Error> {
+        use ::image::io::Reader as ImageReader;
+
+        let image = ImageReader::open(path)?.decode()?.into_rgba8();
+        eprintln!("image size: {:?}", image.dimensions());
+        let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
+        let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
+        eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+
+        for y in 0..chunks_y {
+            for x in 0..chunks_x {
+                let chunk_position = (x, y);
+                self.ensure_chunk_exists(chunk_position);
+                let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+                let mut chunk_image = chunk.as_image_buffer_mut();
+                let pixel_position = (
+                    (Chunk::SIZE.0 * chunk_position.0) as u32,
+                    (Chunk::SIZE.1 * chunk_position.1) as u32,
+                );
+                eprintln!("plopping chunk at {:?}", pixel_position);
+                let right = (pixel_position.0 + Chunk::SIZE.0 as u32).min(image.width() - 1);
+                let bottom = (pixel_position.1 + Chunk::SIZE.1 as u32).min(image.height() - 1);
+                eprintln!("  to {:?}", (right, bottom));
+                let width = right - pixel_position.0;
+                let height = bottom - pixel_position.1;
+                let sub_image = image.view(pixel_position.0, pixel_position.1, width, height);
+                chunk_image.copy_from(&sub_image, 0, 0)?;
+                Self::fix_endianness(&mut chunk_image);
+            }
+        }
+
         Ok(())
     }
 

@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
@@ -76,7 +77,7 @@ impl State {
     const BAR_SIZE: f32 = 32.0;
     const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
-    pub fn new(assets: Assets, peer: Peer) -> Self {
+    pub fn new(assets: Assets, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
             assets,
 
@@ -101,6 +102,9 @@ impl State {
         if this.peer.is_host() {
             log!(this.log, "Welcome to your room!");
             log!(this.log, "To invite friends, send them the room ID shown in the bottom right corner of your screen.");
+        }
+        if let Some(image_path) = image_path {
+            ok_or_log!(this.log, this.paint_canvas.load_from_image_file(&image_path));
         }
         this
     }
