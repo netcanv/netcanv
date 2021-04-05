@@ -310,23 +310,22 @@ impl State {
 
         self.ui.push_group((self.ui.remaining_width(), self.ui.height()), Layout::HorizontalRev);
         // note that the elements go from right to left
-        if self.peer.is_host() {
-            // the save button
-            if Button::with_icon(&mut self.ui, canvas, input, ButtonArgs {
-                height: 32.0,
-                colors: &self.assets.colors.tool_button,
-            }, &self.assets.icons.file.save).clicked() {
-                match FileDialog::new()
-                    .set_filename("canvas.png")
-                    .add_filter("PNG image", &["png"])
-                    .show_save_single_file()
-                {
-                    Ok(Some(path)) => ok_or_log!(self.log, self.paint_canvas.save(&path)),
-                    Err(error) => log!(self.log, "Error while selecting file: {}", error),
-                    _ => (),
-                }
+        // the save button
+        if Button::with_icon(&mut self.ui, canvas, input, ButtonArgs {
+            height: 32.0,
+            colors: &self.assets.colors.tool_button,
+        }, &self.assets.icons.file.save).clicked() {
+            match FileDialog::new()
+                .set_filename("canvas.png")
+                .add_filter("PNG image", &["png"])
+                .show_save_single_file()
+            {
+                Ok(Some(path)) => ok_or_log!(self.log, self.paint_canvas.save(&path)),
+                Err(error) => log!(self.log, "Error while selecting file: {}", error),
+                _ => (),
             }
-
+        }
+        if self.peer.is_host() {
             // the room ID itself
             let id_text = format!("{:04}", self.peer.room_id().unwrap());
             self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
