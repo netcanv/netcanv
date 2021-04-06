@@ -1,9 +1,7 @@
 // socket abstraction.
 
-use std::net::{ToSocketAddrs, SocketAddr, TcpStream};
+use std::net::{ToSocketAddrs, TcpStream};
 use std::sync::Arc;
-use std::time::Duration;
-use std::thread::JoinHandle;
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use serde::{Serialize, de::DeserializeOwned};
@@ -11,7 +9,6 @@ use thiserror::Error;
 
 struct Finished;
 struct Abort;
-struct Tick;
 
 struct ControllableThread {
     finished: Receiver<Finished>,

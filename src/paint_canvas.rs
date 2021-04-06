@@ -62,8 +62,7 @@ pub struct Chunk<'a> {
 }
 
 impl<'a> Chunk<'a> {
-    const SIZE: (i32, i32) = (256, 256);
-
+    pub const SIZE: (i32, i32) = (256, 256);
 
     fn new() -> Self {
         let mut bitmap = Bitmap::new();
@@ -216,26 +215,16 @@ impl<'a> PaintCanvas<'a> {
     }
 
     pub fn draw_to(&self, canvas: &mut Canvas, viewport: &Viewport, window_size: (f32, f32)) {
-        let visible_rect = viewport.rect(window_size);
-        let left = (visible_rect.left / Chunk::SIZE.0 as f32).floor() as i32;
-        let top = (visible_rect.top / Chunk::SIZE.1 as f32).floor() as i32;
-        let right = (visible_rect.right / Chunk::SIZE.0 as f32).ceil() as i32;
-        let bottom = (visible_rect.bottom / Chunk::SIZE.1 as f32).ceil() as i32;
-
-        for y in top..=bottom {
-            for x in left..=right {
-                if let Some(chunk) = self.chunks.get(&(x, y)) {
-                    let screen_position = Chunk::screen_position((x, y));
-                    canvas.draw_bitmap(&chunk.bitmap, screen_position, None);
-                }
+        for chunk_position in viewport.visible_tiles(Chunk::SIZE, window_size) {
+            if let Some(chunk) = self.chunks.get(&chunk_position) {
+                let screen_position = Chunk::screen_position(chunk_position);
+                canvas.draw_bitmap(&chunk.bitmap, screen_position, None);
             }
         }
     }
 
-    pub fn png_data(&mut self) -> PngData<'_, 'a> {
-        PngData {
-            iter: self.chunks.iter_mut(),
-        }
+    pub fn png_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
+        self.chunks.get_mut(&chunk_position)?.png_data()
     }
 
     pub fn decode_png_data(&mut self, to_chunk: (i32, i32), data: &[u8]) -> Result<(), ImageError> {
@@ -340,6 +329,10 @@ impl<'a> PaintCanvas<'a> {
         }
 
         Ok(())
+    }
+
+    pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
+        self.chunks.keys().map(|p| *p).collect()
     }
 
 }

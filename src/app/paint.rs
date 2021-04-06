@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -37,7 +37,10 @@ pub struct State {
     brush_size_slider: Slider,
     stroke_buffer: Vec<StrokePoint>,
 
-    canvas_data_queue: VecDeque<SocketAddr>,
+    server_side_chunks: HashSet<(i32, i32)>,
+    downloaded_chunks: HashSet<(i32, i32)>,
+    needed_chunks: Vec<(i32, i32)>,
+    deferred_message_queue: VecDeque<Message>,
 
     error: Option<String>,
     log: Log,
@@ -92,7 +95,10 @@ impl State {
             brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
             stroke_buffer: Vec::new(),
 
-            canvas_data_queue: VecDeque::new(),
+            server_side_chunks: HashSet::new(),
+            downloaded_chunks: HashSet::new(),
+            needed_chunks: Vec::new(),
+            deferred_message_queue: VecDeque::new(),
 
             error: None,
             log: Log::new(),
@@ -258,6 +264,17 @@ impl State {
         self.process_log(canvas);
 
         self.ui.pop_group();
+
+        //
+        // downloading chunks
+        //
+
+        for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
+            if self.server_side_chunks.contains(&chunk_position) && !self.downloaded_chunks.contains(&chunk_position) {
+                self.needed_chunks.push(chunk_position);
+                self.downloaded_chunks.insert(chunk_position);
+            }
+        }
     }
 
     fn process_bar(&mut self, canvas: &mut Canvas, input: &mut Input) {
@@ -375,17 +392,20 @@ impl AppState for State {
         match self.peer.tick() {
             Ok(messages) => for message in messages {
                 match message {
-                    Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
-
-                    Message::NewMate(addr) => self.canvas_data_queue.push_back(addr),
-                    Message::CanvasData(chunk, png) =>
-                        Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk, &png),
-
-                    Message::Joined(nickname) => log!(self.log, "{} joined the room", nickname),
-                    Message::Left(nickname) => log!(self.log, "{} has left the room", nickname),
-
                     Message::Error(error) => self.error = Some(error),
-                    x => eprintln!("unknown message: {:?}", x),
+                    Message::Connected =>
+                        unimplemented!("Message::Connected shouldn't be generated after connecting to the matchmaker"),
+                    Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
+                    Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                    Message::ChunkPositions(mut positions) =>
+                        self.server_side_chunks = positions.drain(..).collect(),
+                    Message::Chunks(chunks) => {
+                        for (chunk_position, png_data) in chunks {
+                            Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk_position, &png_data);
+                        }
+                    },
+                    message => self.deferred_message_queue.push_back(message),
+
                 }
             },
             Err(error) => {
@@ -393,11 +413,31 @@ impl AppState for State {
             },
         }
 
-        for addr in self.canvas_data_queue.drain(..) {
-            for (chunk_position, png_data) in self.paint_canvas.png_data() {
-                eprintln!("sending chunk {:?}", chunk_position);
-                ok_or_log!(self.log, self.peer.send_canvas_data(addr, chunk_position, png_data));
+        for message in self.deferred_message_queue.drain(..) {
+            match message {
+                Message::Joined(nickname, addr) => {
+                    log!(self.log, "{} joined the room", nickname);
+                    if let Some(addr) = addr {
+                        let positions = self.paint_canvas.chunk_positions();
+                        ok_or_log!(self.log, self.peer.send_chunk_positions(addr, positions));
+                    }
+                },
+                Message::GetChunks(addr, positions) => {
+                    let paint_canvas = &mut self.paint_canvas;
+                    let chunks: Vec<((i32, i32), Vec<u8>)> = positions.iter()
+                        .filter_map(|position| {
+                            paint_canvas.png_data(*position).map(|slice| (*position, Vec::from(slice)))
+                        })
+                        .collect();
+                    ok_or_log!(self.log, self.peer.send_chunks(addr, chunks));
+                },
+                _ => unreachable!("unhandled peer message type"),
             }
+        }
+
+        if self.needed_chunks.len() > 0 {
+            ok_or_log!(self.log, self.peer.download_chunks(self.needed_chunks.drain(..).collect()));
+            self.needed_chunks.clear();
         }
 
         // UI setup

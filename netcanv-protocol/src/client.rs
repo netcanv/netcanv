@@ -2,6 +2,19 @@
 
 use serde::{Serialize, Deserialize};
 
+// the version constant. increased by 100 every minor client version, and by 10000 every major version.
+// eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
+// if two versions' hundreds places differ, the versions are incompatible.
+pub const PROTOCOL_VERSION: u32 = 200;
+
+pub fn versions_compatible(v1: u32, v2: u32) -> bool {
+    v1 / 100 == v2 / 100
+}
+
+pub fn compatible_with(v: u32) -> bool {
+    versions_compatible(PROTOCOL_VERSION, v)
+}
+
 // stroke packet information
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct StrokePoint {
@@ -17,6 +30,10 @@ pub struct StrokePoint {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
+    /*--
+     * VERSION 0.1.0 (no version packet)
+     */
+
     //
     // introduction protocol
     //
@@ -28,6 +45,7 @@ pub enum Packet {
     HiThere(String),
 
     // image data sent to a client by the host when it first joins
+    #[deprecated(since = "0.2.0", note = "use Chunks instead; will be removed in 0.3.0")]
     CanvasData((i32, i32), Vec<u8>),
 
     //
@@ -41,6 +59,22 @@ pub enum Packet {
 
     // a paint stroke
     Stroke(Vec<StrokePoint>),
+
+    /*--
+     * VERSION 0.2.0 (protocol 200)
+     */
+
+    // version packet. this is sent as part of a response to Hello
+    Version(u32),
+
+    // sent by the host to a client upon connection
+    ChunkPositions(Vec<(i32, i32)>),
+
+    // request from the client to download chunks
+    GetChunks(Vec<(i32, i32)>),
+
+    // response from the other peer with the chunks encoded as PNG images.
+    Chunks(Vec<((i32, i32), Vec<u8>)>),
 }
 
 /// converts a float to a fixed-point 29.3

@@ -26,7 +26,7 @@ pub enum Message {
     // general
     //
 
-    // i wonder what this could mean
+    // return to the lobby with an error message
     Error(String),
 
     //
@@ -40,20 +40,23 @@ pub enum Message {
     // painting
     //
 
-    // someone has joined
-    Joined(String),
+    // someone has joined, maybe send them all chunk positions
+    Joined(String, Option<SocketAddr>),
 
     // someone has left
     Left(String),
 
-    // a new mate has arrived in the room and needs canvas data
-    NewMate(SocketAddr),
-
     // stroke packet received
     Stroke(Vec<StrokePoint>),
 
-    // canvas data packet received
-    CanvasData((i32, i32), Vec<u8>)
+    // ChunkPositions packet received
+    ChunkPositions(Vec<(i32, i32)>),
+
+    // GetChunks packet received
+    GetChunks(SocketAddr, Vec<(i32, i32)>),
+
+    // a Chunks-compatible packet received
+    Chunks(Vec<((i32, i32), Vec<u8>)>),
 }
 
 pub struct Mate {
@@ -70,6 +73,7 @@ pub struct Peer {
     nickname: String,
     room_id: Option<u32>,
     mates: HashMap<SocketAddr, Mate>,
+    host: Option<SocketAddr>,
 }
 
 pub struct Messages<'a> {
@@ -102,6 +106,7 @@ impl Peer {
             nickname: nickname.into(),
             room_id: None,
             mates: HashMap::new(),
+            host: None,
         })
     }
 
@@ -117,6 +122,7 @@ impl Peer {
             nickname: nickname.into(),
             room_id: None,
             mates: HashMap::new(),
+            host: None,
         })
     }
 
@@ -148,14 +154,21 @@ impl Peer {
     }
 
     fn decode_payload(&mut self, sender_addr: SocketAddr, payload: &[u8]) -> Option<Message> {
-        let packet = try_or_message!(bincode::deserialize::<cl::Packet>(payload), "Invalid packet received: {}");
+        let packet = try_or_message!(
+            bincode::deserialize::<cl::Packet>(payload),
+            "Unknown packet received: {}. Check if your client is up to date"
+        );
 
         match packet {
+            //
+            // 0.1.0
+            //
             cl::Packet::Hello(nickname) => {
                 eprintln!("{} ({}) joined", nickname, sender_addr);
                 try_or_message!(self.send(Some(sender_addr), cl::Packet::HiThere(self.nickname.clone())));
+                try_or_message!(self.send(Some(sender_addr), cl::Packet::Version(cl::PROTOCOL_VERSION)));
                 self.add_mate(sender_addr, nickname.clone());
-                return Some(Message::Joined(nickname))
+                return Some(Message::Joined(nickname, self.is_host.then(|| sender_addr)))
             },
             cl::Packet::HiThere(nickname) => {
                 eprintln!("{} ({}) is in the room", nickname, sender_addr);
@@ -170,7 +183,7 @@ impl Peer {
                 }
             },
             cl::Packet::Stroke(points) => {
-                return Some(Message::Stroke(points.into_iter().map(|p| {
+                return Some(Message::Stroke(points.iter().map(|p| {
                     StrokePoint {
                         point: Point::new(cl::from_fixed29p3(p.x), cl::from_fixed29p3(p.y)),
                         brush:
@@ -185,9 +198,21 @@ impl Peer {
                     }
                 }).collect()));
             },
-            cl::Packet::CanvasData(chunk, png_image) => {
-                return Some(Message::CanvasData(chunk, png_image));
-            },
+            #[allow(deprecated)] // remove when 0.3.0 is released
+            cl::Packet::CanvasData(chunk_position, png_data) =>
+                return Some(Message::Chunks(vec![(chunk_position, png_data)])),
+            //
+            // 0.2.0
+            //
+            cl::Packet::Version(version) if !cl::compatible_with(version) =>
+                return Some(Message::Error("Client is too old.".into())),
+            cl::Packet::Version(_) => (),
+            cl::Packet::ChunkPositions(positions) =>
+                return Some(Message::ChunkPositions(positions)),
+            cl::Packet::GetChunks(positions) =>
+                return Some(Message::GetChunks(sender_addr, positions)),
+            cl::Packet::Chunks(chunks) =>
+                return Some(Message::Chunks(chunks)),
         }
 
         None
@@ -213,19 +238,14 @@ impl Peer {
                         message = Some(Message::Connected);
                     },
                     mm::Packet::HostAddress(addr) => {
-                        message = Some(
-                            Self::connect_to_host(mm, *addr, &mut self.is_relayed)
-                                .err()
-                                .map_or(
-                                    Message::Connected,
-                                    |e| Message::Error(format!("{}", e)),
-                                )
-                        );
-                        if let Some(Message::Connected) = message {
-                            then = Then::SayHello;
-                        }
+                        self.host = Some(*addr);
+                        then = Then::SayHello;
+                        message = Some(Self::connect_to_host(mm, *addr, &mut self.is_relayed)
+                            .err()
+                            .map_or(Message::Connected, |e| Message::Error(format!("{}", e))));
                     },
-                    mm::Packet::ClientAddress(addr) => return Some(Message::NewMate(*addr)),
+                    mm::Packet::ClientAddress(addr) => (),
+                    mm::Packet::Relayed(_, payload) if payload.len() == 0 => then = Then::SayHello,
                     mm::Packet::Relayed(from, payload) => then = Then::ReadRelayed(*from, payload.to_vec()),
                     mm::Packet::Disconnected(addr) => {
                         if let Some(mate) = self.mates.remove(&addr) {
@@ -286,8 +306,23 @@ impl Peer {
         }).collect()))
     }
 
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "use send_chunks instead")]
     pub fn send_canvas_data(&self, to: SocketAddr, chunk: (i32, i32), png_data: Vec<u8>) -> Result<(), Error> {
         self.send(Some(to), cl::Packet::CanvasData(chunk, png_data))
+    }
+
+    pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> Result<(), Error> {
+        self.send(Some(to), cl::Packet::ChunkPositions(positions))
+    }
+
+    pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> Result<(), Error> {
+        assert!(self.host.is_some(), "only non-hosts can download chunks");
+        self.send(self.host, cl::Packet::GetChunks(positions))
+    }
+
+    pub fn send_chunks(&self, to: SocketAddr, chunks: Vec<((i32, i32), Vec<u8>)>) -> Result<(), Error> {
+        self.send(Some(to), cl::Packet::Chunks(chunks))
     }
 
     pub fn is_host(&self) -> bool {

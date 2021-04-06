@@ -30,7 +30,9 @@ pub enum Packet {
 
     // payload to be relayed. the first argument is an optional target to relay to
     Relay(Option<SocketAddr>, Vec<u8>),
-    // relayed payload
+    // relayed payload.
+    // in version 2 of the protocol there's a special case for this packet, where if the Vec is empty, the packet is
+    // a response to the RequestRelay packet.
     Relayed(SocketAddr, Vec<u8>),
 
     // a relay client has disconnected. sent out to relay clients because they can't normally tell if one of their
