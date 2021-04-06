@@ -16,6 +16,8 @@ use ::image::{
     codecs::png::{PngDecoder, PngEncoder}
 };
 
+use crate::viewport::Viewport;
+
 #[derive(Clone, Debug)]
 pub enum Brush {
     Draw { color: Color4f, stroke_width: f32 },
@@ -213,10 +215,20 @@ impl<'a> PaintCanvas<'a> {
 
     }
 
-    pub fn draw_to(&self, canvas: &mut Canvas) {
-        for (chunk_position, chunk) in &self.chunks {
-            let screen_position = Chunk::screen_position(*chunk_position);
-            canvas.draw_bitmap(&chunk.bitmap, screen_position, None);
+    pub fn draw_to(&self, canvas: &mut Canvas, viewport: &Viewport, window_size: (f32, f32)) {
+        let visible_rect = viewport.rect(window_size);
+        let left = (visible_rect.left / Chunk::SIZE.0 as f32).floor() as i32;
+        let top = (visible_rect.top / Chunk::SIZE.1 as f32).floor() as i32;
+        let right = (visible_rect.right / Chunk::SIZE.0 as f32).ceil() as i32;
+        let bottom = (visible_rect.bottom / Chunk::SIZE.1 as f32).ceil() as i32;
+
+        for y in top..=bottom {
+            for x in left..=right {
+                if let Some(chunk) = self.chunks.get(&(x, y)) {
+                    let screen_position = Chunk::screen_position((x, y));
+                    canvas.draw_bitmap(&chunk.bitmap, screen_position, None);
+                }
+            }
         }
     }
 

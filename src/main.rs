@@ -6,9 +6,9 @@ use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
+
 #[cfg(target_os = "linux")]
 use winit::platform::unix::WindowBuilderExtUnix;
-
 
 mod app;
 mod assets;
@@ -16,6 +16,7 @@ mod net;
 mod paint_canvas;
 mod ui;
 mod util;
+mod viewport;
 
 use app::*;
 use assets::*;

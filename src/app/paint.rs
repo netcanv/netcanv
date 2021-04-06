@@ -13,6 +13,7 @@ use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::util::*;
 use crate::net::{Message, Peer, Timer};
+use crate::viewport::Viewport;
 
 #[derive(PartialEq, Eq)]
 enum PaintMode {
@@ -42,7 +43,7 @@ pub struct State {
     log: Log,
 
     panning: bool,
-    pan: Vector,
+    viewport: Viewport,
 }
 
 const COLOR_PALETTE: &'static [u32] = &[
@@ -97,7 +98,7 @@ impl State {
             log: Log::new(),
 
             panning: false,
-            pan: Vector::new(0.0, 0.0),
+            viewport: Viewport::new(),
         };
         if this.peer.is_host() {
             log!(this.log, "Welcome to your room!");
@@ -140,6 +141,7 @@ impl State {
 
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
         self.ui.push_group((self.ui.width(), self.ui.height() - Self::BAR_SIZE), Layout::Freeform);
+        let canvas_size = self.ui.size();
 
         //
         // input
@@ -159,8 +161,8 @@ impl State {
         }
 
         let brush_size = self.brush_size_slider.value();
-        let from = input.previous_mouse_position() - self.pan;
-        let to = input.mouse_position() - self.pan;
+        let from = input.previous_mouse_position() + self.viewport.pan();
+        let to = input.mouse_position() + self.viewport.pan();
         loop { // give me back my labelled blocks
             let brush = match self.paint_mode {
                 PaintMode::None => break,
@@ -208,8 +210,8 @@ impl State {
         }
 
         if self.panning {
-            let delta_pan = input.mouse_position() - input.previous_mouse_position();
-            self.pan.offset(delta_pan);
+            let delta_pan = input.previous_mouse_position() - input.mouse_position();
+            self.viewport.pan_around(delta_pan);
         }
 
         //
@@ -219,13 +221,13 @@ impl State {
         let paint_canvas = &self.paint_canvas;
         self.ui.draw_on_canvas(canvas, |canvas| {
             canvas.save();
-            canvas.translate(self.pan);
+            canvas.translate(-self.viewport.pan());
 
             let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
             paint.set_anti_alias(true);
             paint.set_blend_mode(BlendMode::Difference);
 
-            paint_canvas.draw_to(canvas);
+            paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
             for (_, mate) in self.peer.mates() {
                 let text_position =
                     mate.cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
@@ -242,7 +244,8 @@ impl State {
             canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &paint);
         });
         if self.panning {
-            let position = format!("{}, {}", -f32::floor(self.pan.x / 256.0), -f32::floor(self.pan.y / 256.0));
+            let pan = self.viewport.pan();
+            let position = format!("{}, {}", (pan.x / 256.0).floor(), (pan.y / 256.0).floor());
             self.ui.push_group(self.ui.size(), Layout::Freeform);
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);
