@@ -1,5 +1,7 @@
 // socket abstraction.
 
+use std::fmt::Display;
+use std::error;
 use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
@@ -8,16 +10,16 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
-struct Finished;
+struct Finished<T: Display + error::Error + Send>(Option<T>);
 struct Abort;
 
-struct ControllableThread {
-    finished: Receiver<Finished>,
+struct ControllableThread<T: Display + error::Error + Send> {
+    finished: Receiver<Finished<T>>,
     abort: Sender<Abort>,
 }
 
-impl ControllableThread {
-    fn new<F, T>(name: &'static str, f: F) -> ControllableThread
+impl<T: Display + error::Error + Send + 'static> ControllableThread<T> {
+    fn new<F>(name: &'static str, f: F) -> Self
     where
         F: FnOnce(Receiver<Abort>) -> Result<(), T> + Send + 'static,
         T: std::fmt::Display,
@@ -26,11 +28,12 @@ impl ControllableThread {
         let (tx_abort, rx_abort) = crossbeam_channel::unbounded();
 
         let _ = std::thread::Builder::new().name(name.into()).spawn(move || {
-            match f(rx_abort) {
+            let status = f(rx_abort);
+            match &status {
                 Err(error) => eprintln!("thread '{}' returned with error: {}", name, error),
                 _ => (),
             }
-            let _ = tx_finished.send(Finished);
+            let _ = tx_finished.send(Finished(status.err()));
         });
 
         ControllableThread {
@@ -39,11 +42,16 @@ impl ControllableThread {
         }
     }
 
-    fn tick(&self) -> Result<bool, Error> {
+    fn tick(&self) -> Result<bool, T> {
         match self.finished.try_recv() {
-            Ok(_) => Ok(true),
+            Ok(Finished(result)) => {
+                match result {
+                    Some(error) => Err(error),
+                    None => Ok(true),
+                }
+            }
             Err(TryRecvError::Empty) => Ok(false),
-            Err(TryRecvError::Disconnected) => Err(Error::ThreadRecv),
+            Err(TryRecvError::Disconnected) => Ok(true),
         }
     }
 
@@ -56,8 +64,8 @@ impl ControllableThread {
 pub struct Remote<P: Serialize + DeserializeOwned + Send + 'static> {
     rx: Receiver<P>,
     tx: Sender<P>,
-    send: ControllableThread,
-    recv: ControllableThread,
+    send: ControllableThread<Error>,
+    recv: ControllableThread<Error>,
 }
 
 #[derive(Debug, Error)]
@@ -68,8 +76,6 @@ pub enum Error {
     Serialize(#[from] bincode::Error),
     #[error("Error while sending data across threads")]
     ThreadSend,
-    #[error("Error while receiving data from the network thread")]
-    ThreadRecv,
 }
 
 impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {

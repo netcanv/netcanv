@@ -458,7 +458,7 @@ impl AppState for State {
                     }
                 },
             Err(error) => {
-                eprintln!("{}", error);
+                self.error = Some(format!("{}", error));
             },
         }
 
