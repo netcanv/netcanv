@@ -42,6 +42,8 @@ pub struct State {
     needed_chunks: Vec<(i32, i32)>,
     deferred_message_queue: VecDeque<Message>,
 
+    save_to_file: Option<PathBuf>,
+
     error: Option<String>,
     log: Log,
 
@@ -50,8 +52,7 @@ pub struct State {
 }
 
 const COLOR_PALETTE: &'static [u32] = &[
-    0x100820ff, 0xff003eff, 0xff7b00ff, 0xffff00ff, 0x2dd70eff, 0x03cbfbff, 0x0868ebff, 0xa315d7ff,
-    0xffffffff,
+    0x100820ff, 0xff003eff, 0xff7b00ff, 0xffff00ff, 0x2dd70eff, 0x03cbfbff, 0x0868ebff, 0xa315d7ff, 0xffffffff,
 ];
 
 macro_rules! log {
@@ -100,20 +101,20 @@ impl State {
         };
         if this.peer.is_host() {
             log!(this.log, "Welcome to your room!");
-            log!(this.log, "To invite friends, send them the room ID shown in the bottom right corner of your screen.");
+            log!(
+                this.log,
+                "To invite friends, send them the room ID shown in the bottom right corner of your screen."
+            );
         }
         if let Some(image_path) = image_path {
-            ok_or_log!(
-                this.log,
-                this.paint_canvas.load_from_image_file(&image_path)
-            );
+            ok_or_log!(this.log, this.paint_canvas.load_from_image_file(&image_path));
         }
         this
     }
 
     fn fellow_stroke(canvas: &mut PaintCanvas, points: &[StrokePoint]) {
         if points.is_empty() {
-            return;
+            return
         } // failsafe
 
         let mut from = points[0].point;
@@ -124,12 +125,7 @@ impl State {
         }
     }
 
-    fn canvas_data(
-        log: &mut Log,
-        canvas: &mut PaintCanvas,
-        chunk_position: (i32, i32),
-        png_image: &[u8],
-    ) {
+    fn canvas_data(log: &mut Log, canvas: &mut PaintCanvas, chunk_position: (i32, i32), png_image: &[u8]) {
         println!("received canvas data for chunk {:?}", chunk_position);
         ok_or_log!(log, canvas.decode_png_data(chunk_position, png_image));
     }
@@ -149,10 +145,8 @@ impl State {
     }
 
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
-        self.ui.push_group(
-            (self.ui.width(), self.ui.height() - Self::BAR_SIZE),
-            Layout::Freeform,
-        );
+        self.ui
+            .push_group((self.ui.width(), self.ui.height() - Self::BAR_SIZE), Layout::Freeform);
         let canvas_size = self.ui.size();
 
         //
@@ -168,9 +162,7 @@ impl State {
                 self.paint_mode = PaintMode::Erase;
             }
         }
-        if input.mouse_button_just_released(MouseButton::Left)
-            || input.mouse_button_just_released(MouseButton::Right)
-        {
+        if input.mouse_button_just_released(MouseButton::Left) || input.mouse_button_just_released(MouseButton::Right) {
             self.paint_mode = PaintMode::None;
         }
 
@@ -198,7 +190,7 @@ impl State {
             } else if to != self.stroke_buffer.last().unwrap().point {
                 self.stroke_buffer.push(StrokePoint { point: to, brush });
             }
-            break;
+            break
         }
 
         for _ in self.update_timer.tick() {
@@ -206,10 +198,7 @@ impl State {
                 ok_or_log!(self.log, self.peer.send_cursor(to, brush_size));
             }
             if !self.stroke_buffer.is_empty() {
-                ok_or_log!(
-                    self.log,
-                    self.peer.send_stroke(self.stroke_buffer.drain(..))
-                );
+                ok_or_log!(self.log, self.peer.send_stroke(self.stroke_buffer.drain(..)));
             }
         }
 
@@ -242,16 +231,10 @@ impl State {
 
             paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
             for (_, mate) in self.peer.mates() {
-                let text_position = mate.cursor
-                    + Point::new(mate.brush_size, mate.brush_size) * 0.5
-                    + Point::new(0.0, 14.0);
+                let text_position =
+                    mate.cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
                 paint.set_style(skpaint::Style::Fill);
-                canvas.draw_str(
-                    &mate.nickname,
-                    text_position,
-                    &self.assets.sans.borrow(),
-                    &paint,
-                );
+                canvas.draw_str(&mate.nickname, text_position, &self.assets.sans.borrow(), &paint);
                 paint.set_style(skpaint::Style::Stroke);
                 canvas.draw_circle(mate.cursor, mate.brush_size * 0.5, &paint);
             }
@@ -269,12 +252,8 @@ impl State {
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);
             self.ui.fill(canvas, Color::BLACK.with_a(128));
-            self.ui.text(
-                canvas,
-                &position,
-                Color::WHITE,
-                (AlignH::Center, AlignV::Middle),
-            );
+            self.ui
+                .text(canvas, &position, Color::WHITE, (AlignH::Center, AlignV::Middle));
             self.ui.pop_group();
             self.ui.pop_group();
         }
@@ -288,9 +267,7 @@ impl State {
         //
 
         for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-            if self.server_side_chunks.contains(&chunk_position)
-                && !self.downloaded_chunks.contains(&chunk_position)
-            {
+            if self.server_side_chunks.contains(&chunk_position) && !self.downloaded_chunks.contains(&chunk_position) {
                 self.needed_chunks.push(chunk_position);
                 self.downloaded_chunks.insert(chunk_position);
             }
@@ -302,10 +279,8 @@ impl State {
             input.lock_mouse_buttons();
         }
 
-        self.ui.push_group(
-            (self.ui.width(), self.ui.remaining_height()),
-            Layout::Horizontal,
-        );
+        self.ui
+            .push_group((self.ui.width(), self.ui.remaining_height()), Layout::Horizontal);
         self.ui.fill(canvas, self.assets.colors.panel);
         self.ui.pad((16.0, 0.0));
 
@@ -313,10 +288,9 @@ impl State {
 
         for hex_color in COLOR_PALETTE {
             let color = hex_color4f(*hex_color);
-            self.ui
-                .push_group((16.0, self.ui.height()), Layout::Freeform);
-            let y_offset = self.ui.height()
-                * if self.paint_color == color {
+            self.ui.push_group((16.0, self.ui.height()), Layout::Freeform);
+            let y_offset = self.ui.height() *
+                if self.paint_color == color {
                     0.5
                 } else if self.ui.has_mouse(&input) {
                     0.7
@@ -337,8 +311,7 @@ impl State {
 
         // brush size
 
-        self.ui
-            .push_group((80.0, self.ui.height()), Layout::Freeform);
+        self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
         self.ui.text(
             canvas,
             "Brush size",
@@ -348,15 +321,10 @@ impl State {
         self.ui.pop_group();
 
         self.ui.space(8.0);
-        self.brush_size_slider.process(
-            &mut self.ui,
-            canvas,
-            input,
-            SliderArgs {
-                width: 192.0,
-                color: self.assets.colors.slider,
-            },
-        );
+        self.brush_size_slider.process(&mut self.ui, canvas, input, SliderArgs {
+            width: 192.0,
+            color: self.assets.colors.slider,
+        });
         self.ui.space(8.0);
 
         let brush_size_string = self.brush_size_slider.value().to_string();
@@ -377,10 +345,8 @@ impl State {
 
         // room ID
 
-        self.ui.push_group(
-            (self.ui.remaining_width(), self.ui.height()),
-            Layout::HorizontalRev,
-        );
+        self.ui
+            .push_group((self.ui.remaining_width(), self.ui.height()), Layout::HorizontalRev);
         // note that the elements go from right to left
         // the save button
         if Button::with_icon(
@@ -403,7 +369,7 @@ impl State {
                 Ok(Some(path)) => {
                     self.paint_canvas.cleanup_empty_chunks();
                     ok_or_log!(self.log, self.paint_canvas.save(&path))
-                }
+                },
                 Err(error) => log!(self.log, "Error while selecting file: {}", error),
                 _ => (),
             }
@@ -411,8 +377,7 @@ impl State {
         if self.peer.is_host() {
             // the room ID itself
             let id_text = format!("{:04}", self.peer.room_id().unwrap());
-            self.ui
-                .push_group((64.0, self.ui.height()), Layout::Freeform);
+            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
             self.ui.set_font(self.assets.sans_bold.clone());
             self.ui.text(
                 canvas,
@@ -423,8 +388,7 @@ impl State {
             self.ui.pop_group();
 
             // "Room ID" text
-            self.ui
-                .push_group((64.0, self.ui.height()), Layout::Freeform);
+            self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
             self.ui.text(
                 canvas,
                 "Room ID",
@@ -455,29 +419,27 @@ impl AppState for State {
         // network
 
         match self.peer.tick() {
-            Ok(messages) => {
+            Ok(messages) =>
                 for message in messages {
                     match message {
-                    Message::Error(error) => self.error = Some(error),
-                    Message::Connected =>
-                        unimplemented!("Message::Connected shouldn't be generated after connecting to the matchmaker"),
-                    Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
-                    Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
-                    Message::ChunkPositions(mut positions) =>
-                        self.server_side_chunks = positions.drain(..).collect(),
-                    Message::Chunks(chunks) => {
-                        for (chunk_position, png_data) in chunks {
-                            Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk_position, &png_data);
-                        }
-                    },
-                    message => self.deferred_message_queue.push_back(message),
-
-                }
-                }
-            }
+                        Message::Error(error) => self.error = Some(error),
+                        Message::Connected => unimplemented!(
+                            "Message::Connected shouldn't be generated after connecting to the matchmaker"
+                        ),
+                        Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
+                        Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                        Message::ChunkPositions(mut positions) =>
+                            self.server_side_chunks = positions.drain(..).collect(),
+                        Message::Chunks(chunks) =>
+                            for (chunk_position, png_data) in chunks {
+                                Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk_position, &png_data);
+                            },
+                        message => self.deferred_message_queue.push_back(message),
+                    }
+                },
             Err(error) => {
                 eprintln!("{}", error);
-            }
+            },
         }
 
         for message in self.deferred_message_queue.drain(..) {
@@ -488,7 +450,7 @@ impl AppState for State {
                         let positions = self.paint_canvas.chunk_positions();
                         ok_or_log!(self.log, self.peer.send_chunk_positions(addr, positions));
                     }
-                }
+                },
                 Message::GetChunks(addr, positions) => {
                     let paint_canvas = &mut self.paint_canvas;
                     let chunks: Vec<((i32, i32), Vec<u8>)> = positions
@@ -500,7 +462,7 @@ impl AppState for State {
                         })
                         .collect();
                     ok_or_log!(self.log, self.peer.send_chunks(addr, chunks));
-                }
+                },
                 _ => unreachable!("unhandled peer message type"),
             }
         }
@@ -508,8 +470,7 @@ impl AppState for State {
         if self.needed_chunks.len() > 0 {
             ok_or_log!(
                 self.log,
-                self.peer
-                    .download_chunks(self.needed_chunks.drain(..).collect())
+                self.peer.download_chunks(self.needed_chunks.drain(..).collect())
             );
             self.needed_chunks.clear();
         }

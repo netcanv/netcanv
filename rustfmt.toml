@@ -1,0 +1,15 @@
+unstable_features = true
+
+binop_separator = "Back"
+comment_width = 100
+condense_wildcard_suffixes = true
+format_strings = true
+match_arm_blocks = false
+match_block_trailing_comma = true
+max_width = 120
+overflow_delimited_expr = true
+reorder_impl_items = true
+group_imports = "StdExternalCrate"
+trailing_semicolon = false
+use_field_init_shorthand = true
+wrap_comments = true

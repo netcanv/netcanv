@@ -64,12 +64,7 @@ impl Button {
             let text_width = ui.text_size(text).0;
             let padding = args.height;
             ui.push_group((text_width + padding, ui.height()), Layout::Freeform);
-            ui.text(
-                canvas,
-                text,
-                args.colors.text,
-                (AlignH::Center, AlignV::Middle),
-            );
+            ui.text(canvas, text, args.colors.text, (AlignH::Center, AlignV::Middle));
             ui.pop_group();
         })
     }
@@ -82,12 +77,7 @@ impl Button {
         icon: &Image,
     ) -> ButtonProcessResult {
         Self::process(ui, canvas, input, args, Some(args.height), |ui, canvas| {
-            ui.icon(
-                canvas,
-                icon,
-                args.colors.text,
-                Some((args.height, args.height)),
-            );
+            ui.icon(canvas, icon, args.colors.text, Some((args.height, args.height)));
         })
     }
 }

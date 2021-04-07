@@ -24,15 +24,13 @@ impl ControllableThread {
         let (tx_finished, rx_finished) = crossbeam_channel::unbounded();
         let (tx_abort, rx_abort) = crossbeam_channel::unbounded();
 
-        let _ = std::thread::Builder::new()
-            .name(name.into())
-            .spawn(move || {
-                match f(rx_abort) {
-                    Err(error) => eprintln!("thread '{}' returned with error: {}", name, error),
-                    _ => (),
-                }
-                let _ = tx_finished.send(Finished);
-            });
+        let _ = std::thread::Builder::new().name(name.into()).spawn(move || {
+            match f(rx_abort) {
+                Err(error) => eprintln!("thread '{}' returned with error: {}", name, error),
+                _ => (),
+            }
+            let _ = tx_finished.send(Finished);
+        });
 
         ControllableThread {
             finished: rx_finished,
@@ -82,31 +80,29 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         let (to_main, from_thread) = crossbeam_channel::unbounded();
 
         let stream = stream_arc.clone();
-        let send =
-            ControllableThread::new("network send thread", move |abort| -> Result<(), Error> {
-                loop {
-                    if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
-                        break;
-                    }
-                    while let Ok(packet) = from_main.recv() {
-                        bincode::serialize_into(&*stream, &packet)?;
-                    }
+        let send = ControllableThread::new("network send thread", move |abort| -> Result<(), Error> {
+            loop {
+                if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
+                    break
                 }
-                Ok(())
-            });
+                while let Ok(packet) = from_main.recv() {
+                    bincode::serialize_into(&*stream, &packet)?;
+                }
+            }
+            Ok(())
+        });
 
         let stream = stream_arc.clone();
-        let recv =
-            ControllableThread::new("network recv thread", move |abort| -> Result<(), Error> {
-                loop {
-                    if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
-                        break;
-                    }
-                    let packet = bincode::deserialize_from(&*stream)?;
-                    to_main.send(packet).map_err(|_| Error::ThreadSend)?;
+        let recv = ControllableThread::new("network recv thread", move |abort| -> Result<(), Error> {
+            loop {
+                if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
+                    break
                 }
-                Ok(())
-            });
+                let packet = bincode::deserialize_from(&*stream)?;
+                to_main.send(packet).map_err(|_| Error::ThreadSend)?;
+            }
+            Ok(())
+        });
 
         Ok(Self {
             rx: from_thread,
@@ -132,8 +128,8 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
 impl<P: Serialize + DeserializeOwned + Send> Drop for Remote<P> {
     fn drop(&mut self) {
         // intentionally ignore the result:
-        // if the thread has already finished, this will fail with an error, because the receiving end has already
-        // disconnected.
+        // if the thread has already finished, this will fail with an error, because the receiving end has
+        // already disconnected.
         let _ = self.send.abort();
         let _ = self.recv.abort();
     }

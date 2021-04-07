@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use skulpin::skia_safe::*;
-
 use winit::dpi::PhysicalPosition;
 pub use winit::event::{ElementState, MouseButton, VirtualKeyCode};
 use winit::event::{KeyboardInput, WindowEvent};
@@ -52,7 +51,7 @@ impl Input {
 
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
-            return false;
+            return false
         }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_is_down[i]
@@ -63,7 +62,7 @@ impl Input {
 
     pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
-            return false;
+            return false
         }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_just_pressed[i]
@@ -74,7 +73,7 @@ impl Input {
 
     pub fn mouse_button_just_released(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
-            return false;
+            return false
         }
         if let Some(i) = Self::mouse_button_index(button) {
             self.mouse_button_just_released[i]
@@ -113,11 +112,9 @@ impl Input {
             WindowEvent::CursorMoved { position, .. } => {
                 let PhysicalPosition { x, y } = position;
                 self.mouse_position = Point::new(*x as _, *y as _);
-            }
+            },
 
-            WindowEvent::MouseInput { button, state, .. } => {
-                self.process_mouse_input(*button, *state)
-            }
+            WindowEvent::MouseInput { button, state, .. } => self.process_mouse_input(*button, *state),
 
             WindowEvent::ReceivedCharacter(c) => self.char_buffer.push(*c),
 
@@ -170,11 +167,11 @@ impl Input {
                 ElementState::Pressed => {
                     self.mouse_button_is_down[i] = true;
                     self.mouse_button_just_pressed[i] = true;
-                }
+                },
                 ElementState::Released => {
                     self.mouse_button_is_down[i] = false;
                     self.mouse_button_just_released[i] = true;
-                }
+                },
             }
         }
     }

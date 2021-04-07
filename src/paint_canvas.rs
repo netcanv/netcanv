@@ -5,8 +5,7 @@ use std::path::Path;
 
 use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
-    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba,
-    RgbaImage,
+    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba, RgbaImage,
 };
 use skulpin::skia_safe::*;
 
@@ -32,17 +31,14 @@ impl Brush {
         paint.set_stroke_cap(paint::Cap::Round);
 
         match self {
-            Self::Draw {
-                color,
-                stroke_width,
-            } => {
+            Self::Draw { color, stroke_width } => {
                 paint.set_color(color.to_color());
                 paint.set_stroke_width(*stroke_width);
-            }
+            },
             Self::Erase { stroke_width } => {
                 paint.set_blend_mode(BlendMode::Clear);
                 paint.set_stroke_width(*stroke_width);
-            }
+            },
         }
 
         paint
@@ -114,7 +110,7 @@ impl<'a> Chunk<'a> {
                 .encode(pixels, width, height, ColorType::Rgba8)
                 .is_err()
             {
-                return None;
+                return None
             }
             self.png_data = Some(bytes);
         }
@@ -125,7 +121,7 @@ impl<'a> Chunk<'a> {
         let decoder = PngDecoder::new(Cursor::new(data))?;
         if decoder.color_type() != ColorType::Rgba8 {
             eprintln!("received non-RGBA image data, ignoring");
-            return Ok(());
+            return Ok(())
         }
         if decoder.dimensions() != (Self::SIZE.0 as u32, Self::SIZE.1 as u32) {
             eprintln!(
@@ -133,7 +129,7 @@ impl<'a> Chunk<'a> {
                 decoder.dimensions(),
                 Self::SIZE
             );
-            return Ok(());
+            return Ok(())
         }
         decoder.read_image(self.pixels_mut())?;
         Ok(())
@@ -197,9 +193,7 @@ impl<'a> PaintCanvas<'a> {
                         self.ensure_chunk_exists(chunk_position);
                         let chunk = self.chunks.get_mut(&chunk_position).unwrap();
                         let screen_position = Chunk::screen_position(chunk_position);
-                        chunk
-                            .canvas
-                            .draw_line(a - screen_position, b - screen_position, &paint);
+                        chunk.canvas.draw_line(a - screen_position, b - screen_position, &paint);
                         chunk.png_data = None;
                     }
                     self.stroked_chunks.insert(chunk_position);
@@ -229,12 +223,12 @@ impl<'a> PaintCanvas<'a> {
     }
 
     pub fn cleanup_empty_chunks(&mut self) {
-        self.chunks
-            .retain(|_, chunk| chunk.pixels().iter().any(|x| *x != 0u8));
+        self.chunks.retain(|_, chunk| chunk.pixels().iter().any(|x| *x != 0u8));
     }
 
-    // right now loading/saving only really works (well, was tested) on little-endian machines, so i make no guarantees
-    // if it works on big-endian. most likely loading will screw up the channel order in pixels. thanks, skia!
+    // right now loading/saving only really works (well, was tested) on little-endian machines, so i
+    // make no guarantees if it works on big-endian. most likely loading will screw up the channel
+    // order in pixels. thanks, skia!
 
     fn fix_endianness<C>(image: &mut ImageBuffer<Rgba<u8>, C>)
     where
@@ -262,10 +256,7 @@ impl<'a> PaintCanvas<'a> {
             right = right.max(chunk_position.0);
             bottom = bottom.max(chunk_position.1);
         }
-        eprintln!(
-            "left={}, top={}, right={}, bottom={}",
-            left, top, right, bottom
-        );
+        eprintln!("left={}, top={}, right={}, bottom={}", left, top, right, bottom);
         if left == i32::MAX {
             anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
         }
@@ -281,8 +272,7 @@ impl<'a> PaintCanvas<'a> {
             );
             eprintln!("   - pixel position: {:?}", pixel_position);
             let pixels = Vec::from(chunk.pixels());
-            let mut chunk_image =
-                RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
+            let mut chunk_image = RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
             Self::fix_endianness(&mut chunk_image);
             let mut sub_image = image.sub_image(
                 pixel_position.0,
@@ -343,7 +333,7 @@ impl Iterator for PngData<'_, '_> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((position, chunk)) = self.iter.next() {
             if let Some(png_data) = chunk.png_data() {
-                return Some((*position, Vec::from(png_data)));
+                return Some((*position, Vec::from(png_data)))
             }
         }
         None

@@ -1,14 +1,12 @@
 use std::error::Error;
 
 use skulpin::*;
-
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
-
 #[cfg(target_os = "linux")]
 use winit::platform::unix::WindowBuilderExtUnix;
+use winit::window::WindowBuilder;
 
 mod app;
 mod assets;
@@ -38,9 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build(&event_loop)?;
 
     let window = WinitWindow::new(&winit_window);
-    let mut renderer = RendererBuilder::new()
-        .use_vulkan_debug_layer(false)
-        .build(&window)?;
+    let mut renderer = RendererBuilder::new().use_vulkan_debug_layer(false).build(&window)?;
 
     let assets = Assets::new(ColorScheme::light());
     let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, None)) as _);
@@ -51,13 +47,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event, .. } => {
+            Event::WindowEvent { event, .. } =>
                 if let WindowEvent::CloseRequested = event {
                     *control_flow = ControlFlow::Exit;
                 } else {
                     input.process_event(&event);
-                }
-            }
+                },
 
             Event::MainEventsCleared => {
                 renderer
@@ -73,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .unwrap();
                 input.finish_frame();
-            }
+            },
 
             _ => (),
         }

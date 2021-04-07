@@ -53,8 +53,7 @@ impl Assets {
     fn load_icon(data: &[u8]) -> Image {
         use usvg::{FitTo, NodeKind, Tree};
 
-        let tree =
-            Tree::from_data(data, &Default::default()).expect("error while loading the SVG file");
+        let tree = Tree::from_data(data, &Default::default()).expect("error while loading the SVG file");
         let size = match *tree.root().borrow() {
             NodeKind::Svg(svg) => svg.size,
             _ => panic!("the root node of the SVG is not <svg/>"),

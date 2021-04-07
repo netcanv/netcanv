@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-// the version constant. increased by 100 every minor client version, and by 10000 every major version.
-// eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
+// the version constant. increased by 100 every minor client version, and by 10000 every major
+// version. eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
 // if two versions' hundreds places differ, the versions are incompatible.
 pub const PROTOCOL_VERSION: u32 = 200;
 
@@ -32,7 +32,7 @@ pub struct StrokePoint {
 pub enum Packet {
     /*--
      * VERSION 0.1.0 (no version packet)
-     */
+     * */
     //
     // introduction protocol
     //
@@ -61,7 +61,7 @@ pub enum Packet {
 
     /*--
      * VERSION 0.2.0 (protocol 200)
-     */
+     * */
     // version packet. this is sent as part of a response to Hello
     Version(u32),
 

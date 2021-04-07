@@ -110,17 +110,12 @@ impl Ui {
     pub fn push_group(&mut self, size: (f32, f32), layout: Layout) {
         let top_rect = self.top().rect;
         let position = match self.top().layout {
-            Layout::Freeform | Layout::Horizontal | Layout::Vertical => {
-                Point::new(top_rect.left, top_rect.top) + self.top().layout_position
-            }
-            Layout::HorizontalRev => {
-                Point::new(top_rect.right, top_rect.top) + self.top().layout_position
-                    - Point::new(size.0, 0.0)
-            }
-            Layout::VerticalRev => {
-                Point::new(top_rect.left, top_rect.bottom) + self.top().layout_position
-                    - Point::new(0.0, size.1)
-            }
+            Layout::Freeform | Layout::Horizontal | Layout::Vertical =>
+                Point::new(top_rect.left, top_rect.top) + self.top().layout_position,
+            Layout::HorizontalRev =>
+                Point::new(top_rect.right, top_rect.top) + self.top().layout_position - Point::new(size.0, 0.0),
+            Layout::VerticalRev =>
+                Point::new(top_rect.left, top_rect.bottom) + self.top().layout_position - Point::new(0.0, size.1),
         };
         let group = Group {
             rect: Rect::from_point_and_size(position, size),
@@ -138,16 +133,16 @@ impl Ui {
             Layout::Freeform => (),
             Layout::Horizontal => {
                 self.top_mut().layout_position.x += group.rect.width();
-            }
+            },
             Layout::HorizontalRev => {
                 self.top_mut().layout_position.x -= group.rect.width();
-            }
+            },
             Layout::Vertical => {
                 self.top_mut().layout_position.y += group.rect.height();
-            }
+            },
             Layout::VerticalRev => {
                 self.top_mut().layout_position.y -= group.rect.height();
-            }
+            },
         }
     }
 
@@ -171,9 +166,7 @@ impl Ui {
             AlignV::Middle => parent.rect.center_y() - child.rect.height() / 2.0,
             AlignV::Bottom => parent.rect.bottom - child.rect.height(),
         };
-        child
-            .rect
-            .set_xywh(x, y, child.rect.width(), child.rect.height());
+        child.rect.set_xywh(x, y, child.rect.width(), child.rect.height());
     }
 
     pub fn pad(&mut self, padding: (f32, f32)) {
@@ -297,13 +290,7 @@ impl Ui {
         (Point::new(x, y), text_width)
     }
 
-    pub fn text(
-        &self,
-        canvas: &mut Canvas,
-        text: &str,
-        color: impl Into<Color4f>,
-        alignment: Alignment,
-    ) -> f32 {
+    pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) -> f32 {
         assert!(self.top().font_size >= 0.0, "font size must be provided");
 
         let mut font = self.borrow_font_mut();
@@ -325,8 +312,7 @@ impl Ui {
     }
 
     pub fn text_origin(&self, text: &str, alignment: Alignment) -> Point {
-        self.text_origin_impl(text, alignment, &mut self.borrow_font_mut())
-            .0
+        self.text_origin_impl(text, alignment, &mut self.borrow_font_mut()).0
     }
 
     pub fn icon(
@@ -339,10 +325,10 @@ impl Ui {
         let group_size = group_size.unwrap_or((icon.width() as f32, icon.height() as f32));
         self.push_group(group_size, Layout::Freeform);
 
-        // probably quite horrible but there aren't that many icons drawn to the screen at once in the first place
+        // probably quite horrible but there aren't that many icons drawn to the screen at once in the first
+        // place
         let image_bounds = IRect::new(0, 0, icon.width(), icon.height());
-        let color_filter =
-            color_filters::blend(color.into().to_color(), BlendMode::SrcATop).unwrap();
+        let color_filter = color_filters::blend(color.into().to_color(), BlendMode::SrcATop).unwrap();
         let filter = image_filters::color_filter(color_filter, None, None).unwrap();
         let colored_icon = icon
             .new_with_filter(None, &filter, image_bounds, image_bounds)
@@ -406,7 +392,7 @@ pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
         for text_field in fields.iter_mut() {
             if had_focus {
                 text_field.set_focus(true);
-                return;
+                return
             }
             if text_field.focused() {
                 text_field.set_focus(false);
