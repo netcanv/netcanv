@@ -3,10 +3,12 @@
 
 use std::collections::HashMap;
 use std::error;
+use std::io::Write;
 use std::net::{AddrParseError, SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, Weak};
 
 use netcanv_protocol::matchmaker::*;
+use serde::Serialize;
 use thiserror::Error;
 
 const MAX_ROOM_ID: u32 = 9999;
@@ -59,17 +61,17 @@ impl Matchmaker {
         None
     }
 
-    fn send_packet(stream: &TcpStream, packet: Packet) -> Result<(), Error> {
+    fn send_packet(stream: &TcpStream, packet: &Packet) -> Result<(), Error> {
         match &packet {
             Packet::Relayed(..) => (),
             packet => eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet),
         }
-        bincode::serialize_into(stream, &packet)?;
+        bincode::serialize_into(stream, packet)?;
         Ok(())
     }
 
     fn send_error(stream: &TcpStream, error: &str) -> Result<(), Error> {
-        Self::send_packet(stream, error_packet(error))
+        Self::send_packet(stream, &error_packet(error))
     }
 
     fn host(mm: Arc<Mutex<Self>>, peer_addr: SocketAddr, stream: Arc<TcpStream>) -> Result<(), Error> {
@@ -86,7 +88,7 @@ impl Matchmaker {
                     mm.host_rooms.insert(peer_addr, room_id);
                 }
                 drop(mm);
-                Self::send_packet(&stream, Packet::RoomId(room_id))?;
+                Self::send_packet(&stream, &Packet::RoomId(room_id))?;
             },
             None => Self::send_error(&stream, "Could not find any more free rooms. Try again")?,
         }
@@ -109,8 +111,8 @@ impl Matchmaker {
         .unwrap();
         let client_addr = stream.peer_addr()?;
         let host_addr = room.host.peer_addr()?;
-        Self::send_packet(&room.host, Packet::ClientAddress(client_addr))?;
-        Self::send_packet(stream, Packet::HostAddress(host_addr))
+        Self::send_packet(&room.host, &Packet::ClientAddress(client_addr))?;
+        Self::send_packet(stream, &Packet::HostAddress(host_addr))
     }
 
     fn add_relay(mm: Arc<Mutex<Self>>, stream: Arc<TcpStream>, host_addr: Option<SocketAddr>) -> Result<(), Error> {
@@ -144,7 +146,7 @@ impl Matchmaker {
         addr: SocketAddr,
         stream: &Arc<TcpStream>,
         to: Option<SocketAddr>,
-        data: &[u8],
+        data: Vec<u8>, // Vec because it's moved out of the Relay packet
     ) -> Result<(), Error> {
         eprintln!("relaying packet (size: {} KiB)", data.len() as f32 / 1024.0);
         let mut mm = mm.lock().unwrap();
@@ -161,6 +163,7 @@ impl Matchmaker {
                 drop(mm);
                 let mut nclients = 0;
                 room.clients.retain(|client| client.upgrade().is_some());
+                let packet = Packet::Relayed(addr, data);
                 for client in &room.clients {
                     let client = &client.upgrade().unwrap();
                     if !Arc::ptr_eq(client, stream) {
@@ -169,7 +172,7 @@ impl Matchmaker {
                                 continue
                             }
                         }
-                        Self::send_packet(client, Packet::Relayed(addr, Vec::from(data)))?;
+                        Self::send_packet(client, &packet)?;
                         nclients += 1;
                     }
                 }
@@ -198,7 +201,7 @@ impl Matchmaker {
             Packet::Host => Self::host(mm, peer_addr, stream),
             Packet::GetHost(room_id) => Self::join(mm, &stream, room_id),
             Packet::RequestRelay(host_addr) => Self::add_relay(mm, stream, host_addr),
-            Packet::Relay(to, data) => Self::relay(mm, peer_addr, &stream, to, &data),
+            Packet::Relay(to, data) => Self::relay(mm, peer_addr, &stream, to, data),
             _ => {
                 eprintln!("! error/invalid packet: {:?}", packet);
                 Err(Error::InvalidPacket)
@@ -219,7 +222,7 @@ impl Matchmaker {
                         continue
                     }
                     let client = client.unwrap();
-                    Self::send_packet(&client, Packet::Disconnected(addr))?;
+                    Self::send_packet(&client, &Packet::Disconnected(addr))?;
                 }
             }
         }
