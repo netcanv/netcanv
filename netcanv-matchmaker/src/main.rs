@@ -12,8 +12,10 @@ use netcanv_protocol::matchmaker::*;
 use serde::Serialize;
 use thiserror::Error;
 
+/// Maximum possible room ID. This can be raised, if IDs ever run out.
 const MAX_ROOM_ID: u32 = 9999;
 
+/// A TCP stream, buffered writer, and buffered reader, packed into one thread-safe struct for convenience.
 struct BufStream {
     stream: TcpStream,
     writer: Mutex<BufWriter<TcpStream>>,
@@ -21,6 +23,7 @@ struct BufStream {
 }
 
 impl BufStream {
+    /// Creates a new BufStream from a TcpStream.
     fn new(stream: TcpStream) -> Result<Self, Error> {
         const MEGABYTE: usize = 1024 * 1024;
         Ok(Self {
@@ -39,6 +42,7 @@ impl Deref for BufStream {
     }
 }
 
+/// A room containing the host and weak references to relay clients connected to the room.
 #[derive(Clone)]
 struct Room {
     host: Arc<BufStream>,
@@ -46,12 +50,18 @@ struct Room {
     id: u32,
 }
 
+/// The matchmaker state, usually passed around behind an Arc<Mutex<T>>.
 struct Matchmaker {
+    /// The rooms available on the matchmaker server. Each room is available behind an Arc<Mutex<T>>, so that accessing
+    /// a room does not require locking the matchmaker mutex.
     rooms: HashMap<u32, Arc<Mutex<Room>>>,
+    /// A mapping from host addresses to their room IDs.
     host_rooms: HashMap<SocketAddr, u32>,
-    relay_clients: HashMap<SocketAddr, u32>, // mapping address → room ID
+    /// A mapping from relay client addresses to their room IDs.
+    relay_clients: HashMap<SocketAddr, u32>,
 }
 
+/// A runtime error.
 #[derive(Debug, Error)]
 enum Error {
     #[error("I/O error: {0}")]
@@ -67,6 +77,7 @@ enum Error {
 }
 
 impl Matchmaker {
+    /// Creates a new matchmaker.
     fn new() -> Self {
         Self {
             rooms: HashMap::new(),
@@ -75,6 +86,25 @@ impl Matchmaker {
         }
     }
 
+    /// Serializes a packet into the stream.
+    fn send_packet(stream: &BufStream, packet: &Packet) -> Result<(), Error> {
+        match &packet {
+            Packet::Relayed(..) => (),
+            packet => eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet),
+        }
+        let mut writer = stream.writer.lock().unwrap();
+        bincode::serialize_into(&mut *writer, packet)?;
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Sends an error packet into the stream.
+    fn send_error(stream: &BufStream, error: &str) -> Result<(), Error> {
+        Self::send_packet(stream, &error_packet(error))
+    }
+
+    /// Searches for a free room ID by rolling a dice 50 times until an ID is found.
+    /// If an ID cannot be found, None is returned and the requesting client is expected to ask for a free room again.
     fn find_free_room_id(&self) -> Option<u32> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -87,21 +117,7 @@ impl Matchmaker {
         None
     }
 
-    fn send_packet(stream: &BufStream, packet: &Packet) -> Result<(), Error> {
-        match &packet {
-            Packet::Relayed(..) => (),
-            packet => eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet),
-        }
-        let mut writer = stream.writer.lock().unwrap();
-        bincode::serialize_into(&mut *writer, packet)?;
-        writer.flush()?;
-        Ok(())
-    }
-
-    fn send_error(stream: &BufStream, error: &str) -> Result<(), Error> {
-        Self::send_packet(stream, &error_packet(error))
-    }
-
+    /// Packet::Host handler. Searches for a free room ID, and sends it to the requesting client.
     fn host(mm: Arc<Mutex<Self>>, peer_addr: SocketAddr, stream: Arc<BufStream>) -> Result<(), Error> {
         let mut mm = mm.lock().unwrap();
         match mm.find_free_room_id() {
@@ -123,6 +139,8 @@ impl Matchmaker {
         Ok(())
     }
 
+    /// Packet::GetHost handler. Finds the host with the given ID, and exchanges addresses between the client and
+    /// the host.
     fn join(mm: Arc<Mutex<Self>>, stream: &BufStream, room_id: u32) -> Result<(), Error> {
         let mm = mm.lock().unwrap();
         let room = match mm.rooms.get(&room_id) {
@@ -143,6 +161,7 @@ impl Matchmaker {
         Self::send_packet(stream, &Packet::HostAddress(host_addr))
     }
 
+    /// Adds a relay client to the matchmaker.
     fn add_relay(mm: Arc<Mutex<Self>>, stream: Arc<BufStream>, host_addr: Option<SocketAddr>) -> Result<(), Error> {
         let peer_addr = stream.peer_addr().unwrap();
         eprintln!("- relay requested from {}", peer_addr);
@@ -169,6 +188,8 @@ impl Matchmaker {
         Ok(())
     }
 
+    /// Relays a packet to a specific relay client in the sender's room, or all relay clients in that room, depending
+    /// on whether `to` is `Some` or `None`.
     fn relay(
         mm: Arc<Mutex<Self>>,
         addr: SocketAddr,
@@ -215,6 +236,7 @@ impl Matchmaker {
         Ok(())
     }
 
+    /// Dispatch point for all the different functions for handling packets.
     fn incoming_packet(
         mm: Arc<Mutex<Self>>,
         peer_addr: SocketAddr,
@@ -237,6 +259,7 @@ impl Matchmaker {
         }
     }
 
+    /// Disconnects a client gracefully by removing all references to it inside of the matchmaker.
     fn disconnect(&mut self, addr: SocketAddr) -> Result<(), Error> {
         if let Some(room_id) = self.host_rooms.remove(&addr) {
             self.rooms.remove(&room_id);
@@ -250,13 +273,15 @@ impl Matchmaker {
                         continue
                     }
                     let client = client.unwrap();
-                    Self::send_packet(&client, &Packet::Disconnected(addr))?;
+                    let _ = Self::send_packet(&client, &Packet::Disconnected(addr));
                 }
             }
         }
         Ok(())
     }
 
+    /// Starts a new client handler thread that reads packets from the client and deserializes them, then passing
+    /// them into the incoming_packet function.
     fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
         let peer_addr = stream.peer_addr()?;
         let stream = Arc::new(BufStream::new(stream)?);
@@ -301,6 +326,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     eprintln!("NetCanv Matchmaker: starting on port {}", port);
 
+    // 127.0.0.1 didn't want to work for some reason
     let localhost = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(localhost)?;
 
