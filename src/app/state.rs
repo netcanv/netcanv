@@ -1,5 +1,5 @@
-use skulpin::CoordinateSystemHelper;
 use skulpin::skia_safe::*;
+use skulpin::CoordinateSystemHelper;
 
 use crate::ui::*;
 
@@ -10,10 +10,7 @@ pub struct StateArgs<'a, 'b, 'c> {
 }
 
 pub trait AppState {
-    fn process(
-        &mut self,
-        args: StateArgs,
-    );
+    fn process(&mut self, args: StateArgs);
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState>;
 }

@@ -32,11 +32,8 @@ pub struct ExpandProcessResult {
 }
 
 impl Expand {
-
     pub fn new(expanded: bool) -> Self {
-        Self {
-            expanded,
-        }
+        Self { expanded }
     }
 
     #[must_use]
@@ -45,15 +42,22 @@ impl Expand {
         ui: &mut Ui,
         canvas: &mut Canvas,
         input: &Input,
-        ExpandArgs { label, font_size, icons, colors }: ExpandArgs,
+        ExpandArgs {
+            label,
+            font_size,
+            icons,
+            colors,
+        }: ExpandArgs,
     ) -> ExpandProcessResult {
         let mut result = ExpandProcessResult {
             expanded: false,
             just_clicked: false,
         };
-        let icon =
-            if self.expanded { &icons.shrink }
-            else { &icons.expand };
+        let icon = if self.expanded {
+            &icons.shrink
+        } else {
+            &icons.expand
+        };
         let height = icon.height() as f32;
 
         ui.push_group((ui.width(), height), Layout::Freeform);
@@ -75,10 +79,12 @@ impl Expand {
             let pressed = input.mouse_button_is_down(MouseButton::Left);
             // underline
             ui.draw_on_canvas(canvas, |canvas| {
-                let underline_color: Color4f =
-                    if pressed { colors.pressed }
-                    else { colors.hover }
-                    .into();
+                let underline_color: Color4f = if pressed {
+                    colors.pressed
+                } else {
+                    colors.hover
+                }
+                .into();
                 let y = height * 1.1;
                 let mut paint = Paint::new(underline_color, None);
                 paint.set_anti_alias(false);
@@ -98,11 +104,9 @@ impl Expand {
         result.expanded = self.expanded;
         result
     }
-
 }
 
 impl ExpandProcessResult {
-
     pub fn mutually_exclude(self, other: &mut Expand) -> Self {
         if self.expanded && self.just_clicked {
             other.expanded = false;
@@ -113,5 +117,4 @@ impl ExpandProcessResult {
     pub fn expanded(self) -> bool {
         self.expanded
     }
-
 }

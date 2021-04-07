@@ -22,7 +22,6 @@ pub struct ButtonProcessResult {
 }
 
 impl Button {
-
     pub fn process(
         ui: &mut Ui,
         canvas: &mut Canvas,
@@ -40,9 +39,11 @@ impl Button {
         let mut clicked = false;
         ui.outline(canvas, colors.outline, 1.0);
         if ui.has_mouse(input) {
-            let fill_color =
-                if input.mouse_button_is_down(MouseButton::Left) { colors.pressed }
-                else { colors.hover };
+            let fill_color = if input.mouse_button_is_down(MouseButton::Left) {
+                colors.pressed
+            } else {
+                colors.hover
+            };
             ui.fill(canvas, fill_color);
             clicked = input.mouse_button_just_released(MouseButton::Left);
         }
@@ -63,7 +64,12 @@ impl Button {
             let text_width = ui.text_size(text).0;
             let padding = args.height;
             ui.push_group((text_width + padding, ui.height()), Layout::Freeform);
-            ui.text(canvas, text, args.colors.text, (AlignH::Center, AlignV::Middle));
+            ui.text(
+                canvas,
+                text,
+                args.colors.text,
+                (AlignH::Center, AlignV::Middle),
+            );
             ui.pop_group();
         })
     }
@@ -76,16 +82,18 @@ impl Button {
         icon: &Image,
     ) -> ButtonProcessResult {
         Self::process(ui, canvas, input, args, Some(args.height), |ui, canvas| {
-            ui.icon(canvas, icon, args.colors.text, Some((args.height, args.height)));
+            ui.icon(
+                canvas,
+                icon,
+                args.colors.text,
+                Some((args.height, args.height)),
+            );
         })
     }
-
 }
 
 impl ButtonProcessResult {
-
     pub fn clicked(self) -> bool {
         self.clicked
     }
-
 }

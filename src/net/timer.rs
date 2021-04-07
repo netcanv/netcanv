@@ -13,7 +13,6 @@ pub struct Tick<'a> {
 }
 
 impl Timer {
-
     pub fn new(interval: Duration) -> Self {
         Self {
             interval: interval.as_micros() as i64,
@@ -28,11 +27,8 @@ impl Timer {
         let elapsed = now - self.last_tick;
         self.last_tick = now;
         self.lag += elapsed.as_micros() as i64;
-        Tick {
-            timer: self,
-        }
+        Tick { timer: self }
     }
-
 }
 
 impl Iterator for Tick<'_> {
@@ -48,4 +44,3 @@ impl Iterator for Tick<'_> {
         }
     }
 }
-

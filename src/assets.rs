@@ -1,7 +1,7 @@
 use skulpin::skia_safe::*;
 
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
-use crate::util::{RcFont, new_rc_font};
+use crate::util::{new_rc_font, RcFont};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
@@ -50,12 +50,11 @@ pub struct Assets {
 }
 
 impl Assets {
-
     fn load_icon(data: &[u8]) -> Image {
         use usvg::{FitTo, NodeKind, Tree};
 
-        let tree = Tree::from_data(data, &Default::default())
-            .expect("error while loading the SVG file");
+        let tree =
+            Tree::from_data(data, &Default::default()).expect("error while loading the SVG file");
         let size = match *tree.root().borrow() {
             NodeKind::Svg(svg) => svg.size,
             _ => panic!("the root node of the SVG is not <svg/>"),
@@ -93,11 +92,9 @@ impl Assets {
             },
         }
     }
-
 }
 
 impl ColorScheme {
-
     pub fn light() -> Self {
         Self {
             text: Color::new(0xff000000),
@@ -135,5 +132,4 @@ impl ColorScheme {
             },
         }
     }
-
 }

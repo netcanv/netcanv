@@ -1,6 +1,6 @@
 // client (p2p) packets
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 // the version constant. increased by 100 every minor client version, and by 10000 every major version.
 // eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
@@ -33,7 +33,6 @@ pub enum Packet {
     /*--
      * VERSION 0.1.0 (no version packet)
      */
-
     //
     // introduction protocol
     //
@@ -63,7 +62,6 @@ pub enum Packet {
     /*--
      * VERSION 0.2.0 (protocol 200)
      */
-
     // version packet. this is sent as part of a response to Hello
     Version(u32),
 
@@ -96,4 +94,3 @@ pub fn from_fixed29p3(x: i32) -> f32 {
 pub fn from_fixed15p1(x: i16) -> f32 {
     x as f32 / 2.0
 }
-

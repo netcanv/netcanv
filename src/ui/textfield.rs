@@ -29,7 +29,6 @@ pub struct TextFieldArgs<'a, 'b> {
 }
 
 impl TextField {
-
     const BLINK_PERIOD: f32 = 1.0;
     const HALF_BLINK: f32 = Self::BLINK_PERIOD / 2.0;
 
@@ -48,7 +47,7 @@ impl TextField {
     }
 
     pub fn height(ui: &Ui) -> f32 {
-        f32::round(16.0/7.0 * ui.font_size())
+        f32::round(16.0 / 7.0 * ui.font_size())
     }
 
     pub fn process(
@@ -56,7 +55,11 @@ impl TextField {
         ui: &mut Ui,
         canvas: &mut Canvas,
         input: &Input,
-        TextFieldArgs { width, colors, hint }: TextFieldArgs,
+        TextFieldArgs {
+            width,
+            colors,
+            hint,
+        }: TextFieldArgs,
     ) {
         ui.push_group((width, Self::height(ui)), Layout::Freeform);
 
@@ -64,9 +67,14 @@ impl TextField {
         ui.draw_on_canvas(canvas, |canvas| {
             let mut paint = Paint::new(Color4f::from(colors.fill), None);
             paint.set_anti_alias(true);
-            let mut rrect = RRect::new_rect_xy(&Rect::from_point_and_size((0.0, 0.0), ui.size()), 4.0, 4.0);
+            let mut rrect =
+                RRect::new_rect_xy(&Rect::from_point_and_size((0.0, 0.0), ui.size()), 4.0, 4.0);
             canvas.draw_rrect(rrect, &paint);
-            paint.set_color(if self.focused { colors.outline_focus } else { colors.outline });
+            paint.set_color(if self.focused {
+                colors.outline_focus
+            } else {
+                colors.outline
+            });
             paint.set_style(paint::Style::Stroke);
             rrect.offset((0.5, 0.5));
             canvas.draw_rrect(rrect, &paint);
@@ -80,11 +88,23 @@ impl TextField {
 
         // render hint
         if hint.is_some() && self.text.len() == 0 {
-            ui.text(canvas, hint.unwrap(), colors.text_hint, (AlignH::Left, AlignV::Middle));
+            ui.text(
+                canvas,
+                hint.unwrap(),
+                colors.text_hint,
+                (AlignH::Left, AlignV::Middle),
+            );
         }
-        let text_advance = ui.text(canvas, &self.text_utf8, colors.text, (AlignH::Left, AlignV::Middle));
+        let text_advance = ui.text(
+            canvas,
+            &self.text_utf8,
+            colors.text,
+            (AlignH::Left, AlignV::Middle),
+        );
 
-        if self.focused && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK {
+        if self.focused
+            && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK
+        {
             ui.draw_on_canvas(canvas, |canvas| {
                 let mut paint = Paint::new(Color4f::from(colors.text), None);
                 paint.set_anti_alias(false);
@@ -159,7 +179,12 @@ impl TextField {
 
         // label
         ui.push_group((args.width, 16.0), Layout::Freeform);
-        ui.text(canvas, label, args.colors.label, (AlignH::Left, AlignV::Top));
+        ui.text(
+            canvas,
+            label,
+            args.colors.label,
+            (AlignH::Left, AlignV::Top),
+        );
         ui.pop_group();
 
         // field
@@ -171,7 +196,6 @@ impl TextField {
     pub fn text<'a>(&'a self) -> &'a str {
         &self.text_utf8
     }
-
 }
 
 impl Focus for TextField {

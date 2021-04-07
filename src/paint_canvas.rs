@@ -1,20 +1,14 @@
-use std::collections::{HashMap, HashSet, hash_map};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::io::Cursor;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
-use skulpin::skia_safe::*;
 use ::image::{
-    ColorType,
-    GenericImage,
-    GenericImageView,
-    ImageDecoder,
-    ImageBuffer,
-    ImageError,
-    Rgba,
+    codecs::png::{PngDecoder, PngEncoder},
+    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba,
     RgbaImage,
-    codecs::png::{PngDecoder, PngEncoder}
 };
+use skulpin::skia_safe::*;
 
 use crate::viewport::Viewport;
 
@@ -31,7 +25,6 @@ pub struct StrokePoint {
 }
 
 impl Brush {
-
     pub fn as_paint(&self) -> Paint {
         let mut paint = Paint::new(Color4f::from(Color::TRANSPARENT), None);
         paint.set_anti_alias(false);
@@ -39,21 +32,22 @@ impl Brush {
         paint.set_stroke_cap(paint::Cap::Round);
 
         match self {
-            Self::Draw { color, stroke_width } => {
+            Self::Draw {
+                color,
+                stroke_width,
+            } => {
                 paint.set_color(color.to_color());
                 paint.set_stroke_width(*stroke_width);
-            },
+            }
             Self::Erase { stroke_width } => {
                 paint.set_blend_mode(BlendMode::Clear);
                 paint.set_stroke_width(*stroke_width);
-            },
+            }
         }
 
         paint
     }
-
 }
-
 
 pub struct Chunk<'a> {
     bitmap: Bitmap,
@@ -116,8 +110,11 @@ impl<'a> Chunk<'a> {
             let pixels = self.pixels_mut();
             let (width, height) = (self.bitmap.width() as u32, self.bitmap.height() as u32);
             let mut bytes: Vec<u8> = Vec::new();
-            if PngEncoder::new(Cursor::new(&mut bytes)).encode(pixels, width, height, ColorType::Rgba8).is_err() {
-                return None
+            if PngEncoder::new(Cursor::new(&mut bytes))
+                .encode(pixels, width, height, ColorType::Rgba8)
+                .is_err()
+            {
+                return None;
             }
             self.png_data = Some(bytes);
         }
@@ -128,16 +125,19 @@ impl<'a> Chunk<'a> {
         let decoder = PngDecoder::new(Cursor::new(data))?;
         if decoder.color_type() != ColorType::Rgba8 {
             eprintln!("received non-RGBA image data, ignoring");
-            return Ok(())
+            return Ok(());
         }
         if decoder.dimensions() != (Self::SIZE.0 as u32, Self::SIZE.1 as u32) {
-            eprintln!("received chunk with invalid size. got: {:?}, expected: {:?}", decoder.dimensions(), Self::SIZE);
-            return Ok(())
+            eprintln!(
+                "received chunk with invalid size. got: {:?}, expected: {:?}",
+                decoder.dimensions(),
+                Self::SIZE
+            );
+            return Ok(());
         }
         decoder.read_image(self.pixels_mut())?;
         Ok(())
     }
-
 }
 
 pub struct PaintCanvas<'a> {
@@ -151,7 +151,6 @@ pub struct PngData<'a, 'b> {
 }
 
 impl<'a> PaintCanvas<'a> {
-
     pub fn new() -> Self {
         Self {
             chunks: HashMap::new(),
@@ -165,12 +164,7 @@ impl<'a> PaintCanvas<'a> {
         }
     }
 
-    pub fn stroke(
-        &mut self,
-        from: impl Into<Point>,
-        to: impl Into<Point>,
-        brush: &Brush,
-    ) {
+    pub fn stroke(&mut self, from: impl Into<Point>, to: impl Into<Point>, brush: &Brush) {
         let a = from.into();
         let b = to.into();
         let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
@@ -196,14 +190,16 @@ impl<'a> PaintCanvas<'a> {
                 (bottom_right.y / Chunk::SIZE.1 as f32).ceil() as i32,
             );
 
-            for y in top_left_chunk.1 .. bottom_right_chunk.1 {
-                for x in top_left_chunk.0 .. bottom_right_chunk.0 {
+            for y in top_left_chunk.1..bottom_right_chunk.1 {
+                for x in top_left_chunk.0..bottom_right_chunk.0 {
                     let chunk_position = (x, y);
                     if !self.stroked_chunks.contains(&chunk_position) {
                         self.ensure_chunk_exists(chunk_position);
                         let chunk = self.chunks.get_mut(&chunk_position).unwrap();
                         let screen_position = Chunk::screen_position(chunk_position);
-                        chunk.canvas.draw_line(a - screen_position, b - screen_position, &paint);
+                        chunk
+                            .canvas
+                            .draw_line(a - screen_position, b - screen_position, &paint);
                         chunk.png_data = None;
                     }
                     self.stroked_chunks.insert(chunk_position);
@@ -211,7 +207,6 @@ impl<'a> PaintCanvas<'a> {
                 }
             }
         }
-
     }
 
     pub fn draw_to(&self, canvas: &mut Canvas, viewport: &Viewport, window_size: (f32, f32)) {
@@ -234,16 +229,16 @@ impl<'a> PaintCanvas<'a> {
     }
 
     pub fn cleanup_empty_chunks(&mut self) {
-        self.chunks.retain(|_, chunk| {
-            chunk.pixels().iter().any(|x| *x != 0u8)
-        });
+        self.chunks
+            .retain(|_, chunk| chunk.pixels().iter().any(|x| *x != 0u8));
     }
 
     // right now loading/saving only really works (well, was tested) on little-endian machines, so i make no guarantees
     // if it works on big-endian. most likely loading will screw up the channel order in pixels. thanks, skia!
 
     fn fix_endianness<C>(image: &mut ImageBuffer<Rgba<u8>, C>)
-        where C: Deref<Target = [u8]> + DerefMut
+    where
+        C: Deref<Target = [u8]> + DerefMut,
     {
         #[cfg(target_endian = "little")]
         {
@@ -267,7 +262,10 @@ impl<'a> PaintCanvas<'a> {
             right = right.max(chunk_position.0);
             bottom = bottom.max(chunk_position.1);
         }
-        eprintln!("left={}, top={}, right={}, bottom={}", left, top, right, bottom);
+        eprintln!(
+            "left={}, top={}, right={}, bottom={}",
+            left, top, right, bottom
+        );
         if left == i32::MAX {
             anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
         }
@@ -283,7 +281,8 @@ impl<'a> PaintCanvas<'a> {
             );
             eprintln!("   - pixel position: {:?}", pixel_position);
             let pixels = Vec::from(chunk.pixels());
-            let mut chunk_image = RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
+            let mut chunk_image =
+                RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
             Self::fix_endianness(&mut chunk_image);
             let mut sub_image = image.sub_image(
                 pixel_position.0,
@@ -334,7 +333,6 @@ impl<'a> PaintCanvas<'a> {
     pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
         self.chunks.keys().map(|p| *p).collect()
     }
-
 }
 
 impl Iterator for PngData<'_, '_> {
@@ -343,7 +341,7 @@ impl Iterator for PngData<'_, '_> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((position, chunk)) = self.iter.next() {
             if let Some(png_data) = chunk.png_data() {
-                return Some((*position, Vec::from(png_data)))
+                return Some((*position, Vec::from(png_data)));
             }
         }
         None

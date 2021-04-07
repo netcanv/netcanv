@@ -24,7 +24,6 @@ pub struct SliderArgs {
 }
 
 impl Slider {
-
     pub fn new(value: f32, min: f32, max: f32, step: SliderStep) -> Self {
         Self {
             value: (value - min) / (max - min),
@@ -104,5 +103,4 @@ impl Slider {
             SliderStep::Discrete(step) => quantize(raw, step),
         }
     }
-
 }

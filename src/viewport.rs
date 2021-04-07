@@ -1,4 +1,4 @@
-use skulpin::skia_safe::{Rect, IRect, Vector};
+use skulpin::skia_safe::{IRect, Rect, Vector};
 
 #[derive(Clone)]
 pub struct Viewport {
@@ -13,7 +13,6 @@ pub struct Tiles<'a> {
 }
 
 impl Viewport {
-
     pub fn new() -> Self {
         Self {
             pan: Vector::new(0.0, 0.0),
@@ -52,7 +51,6 @@ impl Viewport {
             y: irect.top,
         }
     }
-
 }
 
 impl Iterator for Tiles<'_> {

@@ -23,7 +23,6 @@ use assets::*;
 use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let event_loop = EventLoop::new();
     let winit_window = {
         let mut b = WindowBuilder::new()
@@ -35,7 +34,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             b = b.with_app_id("netcanv".into())
         }
         b
-    }.build(&event_loop)?;
+    }
+    .build(&event_loop)?;
 
     let window = WinitWindow::new(&winit_window);
     let mut renderer = RendererBuilder::new()
@@ -51,34 +51,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         *control_flow = ControlFlow::Poll;
 
         match event {
-
-            Event::WindowEvent {
-                event,
-                ..
-            } => {
+            Event::WindowEvent { event, .. } => {
                 if let WindowEvent::CloseRequested = event {
                     *control_flow = ControlFlow::Exit;
                 } else {
                     input.process_event(&event);
                 }
-            },
+            }
 
             Event::MainEventsCleared => {
-                renderer.draw(&window, |canvas, csh| {
-                    // unwrap always succeeds here as app is never None
-                    // i don't really like this method chaining tho
-                    app.as_mut().unwrap().process(StateArgs {
-                        canvas,
-                        coordinate_system_helper: &csh,
-                        input: &mut input,
-                    });
-                    app = Some(app.take().unwrap().next_state());
-                }).unwrap();
+                renderer
+                    .draw(&window, |canvas, csh| {
+                        // unwrap always succeeds here as app is never None
+                        // i don't really like this method chaining tho
+                        app.as_mut().unwrap().process(StateArgs {
+                            canvas,
+                            coordinate_system_helper: &csh,
+                            input: &mut input,
+                        });
+                        app = Some(app.take().unwrap().next_state());
+                    })
+                    .unwrap();
                 input.finish_frame();
-            },
+            }
 
             _ => (),
-
         }
     });
 }
