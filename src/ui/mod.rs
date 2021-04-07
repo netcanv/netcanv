@@ -201,6 +201,16 @@ impl Ui {
         self.top_mut().rect.set_xywh(x, y, width, height);
     }
 
+    // for wallhackd and future use
+    #[allow(unused)]
+    pub fn set_absolute_position(&mut self, position: impl Into<Point>) {
+        let position = position.into();
+        let rect = self.top().rect;
+        self.top_mut()
+            .rect
+            .set_xywh(position.x, position.y, rect.width(), rect.height());
+    }
+
     pub fn fill(&self, canvas: &mut Canvas, color: impl Into<Color4f>) {
         let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(false);
