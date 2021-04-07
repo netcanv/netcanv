@@ -30,9 +30,10 @@ pub struct StrokePoint {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
-    /*--
-     * VERSION 0.1.0 (no version packet)
-     * */
+    // ---
+    // VERSION 0.1.0 (no version packet)
+    // ---
+
     //
     // introduction protocol
     //
@@ -59,9 +60,10 @@ pub enum Packet {
     // a paint stroke
     Stroke(Vec<StrokePoint>),
 
-    /*--
-     * VERSION 0.2.0 (protocol 200)
-     * */
+    // ---
+    // VERSION 0.2.0 (protocol 200)
+    // ---
+
     // version packet. this is sent as part of a response to Hello
     Version(u32),
 
