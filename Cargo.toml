@@ -24,4 +24,4 @@ native-dialog = "0.5.5"
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]
-lto = true
+# lto = true

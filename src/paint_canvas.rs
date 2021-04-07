@@ -103,6 +103,7 @@ impl<'a> Chunk<'a> {
     // PNG data is reencoded upon outside request, but invalidated if the chunk is modified
     fn png_data(&mut self) -> Option<&[u8]> {
         if self.png_data.is_none() {
+            eprintln!("  png data doesn't exist, encoding");
             let pixels = self.pixels_mut();
             let (width, height) = (self.bitmap.width() as u32, self.bitmap.height() as u32);
             let mut bytes: Vec<u8> = Vec::new();
@@ -213,6 +214,7 @@ impl<'a> PaintCanvas<'a> {
     }
 
     pub fn png_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
+        eprintln!("fetching png data for {:?}", chunk_position);
         self.chunks.get_mut(&chunk_position)?.png_data()
     }
 
