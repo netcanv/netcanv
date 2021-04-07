@@ -19,7 +19,7 @@ struct Room {
 }
 
 struct Matchmaker {
-    rooms: HashMap<u32, Room>,
+    rooms: HashMap<u32, Arc<Mutex<Room>>>,
     host_rooms: HashMap<SocketAddr, u32>,
     relay_clients: HashMap<SocketAddr, u32>, // mapping address → room ID
 }
@@ -82,7 +82,7 @@ impl Matchmaker {
                     id: room_id,
                 };
                 {
-                    mm.rooms.insert(room_id, room);
+                    mm.rooms.insert(room_id, Arc::new(Mutex::new(room)));
                     mm.host_rooms.insert(peer_addr, room_id);
                 }
                 drop(mm);
@@ -104,7 +104,9 @@ impl Matchmaker {
                 )?;
                 return Ok(())
             },
-        };
+        }
+        .lock()
+        .unwrap();
         let client_addr = stream.peer_addr()?;
         let host_addr = room.host.peer_addr()?;
         Self::send_packet(&room.host, Packet::ClientAddress(client_addr))?;
@@ -116,23 +118,23 @@ impl Matchmaker {
         eprintln!("- relay requested from {}", peer_addr);
 
         let host_addr: SocketAddr = host_addr.unwrap_or(peer_addr);
-        {
-            let mut mm = mm.lock().unwrap();
-            let room_id: u32;
-            match mm.host_rooms.get(&host_addr) {
-                Some(id) => room_id = *id,
-                None => {
-                    Self::send_error(&stream, "The host seems to have disconnected")?;
-                    return Ok(())
-                },
-            }
-            mm.relay_clients.insert(peer_addr, room_id);
-            mm.rooms
-                .get_mut(&room_id)
-                .unwrap()
-                .clients
-                .push(Arc::downgrade(&stream));
+        let mut mm = mm.lock().unwrap();
+        let room_id: u32;
+        match mm.host_rooms.get(&host_addr) {
+            Some(id) => room_id = *id,
+            None => {
+                Self::send_error(&stream, "The host seems to have disconnected")?;
+                return Ok(())
+            },
         }
+        mm.relay_clients.insert(peer_addr, room_id);
+        mm.rooms
+            .get_mut(&room_id)
+            .unwrap()
+            .lock()
+            .unwrap()
+            .clients
+            .push(Arc::downgrade(&stream));
 
         Ok(())
     }
@@ -144,8 +146,7 @@ impl Matchmaker {
         to: Option<SocketAddr>,
         data: &[u8],
     ) -> Result<(), Error> {
-        // XXX: this can bottleneck the server if there are many relays running at the same time
-        // because the mutex is locked for the entire duration of the server relaying packets!!!
+        eprintln!("relaying packet (size: {} KiB)", data.len() as f32 / 1024.0);
         let mut mm = mm.lock().unwrap();
         let room_id = match mm.relay_clients.get(&addr) {
             Some(id) => *id,
@@ -156,6 +157,8 @@ impl Matchmaker {
         };
         match mm.rooms.get_mut(&room_id) {
             Some(room) => {
+                let mut room = room.lock().unwrap().clone();
+                drop(mm);
                 let mut nclients = 0;
                 room.clients.retain(|client| client.upgrade().is_some());
                 for client in &room.clients {
@@ -209,6 +212,7 @@ impl Matchmaker {
         }
         if let Some(room_id) = self.relay_clients.remove(&addr) {
             if let Some(room) = self.rooms.get_mut(&room_id) {
+                let room = room.lock().unwrap();
                 for client in &room.clients {
                     let client = client.upgrade();
                     if client.is_none() {
