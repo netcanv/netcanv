@@ -1,5 +1,6 @@
 // socket abstraction.
 
+use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
@@ -73,32 +74,35 @@ pub enum Error {
 
 impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {
     pub fn new(addr: impl ToSocketAddrs) -> Result<Self, Error> {
-        let stream_arc = Arc::new(TcpStream::connect(addr)?);
-        stream_arc.set_nodelay(true)?;
+        let stream = TcpStream::connect(addr)?;
+        stream.set_nodelay(true)?;
 
         let (to_thread, from_main) = crossbeam_channel::unbounded();
         let (to_main, from_thread) = crossbeam_channel::unbounded();
 
-        let stream = stream_arc.clone();
+        const MEGABYTE: usize = 1024 * 1024;
+
+        let mut writer = BufWriter::with_capacity(2 * MEGABYTE, stream.try_clone()?);
         let send = ControllableThread::new("network send thread", move |abort| -> Result<(), Error> {
             loop {
                 if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break
                 }
                 while let Ok(packet) = from_main.recv() {
-                    bincode::serialize_into(&*stream, &packet)?;
+                    bincode::serialize_into(&mut writer, &packet)?;
+                    writer.flush()?;
                 }
             }
             Ok(())
         });
 
-        let stream = stream_arc.clone();
+        let mut reader = BufReader::with_capacity(2 * MEGABYTE, stream.try_clone()?);
         let recv = ControllableThread::new("network recv thread", move |abort| -> Result<(), Error> {
             loop {
                 if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break
                 }
-                let packet = bincode::deserialize_from(&*stream)?;
+                let packet = bincode::deserialize_from(&mut reader)?;
                 to_main.send(packet).map_err(|_| Error::ThreadSend)?;
             }
             Ok(())
