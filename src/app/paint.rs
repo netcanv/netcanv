@@ -38,8 +38,9 @@ pub struct State {
     stroke_buffer: Vec<StrokePoint>,
 
     server_side_chunks: HashSet<(i32, i32)>,
+    requested_chunks: HashSet<(i32, i32)>,
     downloaded_chunks: HashSet<(i32, i32)>,
-    needed_chunks: Vec<(i32, i32)>,
+    needed_chunks: HashSet<(i32, i32)>,
     deferred_message_queue: VecDeque<Message>,
 
     save_to_file: Option<PathBuf>,
@@ -89,8 +90,9 @@ impl State {
             stroke_buffer: Vec::new(),
 
             server_side_chunks: HashSet::new(),
+            requested_chunks: HashSet::new(),
             downloaded_chunks: HashSet::new(),
-            needed_chunks: Vec::new(),
+            needed_chunks: HashSet::new(),
             deferred_message_queue: VecDeque::new(),
 
             save_to_file: None,
@@ -195,15 +197,6 @@ impl State {
             break
         }
 
-        for _ in self.update_timer.tick() {
-            if input.previous_mouse_position() != input.mouse_position() {
-                ok_or_log!(self.log, self.peer.send_cursor(to, brush_size));
-            }
-            if !self.stroke_buffer.is_empty() {
-                ok_or_log!(self.log, self.peer.send_stroke(self.stroke_buffer.drain(..)));
-            }
-        }
-
         // panning
 
         if self.ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
@@ -265,13 +258,34 @@ impl State {
         self.ui.pop_group();
 
         //
-        // downloading chunks
+        // networking
         //
 
-        for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-            if self.server_side_chunks.contains(&chunk_position) && !self.downloaded_chunks.contains(&chunk_position) {
-                self.needed_chunks.push(chunk_position);
-                self.downloaded_chunks.insert(chunk_position);
+        for _ in self.update_timer.tick() {
+            // mouse / drawing
+            if input.previous_mouse_position() != input.mouse_position() {
+                ok_or_log!(self.log, self.peer.send_cursor(to, brush_size));
+            }
+            if !self.stroke_buffer.is_empty() {
+                ok_or_log!(self.log, self.peer.send_stroke(self.stroke_buffer.drain(..)));
+            }
+            // chunk downloading
+            if self.save_to_file.is_some() {
+                if self.requested_chunks.len() < self.server_side_chunks.len() {
+                    self.needed_chunks
+                        .extend(self.server_side_chunks.difference(&self.requested_chunks));
+                } else if self.downloaded_chunks.len() == self.server_side_chunks.len() {
+                    ok_or_log!(self.log, self.paint_canvas.save(&self.save_to_file.as_ref().unwrap()));
+                    self.save_to_file = None;
+                }
+            } else {
+                for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
+                    if self.server_side_chunks.contains(&chunk_position) &&
+                        !self.requested_chunks.contains(&chunk_position)
+                    {
+                        self.needed_chunks.insert(chunk_position);
+                    }
+                }
             }
         }
     }
@@ -371,7 +385,7 @@ impl State {
                 Ok(Some(path)) => {
                     self.paint_canvas.cleanup_empty_chunks();
                     self.save_to_file = Some(path);
-//                     ok_or_log!(self.log, self.paint_canvas.save(&path))
+                    //                     ok_or_log!(self.log, self.paint_canvas.save(&path))
                 },
                 Err(error) => log!(self.log, "Error while selecting file: {}", error),
                 _ => (),
@@ -436,6 +450,7 @@ impl AppState for State {
                         Message::Chunks(chunks) =>
                             for (chunk_position, png_data) in chunks {
                                 Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk_position, &png_data);
+                                self.downloaded_chunks.insert(chunk_position);
                             },
                         message => self.deferred_message_queue.push_back(message),
                     }
@@ -471,11 +486,13 @@ impl AppState for State {
         }
 
         if self.needed_chunks.len() > 0 {
+            for chunk in &self.needed_chunks {
+                self.requested_chunks.insert(*chunk);
+            }
             ok_or_log!(
                 self.log,
-                self.peer.download_chunks(self.needed_chunks.drain(..).collect())
+                self.peer.download_chunks(self.needed_chunks.drain().collect())
             );
-            self.needed_chunks.clear();
         }
 
         // UI setup
