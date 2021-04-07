@@ -42,13 +42,7 @@ impl Slider {
         }
     }
 
-    pub fn process(
-        &mut self,
-        ui: &mut Ui,
-        canvas: &mut Canvas,
-        input: &Input,
-        SliderArgs { width, color }: SliderArgs,
-    ) {
+    pub fn process(&mut self, ui: &mut Ui, canvas: &mut Canvas, input: &Input, SliderArgs { width, color }: SliderArgs) {
         ui.push_group((width, ui.height()), Layout::Freeform);
 
         if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Left) {

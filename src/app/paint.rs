@@ -93,6 +93,8 @@ impl State {
             needed_chunks: Vec::new(),
             deferred_message_queue: VecDeque::new(),
 
+            save_to_file: None,
+
             error: None,
             log: Log::new(),
 
@@ -368,7 +370,8 @@ impl State {
             {
                 Ok(Some(path)) => {
                     self.paint_canvas.cleanup_empty_chunks();
-                    ok_or_log!(self.log, self.paint_canvas.save(&path))
+                    self.save_to_file = Some(path);
+//                     ok_or_log!(self.log, self.paint_canvas.save(&path))
                 },
                 Err(error) => log!(self.log, "Error while selecting file: {}", error),
                 _ => (),
