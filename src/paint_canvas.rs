@@ -327,6 +327,8 @@ impl<'a> PaintCanvas<'a> {
             }
         }
 
+        self.cleanup_empty_chunks();
+
         Ok(())
     }
 
