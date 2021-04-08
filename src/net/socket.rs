@@ -128,7 +128,7 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
     }
 
     pub fn tick(&self) -> Result<bool, Error> {
-        Ok(self.send.tick()? && self.recv.tick()?)
+        self.send.tick().and(self.recv.tick())
     }
 }
 

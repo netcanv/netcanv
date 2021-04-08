@@ -262,11 +262,11 @@ impl Matchmaker {
     }
 
     /// Disconnects a client gracefully by removing all references to it inside of the matchmaker.
-    fn disconnect(&mut self, addr: SocketAddr) -> Result<(), Error> {
-        if let Some(room_id) = self.host_rooms.remove(&addr) {
+    fn disconnect(&mut self, peer_addr: SocketAddr, stream: &Arc<BufStream>) -> Result<(), Error> {
+        if let Some(room_id) = self.host_rooms.remove(&peer_addr) {
             self.rooms.remove(&room_id);
         }
-        if let Some(room_id) = self.relay_clients.remove(&addr) {
+        if let Some(room_id) = self.relay_clients.remove(&peer_addr) {
             if let Some(room) = self.rooms.get_mut(&room_id) {
                 let room = room.lock().unwrap();
                 for client in &room.clients {
@@ -275,7 +275,10 @@ impl Matchmaker {
                         continue
                     }
                     let client = client.unwrap();
-                    let _ = Self::send_packet(&client, &Packet::Disconnected(addr));
+                    if Arc::ptr_eq(&client, stream) {
+                        continue
+                    }
+                    let _ = Self::send_packet(&client, &Packet::Disconnected(peer_addr));
                 }
             }
         }
@@ -296,7 +299,7 @@ impl Matchmaker {
                         let _ = mm
                             .lock()
                             .unwrap()
-                            .disconnect(peer_addr)
+                            .disconnect(peer_addr, &stream)
                             .or_else(|error| -> Result<_, ()> {
                                 eprintln!("! error/while disconnecting {}: {}", peer_addr, error);
                                 Ok(())
