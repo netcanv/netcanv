@@ -12,11 +12,13 @@ pub struct Input {
     // mouse input
     mouse_position: Point,
     previous_mouse_position: Point,
+    mouse_scroll: Vector,
 
     mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
     mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
     mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
     mouse_buttons_locked: bool,
+
 
     // keyboard input
     char_buffer: Vec<char>,
@@ -31,6 +33,7 @@ impl Input {
         Self {
             mouse_position: Point::new(0.0, 0.0),
             previous_mouse_position: Point::new(0.0, 0.0),
+            mouse_scroll: Vector::new(0.0, 0.0),
             mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
@@ -47,6 +50,10 @@ impl Input {
 
     pub fn previous_mouse_position(&self) -> Point {
         self.previous_mouse_position
+    }
+
+    pub fn mouse_scroll(&self) -> Vector {
+        self.mouse_scroll
     }
 
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
@@ -116,6 +123,14 @@ impl Input {
 
             WindowEvent::MouseInput { button, state, .. } => self.process_mouse_input(*button, *state),
 
+            WindowEvent::MouseWheel { delta, .. } => {
+                use winit::event::MouseScrollDelta::*;
+                self.mouse_scroll = match *delta {
+                    LineDelta(x, y) => Vector::new(x, y),
+                    PixelDelta(PhysicalPosition { x, y }) => Vector::new(x as f32, y as f32),
+                };
+            },
+
             WindowEvent::ReceivedCharacter(c) => self.char_buffer.push(*c),
 
             WindowEvent::KeyboardInput {
@@ -140,6 +155,7 @@ impl Input {
             *state = false;
         }
         self.previous_mouse_position = self.mouse_position;
+        self.mouse_scroll.set(0.0, 0.0);
         for state in &mut self.key_just_typed {
             *state = false;
         }

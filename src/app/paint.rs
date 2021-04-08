@@ -170,8 +170,8 @@ impl State {
         }
 
         let brush_size = self.brush_size_slider.value();
-        let from = input.previous_mouse_position() + self.viewport.pan();
-        let to = input.mouse_position() + self.viewport.pan();
+        let from = self.viewport.to_viewport_space(input.previous_mouse_position(), self.ui.size());
+        let to = self.viewport.to_viewport_space(input.mouse_position(), self.ui.size());
         loop {
             // give me back my labelled blocks
             let brush = match self.paint_mode {
@@ -196,7 +196,7 @@ impl State {
             break
         }
 
-        // panning
+        // panning and zooming
 
         if self.ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
             self.panning = true;
@@ -209,6 +209,7 @@ impl State {
             let delta_pan = input.previous_mouse_position() - input.mouse_position();
             self.viewport.pan_around(delta_pan);
         }
+        self.viewport.zoom_in(input.mouse_scroll().y);
 
         //
         // rendering
@@ -217,6 +218,8 @@ impl State {
         let paint_canvas = &self.paint_canvas;
         self.ui.draw_on_canvas(canvas, |canvas| {
             canvas.save();
+            canvas.translate((self.ui.width() / 2.0, self.ui.height() / 2.0));
+            canvas.scale((self.viewport.zoom(), self.viewport.zoom()));
             canvas.translate(-self.viewport.pan());
 
             let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);

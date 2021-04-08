@@ -159,10 +159,15 @@ impl Peer {
     }
 
     fn decode_payload(&mut self, sender_addr: SocketAddr, payload: &[u8]) -> Option<Message> {
-        let packet = try_or_message!(
-            bincode::deserialize::<cl::Packet>(payload),
-            "Unknown packet received: {}. Check if your client is up to date"
-        );
+        let packet = match bincode::deserialize::<cl::Packet>(payload) {
+            Err(_) if self.is_host() => return None,
+            Err(error) =>
+                return Some(Message::Error(format!(
+                    "Unknown packet ({}). Check if your client is up to date",
+                    error
+                ))),
+            Ok(packet) => packet,
+        };
 
         match packet {
             //
