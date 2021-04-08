@@ -28,7 +28,7 @@ pub struct State {
     assets: Assets,
 
     ui: Ui,
-    paint_canvas: PaintCanvas<'static>,
+    paint_canvas: PaintCanvas,
     peer: Peer,
     update_timer: Timer,
 
@@ -116,7 +116,7 @@ impl State {
         this
     }
 
-    fn fellow_stroke(canvas: &mut PaintCanvas, points: &[StrokePoint]) {
+    fn fellow_stroke(canvas: &mut Canvas, paint_canvas: &mut PaintCanvas, points: &[StrokePoint]) {
         if points.is_empty() {
             return
         } // failsafe
@@ -124,7 +124,7 @@ impl State {
         let mut from = points[0].point;
         let first_index = if points.len() > 1 { 1 } else { 0 };
         for point in &points[first_index..] {
-            canvas.stroke(from, point.point, &point.brush);
+            paint_canvas.stroke(canvas, from, point.point, &point.brush);
             from = point.point;
         }
     }
@@ -184,7 +184,7 @@ impl State {
                     stroke_width: brush_size,
                 },
             };
-            self.paint_canvas.stroke(from, to, &brush);
+            self.paint_canvas.stroke(canvas, from, to, &brush);
             if self.stroke_buffer.is_empty() {
                 self.stroke_buffer.push(StrokePoint {
                     point: from,
@@ -445,7 +445,7 @@ impl AppState for State {
                             "Message::Connected shouldn't be generated after connecting to the matchmaker"
                         ),
                         Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
-                        Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                        Message::Stroke(points) => Self::fellow_stroke(canvas, &mut self.paint_canvas, &points),
                         Message::ChunkPositions(mut positions) => {
                             eprintln!("received {} chunk positions", positions.len());
                             self.server_side_chunks = positions.drain(..).collect();

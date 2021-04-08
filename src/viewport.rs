@@ -50,7 +50,7 @@ impl Viewport {
         }
     }
 
-    pub fn visible_tiles(&self, tile_size: (i32, i32), window_size: (f32, f32)) -> Tiles<'_> {
+    pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: (f32, f32)) -> Tiles<'_> {
         let visible_rect = self.visible_rect(window_size);
         let irect = IRect {
             left: (visible_rect.left / tile_size.0 as f32).floor() as i32,
