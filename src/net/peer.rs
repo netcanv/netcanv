@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::Instant;
 
 use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
@@ -11,6 +12,7 @@ use thiserror::Error;
 
 use crate::net::socket::{Error as NetError, Remote};
 use crate::paint_canvas::{Brush, StrokePoint};
+use crate::util;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -61,6 +63,8 @@ pub enum Message {
 
 pub struct Mate {
     pub cursor: Point,
+    pub cursor_prev: Point,
+    pub last_cursor: Instant,
     pub nickname: String,
     pub brush_size: f32,
 }
@@ -146,8 +150,10 @@ impl Peer {
 
     fn add_mate(&mut self, addr: SocketAddr, nickname: String) {
         self.mates.insert(addr, Mate {
-            nickname,
             cursor: Point::new(0.0, 0.0),
+            cursor_prev: Point::new(0.0, 0.0),
+            last_cursor: Instant::now(),
+            nickname,
             brush_size: 4.0,
         });
     }
@@ -174,30 +180,39 @@ impl Peer {
             },
             cl::Packet::Cursor(x, y, brush_size) =>
                 if let Some(mate) = self.mates.get_mut(&sender_addr) {
+                    mate.cursor_prev = mate.cursor;
                     mate.cursor = Point::new(cl::from_fixed29p3(x), cl::from_fixed29p3(y));
+                    mate.last_cursor = Instant::now();
                     mate.brush_size = cl::from_fixed15p1(brush_size);
                 } else {
                     eprintln!("{} sus", sender_addr);
                 },
-            cl::Packet::Stroke(points) =>
-                return Some(Message::Stroke(
-                    points
-                        .iter()
-                        .map(|p| StrokePoint {
-                            point: Point::new(cl::from_fixed29p3(p.x), cl::from_fixed29p3(p.y)),
-                            brush: if p.color == 0 {
-                                Brush::Erase {
-                                    stroke_width: cl::from_fixed15p1(p.brush_size),
-                                }
-                            } else {
-                                Brush::Draw {
-                                    color: Color4f::from(Color::new(p.color)),
-                                    stroke_width: cl::from_fixed15p1(p.brush_size),
-                                }
-                            },
-                        })
-                        .collect(),
-                )),
+            cl::Packet::Stroke(points) => {
+                let points: Vec<StrokePoint> = points
+                    .iter()
+                    .map(|p| StrokePoint {
+                        point: Point::new(cl::from_fixed29p3(p.x), cl::from_fixed29p3(p.y)),
+                        brush: if p.color == 0 {
+                            Brush::Erase {
+                                stroke_width: cl::from_fixed15p1(p.brush_size),
+                            }
+                        } else {
+                            Brush::Draw {
+                                color: Color4f::from(Color::new(p.color)),
+                                stroke_width: cl::from_fixed15p1(p.brush_size),
+                            }
+                        },
+                    })
+                    .collect();
+                if points.len() > 0 {
+                    if let Some(mate) = self.mates.get_mut(&sender_addr) {
+                        mate.cursor_prev = points[0].point;
+                        mate.cursor = points.last().unwrap().point;
+                        mate.last_cursor = Instant::now();
+                    }
+                }
+                return Some(Message::Stroke(points))
+            },
             #[allow(deprecated)] // remove when 0.3.0 is released
             cl::Packet::CanvasData(chunk_position, png_data) =>
                 return Some(Message::Chunks(vec![(chunk_position, png_data)])),
@@ -349,5 +364,14 @@ impl Iterator for Messages<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.peer.next_packet()
+    }
+}
+
+impl Mate {
+    pub fn lerp_cursor(&self) -> Point {
+        use crate::app::paint::State;
+        let elapsed_ms = self.last_cursor.elapsed().as_millis() as f32;
+        let t = (elapsed_ms / State::TIME_PER_UPDATE.as_millis() as f32).min(1.0);
+        util::lerp_point(self.cursor_prev, self.cursor, t)
     }
 }

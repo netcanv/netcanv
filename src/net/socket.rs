@@ -1,10 +1,9 @@
 // socket abstraction.
 
-use std::fmt::Display;
 use std::error;
+use std::fmt::Display;
 use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use serde::{de::DeserializeOwned, Serialize};
@@ -44,12 +43,10 @@ impl<T: Display + error::Error + Send + 'static> ControllableThread<T> {
 
     fn tick(&self) -> Result<bool, T> {
         match self.finished.try_recv() {
-            Ok(Finished(result)) => {
-                match result {
-                    Some(error) => Err(error),
-                    None => Ok(true),
-                }
-            }
+            Ok(Finished(result)) => match result {
+                Some(error) => Err(error),
+                None => Ok(true),
+            },
             Err(TryRecvError::Empty) => Ok(false),
             Err(TryRecvError::Disconnected) => Ok(true),
         }

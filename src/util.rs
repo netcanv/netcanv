@@ -35,3 +35,13 @@ pub fn new_rc_font(data: &[u8], default_size: f32) -> RcFont {
 pub fn quantize(value: f32, step: f32) -> f32 {
     step * (value / step + 0.5).floor()
 }
+
+pub fn lerp(v0: f32, v1: f32, t: f32) -> f32 {
+    (1.0 - t) * v0 + t * v1
+}
+
+pub fn lerp_point(p0: impl Into<Point>, p1: impl Into<Point>, t: f32) -> Point {
+    let p0 = p0.into();
+    let p1 = p1.into();
+    Point::new(lerp(p0.x, p1.x, t), lerp(p0.y, p1.y, t))
+}

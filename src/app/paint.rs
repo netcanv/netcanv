@@ -73,7 +73,7 @@ macro_rules! ok_or_log {
 
 impl State {
     const BAR_SIZE: f32 = 32.0;
-    const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
+    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
     pub fn new(assets: Assets, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
@@ -225,12 +225,12 @@ impl State {
 
             paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
             for (_, mate) in self.peer.mates() {
-                let text_position =
-                    mate.cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
+                let cursor = mate.lerp_cursor();
+                let text_position = cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
                 paint.set_style(skpaint::Style::Fill);
                 canvas.draw_str(&mate.nickname, text_position, &self.assets.sans.borrow(), &paint);
                 paint.set_style(skpaint::Style::Stroke);
-                canvas.draw_circle(mate.cursor, mate.brush_size * 0.5, &paint);
+                canvas.draw_circle(cursor, mate.brush_size * 0.5, &paint);
             }
 
             canvas.restore();

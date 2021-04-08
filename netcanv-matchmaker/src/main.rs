@@ -15,7 +15,8 @@ use thiserror::Error;
 /// Maximum possible room ID. This can be raised, if IDs ever run out.
 const MAX_ROOM_ID: u32 = 9999;
 
-/// A TCP stream, buffered writer, and buffered reader, packed into one thread-safe struct for convenience.
+/// A TCP stream, buffered writer, and buffered reader, packed into one thread-safe struct for
+/// convenience.
 struct BufStream {
     stream: TcpStream,
     writer: Mutex<BufWriter<TcpStream>>,
@@ -52,8 +53,8 @@ struct Room {
 
 /// The matchmaker state, usually passed around behind an Arc<Mutex<T>>.
 struct Matchmaker {
-    /// The rooms available on the matchmaker server. Each room is available behind an Arc<Mutex<T>>, so that accessing
-    /// a room does not require locking the matchmaker mutex.
+    /// The rooms available on the matchmaker server. Each room is available behind an
+    /// Arc<Mutex<T>>, so that accessing a room does not require locking the matchmaker mutex.
     rooms: HashMap<u32, Arc<Mutex<Room>>>,
     /// A mapping from host addresses to their room IDs.
     host_rooms: HashMap<SocketAddr, u32>,
@@ -104,7 +105,8 @@ impl Matchmaker {
     }
 
     /// Searches for a free room ID by rolling a dice 50 times until an ID is found.
-    /// If an ID cannot be found, None is returned and the requesting client is expected to ask for a free room again.
+    /// If an ID cannot be found, None is returned and the requesting client is expected to ask for
+    /// a free room again.
     fn find_free_room_id(&self) -> Option<u32> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -139,8 +141,8 @@ impl Matchmaker {
         Ok(())
     }
 
-    /// Packet::GetHost handler. Finds the host with the given ID, and exchanges addresses between the client and
-    /// the host.
+    /// Packet::GetHost handler. Finds the host with the given ID, and exchanges addresses between
+    /// the client and the host.
     fn join(mm: Arc<Mutex<Self>>, stream: &BufStream, room_id: u32) -> Result<(), Error> {
         let mm = mm.lock().unwrap();
         let room = match mm.rooms.get(&room_id) {
@@ -188,8 +190,8 @@ impl Matchmaker {
         Ok(())
     }
 
-    /// Relays a packet to a specific relay client in the sender's room, or all relay clients in that room, depending
-    /// on whether `to` is `Some` or `None`.
+    /// Relays a packet to a specific relay client in the sender's room, or all relay clients in
+    /// that room, depending on whether `to` is `Some` or `None`.
     fn relay(
         mm: Arc<Mutex<Self>>,
         addr: SocketAddr,
@@ -280,8 +282,8 @@ impl Matchmaker {
         Ok(())
     }
 
-    /// Starts a new client handler thread that reads packets from the client and deserializes them, then passing
-    /// them into the incoming_packet function.
+    /// Starts a new client handler thread that reads packets from the client and deserializes them,
+    /// then passing them into the incoming_packet function.
     fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
         let peer_addr = stream.peer_addr()?;
         let stream = Arc::new(BufStream::new(stream)?);
