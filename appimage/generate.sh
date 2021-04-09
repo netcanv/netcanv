@@ -19,4 +19,7 @@ rm -rf *;
 ../linuxdeploy-x86_64.AppImage --appdir AppDir_mm --executable ../../target/release/netcanv-matchmaker --desktop-file ../netcanv-matchmaker.desktop -i ../netcanv.png --output appimage;
 ../linuxdeploy-x86_64.AppImage --appdir AppDir_app --executable ../../target/release/netcanv --desktop-file ../netcanv.desktop -i ../netcanv.png --output appimage;
 
+rm -rf AppDir_app;
+rm -rf AppDir_mm;
+
 cd ..;
