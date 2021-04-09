@@ -55,18 +55,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
 
             Event::MainEventsCleared => {
-                renderer
-                    .draw(&window, |canvas, csh| {
-                        // unwrap always succeeds here as app is never None
-                        // i don't really like this method chaining tho
-                        app.as_mut().unwrap().process(StateArgs {
-                            canvas,
-                            coordinate_system_helper: &csh,
-                            input: &mut input,
-                        });
-                        app = Some(app.take().unwrap().next_state());
-                    })
-                    .unwrap();
+                match renderer.draw(&window, |canvas, csh| {
+                    // unwrap always succeeds here as app is never None
+                    // i don't really like this method chaining tho
+                    app.as_mut().unwrap().process(StateArgs {
+                        canvas,
+                        coordinate_system_helper: &csh,
+                        input: &mut input,
+                    });
+                    app = Some(app.take().unwrap().next_state());
+                }) {
+                    Err(error) => eprintln!("render error: {}", error),
+                    _ => (),
+                };
                 input.finish_frame();
             },
 

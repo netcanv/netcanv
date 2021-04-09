@@ -19,7 +19,6 @@ pub struct Input {
     mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
     mouse_buttons_locked: bool,
 
-
     // keyboard input
     char_buffer: Vec<char>,
     key_just_typed: [bool; KEY_CODE_COUNT],

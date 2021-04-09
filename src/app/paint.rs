@@ -24,11 +24,17 @@ enum PaintMode {
 
 type Log = Vec<(String, Instant)>;
 
+struct Tip {
+    text: String,
+    created: Instant,
+    visible_duration: Duration,
+}
+
 pub struct State {
     assets: Assets,
 
     ui: Ui,
-    paint_canvas: PaintCanvas<'static>,
+    paint_canvas: PaintCanvas,
     peer: Peer,
     update_timer: Timer,
 
@@ -43,10 +49,12 @@ pub struct State {
     needed_chunks: HashSet<(i32, i32)>,
     deferred_message_queue: VecDeque<Message>,
 
+    load_from_file: Option<PathBuf>,
     save_to_file: Option<PathBuf>,
 
     error: Option<String>,
     log: Log,
+    tip: Tip,
 
     panning: bool,
     viewport: Viewport,
@@ -95,10 +103,16 @@ impl State {
             needed_chunks: HashSet::new(),
             deferred_message_queue: VecDeque::new(),
 
+            load_from_file: image_path,
             save_to_file: None,
 
             error: None,
             log: Log::new(),
+            tip: Tip {
+                text: "".into(),
+                created: Instant::now(),
+                visible_duration: Default::default(),
+            },
 
             panning: false,
             viewport: Viewport::new(),
@@ -110,13 +124,18 @@ impl State {
                 "To invite friends, send them the room ID shown in the bottom right corner of your screen."
             );
         }
-        if let Some(image_path) = image_path {
-            ok_or_log!(this.log, this.paint_canvas.load_from_image_file(&image_path));
-        }
         this
     }
 
-    fn fellow_stroke(canvas: &mut PaintCanvas, points: &[StrokePoint]) {
+    fn show_tip(&mut self, text: &str, duration: Duration) {
+        self.tip = Tip {
+            text: text.into(),
+            created: Instant::now(),
+            visible_duration: duration,
+        };
+    }
+
+    fn fellow_stroke(canvas: &mut Canvas, paint_canvas: &mut PaintCanvas, points: &[StrokePoint]) {
         if points.is_empty() {
             return
         } // failsafe
@@ -124,13 +143,19 @@ impl State {
         let mut from = points[0].point;
         let first_index = if points.len() > 1 { 1 } else { 0 };
         for point in &points[first_index..] {
-            canvas.stroke(from, point.point, &point.brush);
+            paint_canvas.stroke(canvas, from, point.point, &point.brush);
             from = point.point;
         }
     }
 
-    fn canvas_data(log: &mut Log, canvas: &mut PaintCanvas, chunk_position: (i32, i32), png_image: &[u8]) {
-        ok_or_log!(log, canvas.decode_png_data(chunk_position, png_image));
+    fn canvas_data(
+        log: &mut Log,
+        canvas: &mut Canvas,
+        paint_canvas: &mut PaintCanvas,
+        chunk_position: (i32, i32),
+        png_image: &[u8],
+    ) {
+        ok_or_log!(log, paint_canvas.decode_png_data(canvas, chunk_position, png_image));
     }
 
     fn process_log(&mut self, canvas: &mut Canvas) {
@@ -170,8 +195,11 @@ impl State {
         }
 
         let brush_size = self.brush_size_slider.value();
-        let from = self.viewport.to_viewport_space(input.previous_mouse_position(), self.ui.size());
-        let to = self.viewport.to_viewport_space(input.mouse_position(), self.ui.size());
+        let from = self
+            .viewport
+            .to_viewport_space(input.previous_mouse_position(), canvas_size);
+        let mouse_position = input.mouse_position();
+        let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
         loop {
             // give me back my labelled blocks
             let brush = match self.paint_mode {
@@ -184,7 +212,7 @@ impl State {
                     stroke_width: brush_size,
                 },
             };
-            self.paint_canvas.stroke(from, to, &brush);
+            self.paint_canvas.stroke(canvas, from, to, &brush);
             if self.stroke_buffer.is_empty() {
                 self.stroke_buffer.push(StrokePoint {
                     point: from,
@@ -208,8 +236,14 @@ impl State {
         if self.panning {
             let delta_pan = input.previous_mouse_position() - input.mouse_position();
             self.viewport.pan_around(delta_pan);
+            let pan = self.viewport.pan();
+            let position = format!("{}, {}", (pan.x / 256.0).floor(), (pan.y / 256.0).floor());
+            self.show_tip(&position, Duration::from_millis(100));
         }
-        self.viewport.zoom_in(input.mouse_scroll().y);
+        if input.mouse_scroll().y != 0.0 {
+            self.viewport.zoom_in(input.mouse_scroll().y);
+            self.show_tip(&format!("{:.0}%", self.viewport.zoom() * 100.0), Duration::from_secs(3));
+        }
 
         //
         // rendering
@@ -227,30 +261,30 @@ impl State {
             paint.set_blend_mode(BlendMode::Difference);
 
             paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
-            for (_, mate) in self.peer.mates() {
-                let cursor = mate.lerp_cursor();
-                let text_position = cursor + Point::new(mate.brush_size, mate.brush_size) * 0.5 + Point::new(0.0, 14.0);
-                paint.set_style(skpaint::Style::Fill);
-                canvas.draw_str(&mate.nickname, text_position, &self.assets.sans.borrow(), &paint);
-                paint.set_style(skpaint::Style::Stroke);
-                canvas.draw_circle(cursor, mate.brush_size * 0.5, &paint);
-            }
 
             canvas.restore();
 
-            let mouse = self.ui.mouse_position(&input);
+            for (_, mate) in self.peer.mates() {
+                let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
+                let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
+                let text_position = cursor + Point::new(brush_radius, brush_radius) + Point::new(0.0, 14.0);
+                paint.set_style(skpaint::Style::Fill);
+                canvas.draw_str(&mate.nickname, text_position, &self.assets.sans.borrow(), &paint);
+                paint.set_style(skpaint::Style::Stroke);
+                canvas.draw_circle(cursor, brush_radius, &paint);
+            }
+
+            let zoomed_brush_size = brush_size * self.viewport.zoom();
             paint.set_style(skpaint::Style::Stroke);
-            canvas.draw_circle(mouse, self.brush_size_slider.value() * 0.5, &paint);
+            canvas.draw_circle(mouse_position, zoomed_brush_size * 0.5, &paint);
         });
-        if self.panning {
-            let pan = self.viewport.pan();
-            let position = format!("{}, {}", (pan.x / 256.0).floor(), (pan.y / 256.0).floor());
+        if self.tip.created.elapsed() < self.tip.visible_duration {
             self.ui.push_group(self.ui.size(), Layout::Freeform);
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);
             self.ui.fill(canvas, Color::BLACK.with_a(128));
             self.ui
-                .text(canvas, &position, Color::WHITE, (AlignH::Center, AlignV::Middle));
+                .text(canvas, &self.tip.text, Color::WHITE, (AlignH::Center, AlignV::Middle));
             self.ui.pop_group();
             self.ui.pop_group();
         }
@@ -385,7 +419,6 @@ impl State {
                 .show_save_single_file()
             {
                 Ok(Some(path)) => {
-                    self.paint_canvas.cleanup_empty_chunks();
                     self.save_to_file = Some(path);
                 },
                 Err(error) => log!(self.log, "Error while selecting file: {}", error),
@@ -434,6 +467,16 @@ impl AppState for State {
     ) {
         canvas.clear(Color::WHITE);
 
+        // loading from file
+
+        if self.load_from_file.is_some() {
+            ok_or_log!(
+                self.log,
+                self.paint_canvas
+                    .load_from_image_file(canvas, &self.load_from_file.take().unwrap())
+            );
+        }
+
         // network
 
         match self.peer.tick() {
@@ -445,15 +488,22 @@ impl AppState for State {
                             "Message::Connected shouldn't be generated after connecting to the matchmaker"
                         ),
                         Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
-                        Message::Stroke(points) => Self::fellow_stroke(&mut self.paint_canvas, &points),
+                        Message::Stroke(points) => Self::fellow_stroke(canvas, &mut self.paint_canvas, &points),
                         Message::ChunkPositions(mut positions) => {
                             eprintln!("received {} chunk positions", positions.len());
+                            eprintln!("the positions are: {:?}", &positions);
                             self.server_side_chunks = positions.drain(..).collect();
                         },
                         Message::Chunks(chunks) => {
                             eprintln!("received {} chunks", chunks.len());
                             for (chunk_position, png_data) in chunks {
-                                Self::canvas_data(&mut self.log, &mut self.paint_canvas, chunk_position, &png_data);
+                                Self::canvas_data(
+                                    &mut self.log,
+                                    canvas,
+                                    &mut self.paint_canvas,
+                                    chunk_position,
+                                    &png_data,
+                                );
                                 self.downloaded_chunks.insert(chunk_position);
                             }
                         },
