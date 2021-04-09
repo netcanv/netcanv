@@ -26,7 +26,7 @@ impl Viewport {
     }
 
     pub fn zoom(&self) -> f32 {
-        f32::powf(1.1, self.zoom_level)
+        f32::powf(2.0, self.zoom_level * 0.25)
     }
 
     pub fn pan_around(&mut self, by: Vector) {
@@ -35,7 +35,7 @@ impl Viewport {
 
     pub fn zoom_in(&mut self, delta: f32) {
         self.zoom_level += delta;
-        self.zoom_level = self.zoom_level.clamp(-32.0, 32.0);
+        self.zoom_level = self.zoom_level.clamp(-14.0, 24.0);
     }
 
     pub fn visible_rect(&self, window_size: (f32, f32)) -> Rect {
@@ -69,6 +69,10 @@ impl Viewport {
     pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
         // (point.into() - Point::from(window_size) * 0.5 + self.pan * self.zoom()) * (1.0 / self.zoom())
         (point.into() - Point::from(window_size) * 0.5) * (1.0 / self.zoom()) + self.pan
+    }
+
+    pub fn to_screen_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
+        (point.into() - self.pan) * self.zoom() + Point::from(window_size) * 0.5
     }
 }
 

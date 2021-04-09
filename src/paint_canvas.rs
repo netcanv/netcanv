@@ -6,8 +6,9 @@ use std::path::Path;
 
 use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
-    DynamicImage, ImageOutputFormat,
-    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba, RgbaImage,
+    Bgra,
+    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, ImageOutputFormat,
+    Rgba, RgbaImage,
 };
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
@@ -50,79 +51,152 @@ impl Brush {
 
 pub struct Chunk {
     surface: RefCell<Surface>,
-    png_data: Option<Vec<u8>>,
+    png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
+    non_empty_subs: [bool; Self::SUB_COUNT],
 }
 
 impl Chunk {
-    pub const SIZE: (u32, u32) = (512, 512);
+    pub const SIZE: (u32, u32) = (256, 256);
+    const SUB_CHUNKS: (u32, u32) = (4, 4);
+    const SUB_COUNT: usize = (Self::SUB_CHUNKS.0 * Self::SUB_CHUNKS.1) as usize;
+    const SURFACE_SIZE: (u32, u32) = (
+        (Self::SIZE.0 * Self::SUB_CHUNKS.0) as u32,
+        (Self::SIZE.1 * Self::SUB_CHUNKS.1) as u32,
+    );
 
     fn new(canvas: &mut Canvas) -> Self {
-        let surface = match canvas.new_surface(
-            &ImageInfo::new(
-                ISize::new(Self::SIZE.0 as i32, Self::SIZE.1 as i32),
-                skia::ColorType::RGBA8888,
-                AlphaType::Premul,
-                None,
-            ),
-            None,
-        )
-        {
+        let surface = match canvas.new_surface(&Self::image_info(Self::SURFACE_SIZE), None) {
             Some(surface) => surface,
-            None => panic!("failed to create surface for storing a chunk"),
+            None => panic!("failed to create a surface for storing the chunk"),
         };
-
         Self {
             surface: RefCell::new(surface),
-            png_data: None,
+            png_data: Default::default(),
+            non_empty_subs: [false; Self::SUB_COUNT],
         }
     }
 
     fn screen_position(chunk_position: (i32, i32)) -> Point {
         Point::new(
-            (chunk_position.0 * Self::SIZE.0 as i32) as _,
-            (chunk_position.1 * Self::SIZE.1 as i32) as _,
+            (chunk_position.0 * Self::SURFACE_SIZE.0 as i32) as _,
+            (chunk_position.1 * Self::SURFACE_SIZE.1 as i32) as _,
         )
     }
 
-    fn download_image(&self) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-        todo!()
+    fn download_image(&self) -> RgbaImage {
+        let mut image_buffer = ImageBuffer::from_pixel(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1, Bgra([0, 0, 0, 0]));
+        self.surface.borrow_mut().read_pixels(
+            &Self::image_info(Self::SURFACE_SIZE),
+            &mut image_buffer,
+            Self::SURFACE_SIZE.0 as usize * 4,
+            (0, 0),
+        );
+        DynamicImage::ImageBgra8(image_buffer).to_rgba8()
+    }
+
+    fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
+        let bgra = DynamicImage::ImageRgba8(image.clone()).to_bgra8(); // TODO: big endian
+        let pixmap = Pixmap::new(&Self::image_info(Self::SIZE), &bgra, Self::SIZE.0 as usize * 4);
+        self.surface
+            .borrow_mut()
+            .write_pixels_from_pixmap(&pixmap, (offset.0 as i32, offset.1 as i32));
+    }
+
+    // get master chunk position from absolute position
+    fn master(chunk_position: (i32, i32)) -> (i32, i32) {
+        (
+            chunk_position.0.div_euclid(Self::SUB_CHUNKS.0 as i32),
+            chunk_position.1.div_euclid(Self::SUB_CHUNKS.1 as i32),
+        )
+    }
+
+    // get sub chunk position from absolute position
+    fn sub(chunk_position: (i32, i32)) -> usize {
+        let x_bits = chunk_position.0.rem_euclid(Self::SUB_CHUNKS.0 as i32) as usize;
+        let y_bits = chunk_position.1.rem_euclid(Self::SUB_CHUNKS.1 as i32) as usize;
+        (x_bits << 2) | y_bits
+    }
+
+    // position of the given sub in a master chunk
+    fn sub_position(sub: usize) -> (u32, u32) {
+        (
+            ((sub & 0b1100) >> 2) as u32,
+            (sub & 0b11) as u32,
+        )
+    }
+
+    // on-image position of the given sub in a master chunk
+    fn sub_screen_position(sub: usize) -> (u32, u32) {
+        (
+            ((sub & 0b1100) >> 2) as u32 * Self::SIZE.0,
+            (sub & 0b11) as u32 * Self::SIZE.1,
+        )
     }
 
     // reencodes PNG data if necessary.
     // PNG data is reencoded upon outside request, but invalidated if the chunk is modified
-    fn png_data(&mut self) -> Option<&[u8]> {
-        if self.png_data.is_none() {
+    fn png_data(&mut self, sub: usize) -> Option<&[u8]> {
+        if self.png_data[sub].is_none() {
             eprintln!("  png data doesn't exist, encoding");
-            let (width, height) = Self::SIZE;
-            let mut bytes: Vec<u8> = Vec::new();
-            if DynamicImage::ImageRgba8(self.download_image())
-                .write_to(&mut Cursor::new(&mut bytes), ImageOutputFormat::Png)
-                .is_err()
-            {
-                return None
+            let chunk_image = self.download_image();
+            for sub in 0..Self::SUB_COUNT {
+                let (x, y) = Self::sub_screen_position(sub);
+                let sub_image = chunk_image.view(x, y, Self::SIZE.0, Self::SIZE.1).to_image();
+                if Self::image_is_empty(&sub_image) {
+                    continue
+                }
+                let mut bytes: Vec<u8> = Vec::new();
+                match PngEncoder::new(Cursor::new(&mut bytes)).encode(
+                    &sub_image,
+                    sub_image.width(),
+                    sub_image.height(),
+                    ColorType::Rgba8,
+                ) {
+                    Ok(()) => (),
+                    Err(error) => {
+                        eprintln!("error while encoding: {}", error);
+                        continue
+                    },
+                }
+                self.png_data[sub] = Some(bytes);
             }
-            self.png_data = Some(bytes);
         }
-        Some(self.png_data.as_ref().unwrap())
+        self.png_data[sub].as_deref()
     }
 
-    fn decode_png_data(&mut self, data: &[u8]) -> Result<(), ImageError> {
-        todo!()
-//         let decoder = PngDecoder::new(Cursor::new(data))?;
-//         if decoder.color_type() != ColorType::Rgba8 {
-//             eprintln!("received non-RGBA image data, ignoring");
-//             return Ok(())
-//         }
-//         if decoder.dimensions() != (Self::SIZE.0 as u32, Self::SIZE.1 as u32) {
-//             eprintln!(
-//                 "received chunk with invalid size. got: {:?}, expected: {:?}",
-//                 decoder.dimensions(),
-//                 Self::SIZE
-//             );
-//             return Ok(())
-//         }
-//         decoder.read_image(self.pixels_mut())?;
-//         Ok(())
+    fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> Result<(), ImageError> {
+        let decoder = PngDecoder::new(Cursor::new(data))?;
+        if decoder.color_type() != ColorType::Rgba8 {
+            eprintln!("received non-RGBA image data, ignoring");
+            return Ok(())
+        }
+        if decoder.dimensions() != (Self::SIZE.0, Self::SIZE.1) {
+            eprintln!(
+                "received chunk with invalid size. got: {:?}, expected: {:?}",
+                decoder.dimensions(),
+                Self::SIZE
+            );
+            return Ok(())
+        }
+        let mut image = RgbaImage::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
+        decoder.read_image(&mut image)?;
+        if image.iter().any(|x| *x != 0) {
+            self.upload_image(&image, Self::sub_screen_position(sub));
+        }
+        Ok(())
+    }
+
+    fn image_is_empty(image: &RgbaImage) -> bool {
+        image.iter().all(|x| *x == 0)
+    }
+
+    fn image_info(size: (u32, u32)) -> ImageInfo {
+        ImageInfo::new(
+            ISize::new(size.0 as i32, size.1 as i32),
+            skia::ColorType::RGBA8888,
+            AlphaType::Premul,
+            None,
+        )
     }
 }
 
@@ -130,10 +204,7 @@ pub struct PaintCanvas {
     chunks: HashMap<(i32, i32), Chunk>,
     // this set contains all chunks that have already been visited in the current stroke() call
     stroked_chunks: HashSet<(i32, i32)>,
-}
 
-pub struct PngData<'a> {
-    iter: hash_map::IterMut<'a, (i32, i32), Chunk>,
 }
 
 impl PaintCanvas {
@@ -179,14 +250,21 @@ impl PaintCanvas {
             for y in top_left_chunk.1..bottom_right_chunk.1 {
                 for x in top_left_chunk.0..bottom_right_chunk.0 {
                     let chunk_position = (x, y);
-                    if !self.stroked_chunks.contains(&chunk_position) {
-                        self.ensure_chunk_exists(canvas, chunk_position);
-                        let chunk = self.chunks.get_mut(&chunk_position).unwrap();
-                        let screen_position = Chunk::screen_position(chunk_position);
-                        chunk.surface.borrow_mut().canvas().draw_line(a - screen_position, b - screen_position, &paint);
-                        chunk.png_data = None;
+                    let master = Chunk::master(chunk_position);
+                    let sub = Chunk::sub(chunk_position);
+                    if !self.stroked_chunks.contains(&master) {
+                        self.ensure_chunk_exists(canvas, master);
+                        let chunk = self.chunks.get_mut(&master).unwrap();
+                        let screen_position = Chunk::screen_position(master);
+                        chunk
+                            .surface
+                            .borrow_mut()
+                            .canvas()
+                            .draw_line(a - screen_position, b - screen_position, &paint);
+                        chunk.png_data[sub] = None;
+                        chunk.non_empty_subs[sub] = true;
                     }
-                    self.stroked_chunks.insert(chunk_position);
+                    self.stroked_chunks.insert(master);
                     p.offset(delta);
                 }
             }
@@ -194,142 +272,125 @@ impl PaintCanvas {
     }
 
     pub fn draw_to(&self, canvas: &mut Canvas, viewport: &Viewport, window_size: (f32, f32)) {
-        for chunk_position in viewport.visible_tiles(Chunk::SIZE, window_size) {
+        for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
             if let Some(chunk) = self.chunks.get(&chunk_position) {
                 let screen_position = Chunk::screen_position(chunk_position);
-                chunk.surface.borrow_mut().draw(canvas, (screen_position.x, screen_position.y), None);
+                // why is the position parameter a Size? only rust-skia devs know.
+                chunk
+                    .surface
+                    .borrow_mut()
+                    .draw(canvas, (screen_position.x, screen_position.y), None);
             }
         }
     }
 
     pub fn png_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
         eprintln!("fetching png data for {:?}", chunk_position);
-        self.chunks.get_mut(&chunk_position)?.png_data()
+        self.chunks
+            .get_mut(&Chunk::master(chunk_position))?
+            .png_data(Chunk::sub(chunk_position))
     }
 
-    pub fn decode_png_data(&mut self, to_chunk: (i32, i32), data: &[u8]) -> Result<(), ImageError> {
-        todo!()
-//         self.ensure_chunk_exists(to_chunk);
-//         let chunk = self.chunks.get_mut(&to_chunk).unwrap();
-//         chunk.decode_png_data(data)
-    }
-
-    pub fn cleanup_empty_chunks(&mut self) {
-//         self.chunks.retain(|_, chunk| chunk.pixels().iter().any(|x| *x != 0u8));
-    }
-
-    // right now loading/saving only really works (well, was tested) on little-endian machines, so i
-    // make no guarantees if it works on big-endian. most likely loading will screw up the channel
-    // order in pixels. thanks, skia!
-
-    fn fix_endianness<C>(image: &mut ImageBuffer<Rgba<u8>, C>)
-    where
-        C: Deref<Target = [u8]> + DerefMut,
-    {
-        #[cfg(target_endian = "little")]
-        {
-            use ::image::Pixel;
-            for pixel in image.pixels_mut() {
-                let bgra = pixel.to_bgra();
-                let channels = pixel.channels_mut();
-                channels[0] = bgra[0];
-                channels[1] = bgra[1];
-                channels[2] = bgra[2];
-                channels[3] = bgra[3];
-            }
-        }
+    pub fn decode_png_data(&mut self, canvas: &mut Canvas, to_chunk: (i32, i32), data: &[u8]) -> Result<(), ImageError> {
+        self.ensure_chunk_exists(canvas, Chunk::master(to_chunk));
+        let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
+        chunk.decode_png_data(Chunk::sub(to_chunk), data)
     }
 
     pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
         todo!()
-//         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
-//         for (chunk_position, _) in &self.chunks {
-//             left = left.min(chunk_position.0);
-//             top = top.min(chunk_position.1);
-//             right = right.max(chunk_position.0);
-//             bottom = bottom.max(chunk_position.1);
-//         }
-//         eprintln!("left={}, top={}, right={}, bottom={}", left, top, right, bottom);
-//         if left == i32::MAX {
-//             anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
-//         }
-//         let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
-//         let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
-//         eprintln!("size: {:?}", (width, height));
-//         let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-//         for (chunk_position, chunk) in &self.chunks {
-//             eprintln!("writing chunk {:?}", chunk_position);
-//             let pixel_position = (
-//                 (Chunk::SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
-//                 (Chunk::SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
-//             );
-//             eprintln!("   - pixel position: {:?}", pixel_position);
-//             let pixels = Vec::from(chunk.pixels());
-//             let mut chunk_image = RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1 as u32, pixels).unwrap();
-//             Self::fix_endianness(&mut chunk_image);
-//             let mut sub_image = image.sub_image(
-//                 pixel_position.0,
-//                 pixel_position.1,
-//                 Chunk::SIZE.0 as u32,
-//                 Chunk::SIZE.1 as u32,
-//             );
-//             sub_image.copy_from(&chunk_image, 0, 0)?;
-//         }
-//         image.save(path)?;
-//         Ok(())
+        //         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN,
+        // i32::MIN);         for (chunk_position, _) in &self.chunks {
+        //             left = left.min(chunk_position.0);
+        //             top = top.min(chunk_position.1);
+        //             right = right.max(chunk_position.0);
+        //             bottom = bottom.max(chunk_position.1);
+        //         }
+        //         eprintln!("left={}, top={}, right={}, bottom={}", left, top, right, bottom);
+        //         if left == i32::MAX {
+        //             anyhow::bail!("There's nothing to save! Draw something on the canvas and try
+        // again.");         }
+        //         let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
+        //         let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
+        //         eprintln!("size: {:?}", (width, height));
+        //         let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+        //         for (chunk_position, chunk) in &self.chunks {
+        //             eprintln!("writing chunk {:?}", chunk_position);
+        //             let pixel_position = (
+        //                 (Chunk::SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
+        //                 (Chunk::SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
+        //             );
+        //             eprintln!("   - pixel position: {:?}", pixel_position);
+        //             let pixels = Vec::from(chunk.pixels());
+        //             let mut chunk_image = RgbaImage::from_vec(Chunk::SIZE.0 as u32, Chunk::SIZE.1
+        // as u32, pixels).unwrap();             Self::fix_endianness(&mut chunk_image);
+        //             let mut sub_image = image.sub_image(
+        //                 pixel_position.0,
+        //                 pixel_position.1,
+        //                 Chunk::SIZE.0 as u32,
+        //                 Chunk::SIZE.1 as u32,
+        //             );
+        //             sub_image.copy_from(&chunk_image, 0, 0)?;
+        //         }
+        //         image.save(path)?;
+        //         Ok(())
     }
 
     pub fn load_from_image_file(&mut self, path: &Path) -> Result<(), anyhow::Error> {
         todo!()
-//         use ::image::io::Reader as ImageReader;
+        //         use ::image::io::Reader as ImageReader;
 
-//         let image = ImageReader::open(path)?.decode()?.into_rgba8();
-//         eprintln!("image size: {:?}", image.dimensions());
-//         let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
-//         let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
-//         eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+        //         let image = ImageReader::open(path)?.decode()?.into_rgba8();
+        //         eprintln!("image size: {:?}", image.dimensions());
+        //         let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
+        //         let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
+        //         eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
 
-//         for y in 0..chunks_y {
-//             for x in 0..chunks_x {
-//                 let chunk_position = (x, y);
-//                 self.ensure_chunk_exists(chunk_position);
-//                 let chunk = self.chunks.get_mut(&chunk_position).unwrap();
-//                 let mut chunk_image = chunk.as_image_buffer_mut();
-//                 let pixel_position = (
-//                     (Chunk::SIZE.0 * chunk_position.0) as u32,
-//                     (Chunk::SIZE.1 * chunk_position.1) as u32,
-//                 );
-//                 eprintln!("plopping chunk at {:?}", pixel_position);
-//                 let right = (pixel_position.0 + Chunk::SIZE.0 as u32).min(image.width() - 1);
-//                 let bottom = (pixel_position.1 + Chunk::SIZE.1 as u32).min(image.height() - 1);
-//                 eprintln!("  to {:?}", (right, bottom));
-//                 let width = right - pixel_position.0;
-//                 let height = bottom - pixel_position.1;
-//                 let sub_image = image.view(pixel_position.0, pixel_position.1, width, height);
-//                 chunk_image.copy_from(&sub_image, 0, 0)?;
-//                 Self::fix_endianness(&mut chunk_image);
-//             }
-//         }
+        //         for y in 0..chunks_y {
+        //             for x in 0..chunks_x {
+        //                 let chunk_position = (x, y);
+        //                 self.ensure_chunk_exists(chunk_position);
+        //                 let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+        //                 let mut chunk_image = chunk.as_image_buffer_mut();
+        //                 let pixel_position = (
+        //                     (Chunk::SIZE.0 * chunk_position.0) as u32,
+        //                     (Chunk::SIZE.1 * chunk_position.1) as u32,
+        //                 );
+        //                 eprintln!("plopping chunk at {:?}", pixel_position);
+        //                 let right = (pixel_position.0 + Chunk::SIZE.0 as u32).min(image.width() -
+        // 1);                 let bottom = (pixel_position.1 + Chunk::SIZE.1 as
+        // u32).min(image.height() - 1);                 eprintln!("  to {:?}", (right,
+        // bottom));                 let width = right - pixel_position.0;
+        //                 let height = bottom - pixel_position.1;
+        //                 let sub_image = image.view(pixel_position.0, pixel_position.1, width,
+        // height);                 chunk_image.copy_from(&sub_image, 0, 0)?;
+        //                 Self::fix_endianness(&mut chunk_image);
+        //             }
+        //         }
 
-//         self.cleanup_empty_chunks();
+        //         self.cleanup_empty_chunks();
 
-//         Ok(())
+        //         Ok(())
     }
 
     pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
-        self.chunks.keys().map(|p| *p).collect()
-    }
-}
-
-impl Iterator for PngData<'_> {
-    type Item = ((i32, i32), Vec<u8>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some((position, chunk)) = self.iter.next() {
-            if let Some(png_data) = chunk.png_data() {
-                return Some((*position, Vec::from(png_data)))
+        let mut result = Vec::new();
+        for (master_position, chunk) in &self.chunks {
+            let master_chunk_position = (
+                master_position.0 * Chunk::SUB_CHUNKS.0 as i32,
+                master_position.1 * Chunk::SUB_CHUNKS.1 as i32,
+            );
+            for (sub, non_empty) in chunk.non_empty_subs.iter().enumerate() {
+                if *non_empty {
+                    let sub_position = Chunk::sub_position(sub);
+                    let chunk_position = (
+                        master_chunk_position.0 + sub_position.0 as i32,
+                        master_chunk_position.1 + sub_position.1 as i32,
+                    );
+                    result.push(chunk_position);
+                }
             }
         }
-        None
+        result
     }
 }
