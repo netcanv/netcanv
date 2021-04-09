@@ -5,8 +5,7 @@ use std::path::Path;
 
 use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
-    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Pixel, Rgba,
-    RgbaImage,
+    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba, RgbaImage,
 };
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
@@ -182,22 +181,6 @@ impl Chunk {
             self.upload_image(image, Self::sub_screen_position(sub));
         }
         Ok(())
-    }
-
-    // skia functions use native endianness while image functions use big endianness.
-    // this function accounts for that by swapping the byte order in the image on little endian
-    // architectures.
-    fn correct_endianness(image: &mut RgbaImage) {
-        #[cfg(target_endian = "little")]
-        {
-            for pixel in image.pixels_mut() {
-                let bgra = pixel.to_bgra();
-                pixel[0] = bgra[0];
-                pixel[1] = bgra[1];
-                pixel[2] = bgra[2];
-                pixel[3] = bgra[3];
-            }
-        }
     }
 
     fn image_is_empty(image: &RgbaImage) -> bool {
