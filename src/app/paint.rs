@@ -49,6 +49,7 @@ pub struct State {
     needed_chunks: HashSet<(i32, i32)>,
     deferred_message_queue: VecDeque<Message>,
 
+    load_from_file: Option<PathBuf>,
     save_to_file: Option<PathBuf>,
 
     error: Option<String>,
@@ -102,6 +103,7 @@ impl State {
             needed_chunks: HashSet::new(),
             deferred_message_queue: VecDeque::new(),
 
+            load_from_file: image_path,
             save_to_file: None,
 
             error: None,
@@ -121,9 +123,6 @@ impl State {
                 this.log,
                 "To invite friends, send them the room ID shown in the bottom right corner of your screen."
             );
-        }
-        if let Some(image_path) = image_path {
-            ok_or_log!(this.log, this.paint_canvas.load_from_image_file(&image_path));
         }
         this
     }
@@ -467,6 +466,16 @@ impl AppState for State {
         }: StateArgs,
     ) {
         canvas.clear(Color::WHITE);
+
+        // loading from file
+
+        if self.load_from_file.is_some() {
+            ok_or_log!(
+                self.log,
+                self.paint_canvas
+                    .load_from_image_file(canvas, &self.load_from_file.take().unwrap())
+            );
+        }
 
         // network
 

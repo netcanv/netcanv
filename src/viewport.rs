@@ -35,7 +35,7 @@ impl Viewport {
 
     pub fn zoom_in(&mut self, delta: f32) {
         self.zoom_level += delta;
-        self.zoom_level = self.zoom_level.clamp(-14.0, 24.0);
+        self.zoom_level = self.zoom_level.clamp(-16.0, 24.0);
     }
 
     pub fn visible_rect(&self, window_size: (f32, f32)) -> Rect {
