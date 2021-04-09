@@ -6,9 +6,8 @@ use std::path::Path;
 
 use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
-    Bgra,
-    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, ImageOutputFormat,
-    Rgba, RgbaImage,
+    Bgra, ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError,
+    ImageOutputFormat, Rgba, RgbaImage,
 };
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
@@ -119,10 +118,7 @@ impl Chunk {
 
     // position of the given sub in a master chunk
     fn sub_position(sub: usize) -> (u32, u32) {
-        (
-            ((sub & 0b1100) >> 2) as u32,
-            (sub & 0b11) as u32,
-        )
+        (((sub & 0b1100) >> 2) as u32, (sub & 0b11) as u32)
     }
 
     // on-image position of the given sub in a master chunk
@@ -204,7 +200,6 @@ pub struct PaintCanvas {
     chunks: HashMap<(i32, i32), Chunk>,
     // this set contains all chunks that have already been visited in the current stroke() call
     stroked_chunks: HashSet<(i32, i32)>,
-
 }
 
 impl PaintCanvas {
