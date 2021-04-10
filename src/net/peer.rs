@@ -8,19 +8,10 @@ use std::time::Instant;
 use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
 use skulpin::skia_safe::{Color, Color4f, Point};
-use thiserror::Error;
 
-use crate::net::socket::{Error as NetError, Remote};
+use crate::net::socket::{Remote};
 use crate::paint_canvas::{Brush, StrokePoint};
 use crate::util;
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("{0}")]
-    Net(#[from] NetError),
-    #[error("Data error: {0}")]
-    Data(#[from] bincode::Error),
-}
 
 #[derive(Debug)]
 pub enum Message {
@@ -97,7 +88,7 @@ macro_rules! try_or_message {
 }
 
 impl Peer {
-    pub fn host(nickname: &str, matchmaker_addr: &str) -> Result<Self, Error> {
+    pub fn host(nickname: &str, matchmaker_addr: &str) -> anyhow::Result<Self> {
         let mm = Remote::new(matchmaker_addr)?;
         mm.send(mm::Packet::Host)?;
 
@@ -113,7 +104,7 @@ impl Peer {
         })
     }
 
-    pub fn join(nickname: &str, matchmaker_addr: &str, room_id: u32) -> Result<Self, Error> {
+    pub fn join(nickname: &str, matchmaker_addr: &str, room_id: u32) -> anyhow::Result<Self> {
         let mm = Remote::new(matchmaker_addr)?;
         mm.send(mm::Packet::GetHost(room_id))?;
 
@@ -131,7 +122,7 @@ impl Peer {
 
     // is_relayed is an output variable to appease the borrow checker. can't borrow &mut self because of
     // the literal first borrow in next_packet
-    fn connect_to_host(mm: &Remote<mm::Packet>, host_addr: SocketAddr, is_relayed: &mut bool) -> Result<(), Error> {
+    fn connect_to_host(mm: &Remote<mm::Packet>, host_addr: SocketAddr, is_relayed: &mut bool) -> anyhow::Result<()> {
         // for now we'll always relay packets because i don't think it's possible to do hole punching with
         // rust's stdlib TcpStream
         mm.send(mm::Packet::RequestRelay(Some(host_addr)))?;
@@ -139,7 +130,7 @@ impl Peer {
         Ok(())
     }
 
-    fn send(&self, to: Option<SocketAddr>, packet: cl::Packet) -> Result<(), Error> {
+    fn send(&self, to: Option<SocketAddr>, packet: cl::Packet) -> anyhow::Result<()> {
         // TODO: no matchmaker relay
         self.matchmaker
             .as_ref()
@@ -286,14 +277,14 @@ impl Peer {
         message
     }
 
-    pub fn tick<'a>(&'a mut self) -> Result<Messages<'a>, Error> {
+    pub fn tick<'a>(&'a mut self) -> anyhow::Result<Messages<'a>> {
         if let Some(mm) = &self.matchmaker {
             let _ = mm.tick()?;
         }
         Ok(Messages { peer: self })
     }
 
-    pub fn send_cursor(&self, cursor: Point, brush_size: f32) -> Result<(), Error> {
+    pub fn send_cursor(&self, cursor: Point, brush_size: f32) -> anyhow::Result<()> {
         self.send(
             None,
             cl::Packet::Cursor(
@@ -304,7 +295,7 @@ impl Peer {
         )
     }
 
-    pub fn send_stroke(&self, iterator: impl Iterator<Item = StrokePoint>) -> Result<(), Error> {
+    pub fn send_stroke(&self, iterator: impl Iterator<Item = StrokePoint>) -> anyhow::Result<()> {
         self.send(
             None,
             cl::Packet::Stroke(
@@ -333,20 +324,20 @@ impl Peer {
 
     #[allow(deprecated)]
     #[deprecated(since = "0.2.0", note = "use send_chunks instead")]
-    pub fn send_canvas_data(&self, to: SocketAddr, chunk: (i32, i32), png_data: Vec<u8>) -> Result<(), Error> {
+    pub fn send_canvas_data(&self, to: SocketAddr, chunk: (i32, i32), png_data: Vec<u8>) -> anyhow::Result<()> {
         self.send(Some(to), cl::Packet::CanvasData(chunk, png_data))
     }
 
-    pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> Result<(), Error> {
+    pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         self.send(Some(to), cl::Packet::ChunkPositions(positions))
     }
 
-    pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> Result<(), Error> {
+    pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         assert!(self.host.is_some(), "only non-hosts can download chunks");
         self.send(self.host, cl::Packet::GetChunks(positions))
     }
 
-    pub fn send_chunks(&self, to: SocketAddr, chunks: Vec<((i32, i32), Vec<u8>)>) -> Result<(), Error> {
+    pub fn send_chunks(&self, to: SocketAddr, chunks: Vec<((i32, i32), Vec<u8>)>) -> anyhow::Result<()> {
         self.send(Some(to), cl::Packet::Chunks(chunks))
     }
 

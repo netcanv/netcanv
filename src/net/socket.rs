@@ -1,23 +1,21 @@
 // socket abstraction.
 
-use std::error;
 use std::fmt::Display;
 use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use serde::{de::DeserializeOwned, Serialize};
-use thiserror::Error;
 
-struct Finished<T: Display + error::Error + Send>(Option<T>);
+struct Finished<T: Display + Send>(Option<T>);
 struct Abort;
 
-struct ControllableThread<T: Display + error::Error + Send> {
+struct ControllableThread<T: Display + Send> {
     finished: Receiver<Finished<T>>,
     abort: Sender<Abort>,
 }
 
-impl<T: Display + error::Error + Send + 'static> ControllableThread<T> {
+impl<T: Display + Send + 'static> ControllableThread<T> {
     fn new<F>(name: &'static str, f: F) -> Self
     where
         F: FnOnce(Receiver<Abort>) -> Result<(), T> + Send + 'static,
@@ -52,8 +50,8 @@ impl<T: Display + error::Error + Send + 'static> ControllableThread<T> {
         }
     }
 
-    fn abort(&self) -> Result<(), Error> {
-        self.abort.send(Abort).map_err(|_| Error::ThreadSend)
+    fn abort(&self) {
+        let _ = self.abort.send(Abort);
     }
 }
 
@@ -61,22 +59,12 @@ impl<T: Display + error::Error + Send + 'static> ControllableThread<T> {
 pub struct Remote<P: Serialize + DeserializeOwned + Send + 'static> {
     rx: Receiver<P>,
     tx: Sender<P>,
-    send: ControllableThread<Error>,
-    recv: ControllableThread<Error>,
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Serialization error: {0}")]
-    Serialize(#[from] bincode::Error),
-    #[error("Error while sending data across threads")]
-    ThreadSend,
+    send: ControllableThread<anyhow::Error>,
+    recv: ControllableThread<anyhow::Error>,
 }
 
 impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {
-    pub fn new(addr: impl ToSocketAddrs) -> Result<Self, Error> {
+    pub fn new(addr: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_nodelay(true)?;
 
@@ -86,7 +74,7 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         const MEGABYTE: usize = 1024 * 1024;
 
         let mut writer = BufWriter::with_capacity(2 * MEGABYTE, stream.try_clone()?);
-        let send = ControllableThread::new("network send thread", move |abort| -> Result<(), Error> {
+        let send = ControllableThread::new("network send thread", move |abort| -> anyhow::Result<()> {
             loop {
                 if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break
@@ -100,13 +88,15 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         });
 
         let mut reader = BufReader::with_capacity(2 * MEGABYTE, stream.try_clone()?);
-        let recv = ControllableThread::new("network recv thread", move |abort| -> Result<(), Error> {
+        let recv = ControllableThread::new("network recv thread", move |abort| -> anyhow::Result<()> {
             loop {
                 if let Ok(_) | Err(TryRecvError::Disconnected) = abort.try_recv() {
                     break
                 }
                 let packet = bincode::deserialize_from(&mut reader)?;
-                to_main.send(packet).map_err(|_| Error::ThreadSend)?;
+                if to_main.send(packet).is_err() {
+                    anyhow::bail!("Couldn't send packet over to the main thread")
+                }
             }
             Ok(())
         });
@@ -119,15 +109,19 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         })
     }
 
-    pub fn send(&self, packet: P) -> Result<(), Error> {
-        self.tx.send(packet).map_err(|_| Error::ThreadSend)
+    pub fn send(&self, packet: P) -> anyhow::Result<()> {
+        if self.tx.send(packet).is_err() {
+            anyhow::bail!("Couldn't send packet over to the network thread")
+        } else {
+            Ok(())
+        }
     }
 
     pub fn try_recv(&self) -> Option<P> {
         self.rx.try_recv().ok()
     }
 
-    pub fn tick(&self) -> Result<bool, Error> {
+    pub fn tick(&self) -> anyhow::Result<bool> {
         self.send.tick().and(self.recv.tick())
     }
 }

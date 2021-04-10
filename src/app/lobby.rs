@@ -19,7 +19,7 @@ enum Status {
     Error(String),
 }
 
-impl<T: Error + Display> From<T> for Status {
+impl<T: Display> From<T> for Status {
     fn from(error: T) -> Self {
         Self::Error(format!("{}", error))
     }

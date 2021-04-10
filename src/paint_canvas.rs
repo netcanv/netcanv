@@ -161,7 +161,7 @@ impl Chunk {
         self.png_data[sub].as_deref()
     }
 
-    fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> Result<(), ImageError> {
+    fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
         let decoder = PngDecoder::new(Cursor::new(data))?;
         if decoder.color_type() != ColorType::Rgba8 {
             eprintln!("received non-RGBA image data, ignoring");
@@ -287,13 +287,13 @@ impl PaintCanvas {
             .png_data(Chunk::sub(chunk_position))
     }
 
-    pub fn decode_png_data(&mut self, canvas: &mut Canvas, to_chunk: (i32, i32), data: &[u8]) -> Result<(), ImageError> {
+    pub fn decode_png_data(&mut self, canvas: &mut Canvas, to_chunk: (i32, i32), data: &[u8]) -> anyhow::Result<()> {
         self.ensure_chunk_exists(canvas, Chunk::master(to_chunk));
         let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
         chunk.decode_png_data(Chunk::sub(to_chunk), data)
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
+    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         for (chunk_position, _) in &self.chunks {
             left = left.min(chunk_position.0);
@@ -331,7 +331,7 @@ impl PaintCanvas {
         Ok(())
     }
 
-    pub fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> Result<(), anyhow::Error> {
+    pub fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
         use ::image::io::Reader as ImageReader;
 
         let image = ImageReader::open(path)?.decode()?.into_rgba8();
