@@ -162,7 +162,7 @@ impl State {
         self.log
             .retain(|(_, time_created)| time_created.elapsed() < Duration::from_secs(5));
         self.ui.draw_on_canvas(canvas, |canvas| {
-            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
+            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(224)), None);
             paint.set_blend_mode(BlendMode::Difference);
             let mut y = self.ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
             for (entry, _) in &self.log {
@@ -256,7 +256,7 @@ impl State {
             canvas.scale((self.viewport.zoom(), self.viewport.zoom()));
             canvas.translate(-self.viewport.pan());
 
-            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(192)), None);
+            let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(224)), None);
             paint.set_anti_alias(true);
             paint.set_blend_mode(BlendMode::Difference);
 
@@ -282,7 +282,7 @@ impl State {
             self.ui.push_group(self.ui.size(), Layout::Freeform);
             self.ui.pad((32.0, 32.0));
             self.ui.push_group((72.0, 32.0), Layout::Freeform);
-            self.ui.fill(canvas, Color::BLACK.with_a(128));
+            self.ui.fill(canvas, Color::BLACK.with_a(192));
             self.ui
                 .text(canvas, &self.tip.text, Color::WHITE, (AlignH::Center, AlignV::Middle));
             self.ui.pop_group();

@@ -272,10 +272,12 @@ impl PaintCanvas {
             if let Some(chunk) = self.chunks.get(&chunk_position) {
                 let screen_position = Chunk::screen_position(chunk_position);
                 // why is the position parameter a Size? only rust-skia devs know.
-                chunk
-                    .surface
-                    .borrow_mut()
-                    .draw(canvas, (screen_position.x, screen_position.y), None);
+                chunk.surface.borrow_mut().draw(
+                    canvas,
+                    (screen_position.x, screen_position.y),
+                    SamplingOptions::new(FilterMode::Nearest, MipmapMode::None),
+                    None,
+                );
             }
         }
     }

@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use skulpin::rafx::api::RafxExtents2D;
 use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -21,10 +22,12 @@ use assets::*;
 use ui::input::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let window_size = LogicalSize::new(1024, 600);
+
     let event_loop = EventLoop::new();
-    let winit_window = {
+    let window = {
         let mut b = WindowBuilder::new()
-            .with_inner_size(LogicalSize::new(1024, 600))
+            .with_inner_size(window_size)
             .with_title("NetCanv")
             .with_resizable(true);
         #[cfg(target_os = "linux")]
@@ -35,15 +38,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     .build(&event_loop)?;
 
-    let window = WinitWindow::new(&winit_window);
-    let mut renderer = RendererBuilder::new().use_vulkan_debug_layer(false).build(&window)?;
+    let mut renderer = RendererBuilder::new()
+        .coordinate_system(CoordinateSystem::Logical)
+        .build(&window, RafxExtents2D {
+            width: window_size.width,
+            height: window_size.height,
+        })?;
 
     let assets = Assets::new(ColorScheme::light());
     let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, None)) as _);
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
-        let window = WinitWindow::new(&winit_window);
         *control_flow = ControlFlow::Poll;
 
         match event {
@@ -55,7 +61,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
 
             Event::MainEventsCleared => {
-                match renderer.draw(&window, |canvas, csh| {
+                let window_size = window.inner_size().to_logical(window.scale_factor());
+                let window_extents = RafxExtents2D {
+                    width: window_size.width,
+                    height: window_size.height,
+                };
+                match renderer.draw(window_extents, window.scale_factor(), |canvas, csh| {
                     // unwrap always succeeds here as app is never None
                     // i don't really like this method chaining tho
                     app.as_mut().unwrap().process(StateArgs {

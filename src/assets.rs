@@ -103,10 +103,10 @@ impl ColorScheme {
             error: Color::new(0xff7f0000),
 
             button: ButtonColors {
-                outline: Color::new(0x40000000),
+                outline: Color::new(0x60000000),
                 text: Color::new(0xff000000),
-                hover: Color::new(0x20000000),
-                pressed: Color::new(0x50000000),
+                hover: Color::new(0x40000000),
+                pressed: Color::new(0x80000000),
             },
             tool_button: ButtonColors {
                 outline: Color::new(0x00000000),
@@ -118,8 +118,8 @@ impl ColorScheme {
             expand: ExpandColors {
                 icon: Color::new(0xff000000),
                 text: Color::new(0xff000000),
-                hover: Color::new(0x30000000),
-                pressed: Color::new(0x60000000),
+                hover: Color::new(0x60000000),
+                pressed: Color::new(0x90000000),
             },
             text_field: TextFieldColors {
                 outline: Color::new(0xff808080),

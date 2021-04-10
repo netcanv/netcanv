@@ -58,7 +58,7 @@ impl Slider {
         }
 
         ui.draw_on_canvas(canvas, |canvas| {
-            let transparent = Color4f::from(color.with_a(96));
+            let transparent = Color4f::from(color.with_a(192));
             let mut paint = Paint::new(transparent, None);
             let mut x = self.value * ui.width();
             let y = ui.height() / 2.0;
