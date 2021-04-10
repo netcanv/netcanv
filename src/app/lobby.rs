@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use native_dialog::FileDialog;
 use skulpin::skia_safe::*;
 
-use crate::app::{paint, AppState, StateArgs};
+use crate::{app::{paint, AppState, StateArgs}, assets::ColorScheme};
 use crate::assets::Assets;
 use crate::net::{Message, Peer};
 use crate::ui::*;
@@ -345,6 +345,35 @@ impl AppState for State {
         self.process_menu(canvas, input);
         self.ui.space(24.0);
         self.process_status(canvas);
+        self.ui.pop_group();
+
+        self.ui.push_group((32.0, self.ui.height()), Layout::Vertical);
+        self.ui.align((AlignH::Right, AlignV::Top));
+
+        if Button::with_icon(
+            &mut self.ui,
+            canvas,
+            input,
+            ButtonArgs {
+                height: 32.0,
+                colors: &self.assets.colors.tool_button,
+            },
+            match self.assets.colors_dark {
+                true => &self.assets.icons.color_switcher.light,
+                false => &self.assets.icons.color_switcher.dark
+            },
+        )
+        .clicked()
+        {
+            self.assets.colors_dark = !self.assets.colors_dark;
+
+            if self.assets.colors_dark {
+                self.assets.colors = ColorScheme::dark();
+            } else {
+                self.assets.colors = ColorScheme::light();
+            }
+        }
+
         self.ui.pop_group();
     }
 
