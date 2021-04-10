@@ -56,7 +56,7 @@ pub struct Assets {
     pub colors: ColorScheme,
     pub icons: Icons,
 
-    pub colors_dark: bool
+    pub dark_mode: bool
 }
 
 impl Assets {
@@ -104,7 +104,7 @@ impl Assets {
                 }
             },
 
-            colors_dark: false
+            dark_mode: false
         }
     }
 }

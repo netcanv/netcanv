@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use native_dialog::FileDialog;
 use skulpin::skia_safe::*;
 
-use crate::{app::{paint, AppState, StateArgs}, assets::ColorScheme};
-use crate::assets::Assets;
+use crate::app::{paint, AppState, StateArgs};
+use crate::assets::{Assets, ColorScheme};
 use crate::net::{Message, Peer};
 use crate::ui::*;
 use crate::util::get_window_size;
@@ -358,16 +358,17 @@ impl AppState for State {
                 height: 32.0,
                 colors: &self.assets.colors.tool_button,
             },
-            match self.assets.colors_dark {
-                true => &self.assets.icons.color_switcher.light,
-                false => &self.assets.icons.color_switcher.dark
+            if self.assets.dark_mode {
+                &self.assets.icons.color_switcher.light
+            } else {
+                &self.assets.icons.color_switcher.dark
             },
         )
         .clicked()
         {
-            self.assets.colors_dark = !self.assets.colors_dark;
+            self.assets.dark_mode = !self.assets.dark_mode;
 
-            if self.assets.colors_dark {
+            if self.assets.dark_mode {
                 self.assets.colors = ColorScheme::dark();
             } else {
                 self.assets.colors = ColorScheme::light();
