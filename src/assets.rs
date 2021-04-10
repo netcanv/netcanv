@@ -154,13 +154,13 @@ impl ColorScheme {
             panel: Color::new(0xff1f1f1f),
             panel2: Color::new(0xffffffff),
             separator: Color::new(0xff202020),
-            error: Color::new(0xff7f0000),
+            error: Color::new(0xfffc9292),
 
             button: ButtonColors {
                 outline: Color::new(0xff444444),
                 text: Color::new(0xffd2d2d2),
-                hover: Color::new(0x20000000),
-                pressed: Color::new(0x50000000),
+                hover: Color::new(0x30ffffff),
+                pressed: Color::new(0x10ffffff),
             },
             tool_button: ButtonColors {
                 outline: Color::new(0x00000000),
@@ -172,8 +172,8 @@ impl ColorScheme {
             expand: ExpandColors {
                 icon: Color::new(0xffb7b7b7),
                 text: Color::new(0xffb7b7b7),
-                hover: Color::new(0x30000000),
-                pressed: Color::new(0x60000000),
+                hover: Color::new(0x60ffffff),
+                pressed: Color::new(0x30ffffff),
             },
             text_field: TextFieldColors {
                 outline: Color::new(0xff595959),
