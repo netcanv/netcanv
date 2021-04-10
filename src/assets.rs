@@ -159,14 +159,14 @@ impl ColorScheme {
             button: ButtonColors {
                 outline: Color::new(0xff444444),
                 text: Color::new(0xffd2d2d2),
-                hover: Color::new(0x30ffffff),
+                hover: Color::new(0x20ffffff),
                 pressed: Color::new(0x10ffffff),
             },
             tool_button: ButtonColors {
                 outline: Color::new(0x00000000),
                 text: Color::new(0xffb7b7b7),
-                hover: Color::new(0x20ababab),
-                pressed: Color::new(0x50000000),
+                hover: Color::new(0x20ffffff),
+                pressed: Color::new(0x10ffffff),
             },
             slider: Color::new(0xff979797),
             expand: ExpandColors {
