@@ -362,6 +362,7 @@ impl PaintCanvas {
                 if Chunk::image_is_empty(&chunk_image) {
                     continue
                 }
+                chunk.non_empty_subs = [true; Chunk::SUB_COUNT];
                 chunk.upload_image(chunk_image, (0, 0));
             }
         }
