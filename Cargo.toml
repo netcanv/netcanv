@@ -9,7 +9,7 @@ members = ["netcanv-matchmaker", "netcanv-protocol"]
 
 [dependencies]
 winit = "0.24.0"
-skulpin = "0.13.1"
+skulpin = { version = "0.12.0", default_features = false, features = ["winit-app", "winit-24"] }
 usvg = "0.14.0"
 resvg = "0.14.0"
 tiny-skia = "0.5.0"
