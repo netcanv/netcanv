@@ -11,6 +11,8 @@ const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
+const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
+const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 
 pub struct ColorScheme {
     pub text: Color,
@@ -35,10 +37,16 @@ pub struct FileIcons {
     pub save: Image,
 }
 
+pub struct ColorSwitcherIcons {
+    pub dark: Image,
+    pub light: Image
+}
+
 pub struct Icons {
     pub expand: ExpandIcons,
     pub status: StatusIcons,
     pub file: FileIcons,
+    pub color_switcher: ColorSwitcherIcons
 }
 
 pub struct Assets {
@@ -47,6 +55,8 @@ pub struct Assets {
 
     pub colors: ColorScheme,
     pub icons: Icons,
+
+    pub dark_mode: bool
 }
 
 impl Assets {
@@ -88,7 +98,13 @@ impl Assets {
                 file: FileIcons {
                     save: Self::load_icon(SAVE_SVG),
                 },
+                color_switcher: ColorSwitcherIcons {
+                    dark: Self::load_icon(DARK_MODE_SVG),
+                    light: Self::load_icon(LIGHT_MODE_SVG)
+                }
             },
+
+            dark_mode: false
         }
     }
 }
@@ -128,6 +144,44 @@ impl ColorScheme {
                 text: Color::new(0xff000000),
                 text_hint: Color::new(0x7f000000),
                 label: Color::new(0xff000000),
+            },
+        }
+    }
+
+    pub fn dark() -> Self {
+        Self {
+            text: Color::new(0xffb7b7b7),
+            panel: Color::new(0xff1f1f1f),
+            panel2: Color::new(0xffffffff),
+            separator: Color::new(0xff202020),
+            error: Color::new(0xff7f0000),
+
+            button: ButtonColors {
+                outline: Color::new(0xff444444),
+                text: Color::new(0xffd2d2d2),
+                hover: Color::new(0x20000000),
+                pressed: Color::new(0x50000000),
+            },
+            tool_button: ButtonColors {
+                outline: Color::new(0x00000000),
+                text: Color::new(0xffb7b7b7),
+                hover: Color::new(0x20ababab),
+                pressed: Color::new(0x50000000),
+            },
+            slider: Color::new(0xff979797),
+            expand: ExpandColors {
+                icon: Color::new(0xffb7b7b7),
+                text: Color::new(0xffb7b7b7),
+                hover: Color::new(0x30000000),
+                pressed: Color::new(0x60000000),
+            },
+            text_field: TextFieldColors {
+                outline: Color::new(0xff595959),
+                outline_focus: Color::new(0xff9a9a9a),
+                fill: Color::new(0xff383838),
+                text: Color::new(0xffd5d5d5),
+                text_hint: Color::new(0x7f939393),
+                label: Color::new(0xffd5d5d5),
             },
         }
     }
