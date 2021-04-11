@@ -81,11 +81,10 @@ macro_rules! ok_or_log {
 }
 
 impl State {
-    const BAR_SIZE: f32 = 32.0;
-    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
-
     // TODO: config
     const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
+    const BAR_SIZE: f32 = 32.0;
+    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
     pub fn new(assets: Assets, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
@@ -316,7 +315,10 @@ impl State {
                     self.needed_chunks
                         .extend(self.server_side_chunks.difference(&self.requested_chunks));
                 } else if self.downloaded_chunks.len() == self.server_side_chunks.len() {
-                    ok_or_log!(self.log, self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap())));
+                    ok_or_log!(
+                        self.log,
+                        self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap()))
+                    );
                     self.last_autosave = Instant::now();
                     self.save_to_file = None;
                 }

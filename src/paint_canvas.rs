@@ -8,7 +8,7 @@ use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
     ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba, RgbaImage,
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
 
@@ -385,8 +385,7 @@ impl PaintCanvas {
         for entry in std::fs::read_dir(path)? {
             let path = entry?.path();
             if path.is_file() {
-                if path.extension() == Some(OsStr::new("png")) ||
-                    path.file_name() == Some(OsStr::new("canvas.toml")) {
+                if path.extension() == Some(OsStr::new("png")) || path.file_name() == Some(OsStr::new("canvas.toml")) {
                     std::fs::remove_file(path)?;
                 }
             }
@@ -417,16 +416,15 @@ impl PaintCanvas {
                 }
                 let chunk_position = Chunk::chunk_position(*master_position, sub);
                 eprintln!("  chunk {:?}", chunk_position);
-                let saved =
-                    if let Some(png_data) = chunk.png_data(sub) {
-                        let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
-                        let filepath = path.join(Path::new(&filename));
-                        eprintln!("  saving to {:?}", filepath);
-                        std::fs::write(filepath, png_data)?;
-                        true
-                    } else {
-                        false
-                    };
+                let saved = if let Some(png_data) = chunk.png_data(sub) {
+                    let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
+                    let filepath = path.join(Path::new(&filename));
+                    eprintln!("  saving to {:?}", filepath);
+                    std::fs::write(filepath, png_data)?;
+                    true
+                } else {
+                    false
+                };
                 if saved {
                     chunk.mark_saved(sub);
                 }
@@ -438,7 +436,10 @@ impl PaintCanvas {
 
     // if path is None, self.filename will be used
     pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<()> {
-        let path = path.map(|p| p.to_path_buf()).or(self.filename.clone()).expect("no save path provided");
+        let path = path
+            .map(|p| p.to_path_buf())
+            .or(self.filename.clone())
+            .expect("no save path provided");
         if let Some(ext) = path.extension() {
             match ext.to_str() {
                 Some("png") => self.save_as_png(&path),
@@ -493,7 +494,10 @@ impl PaintCanvas {
         let mut iter = coords.split(',');
         let x_str = iter.next();
         let y_str = iter.next();
-        anyhow::ensure!(x_str.is_some() && y_str.is_some(), "Chunk position must follow the pattern: x,y");
+        anyhow::ensure!(
+            x_str.is_some() && y_str.is_some(),
+            "Chunk position must follow the pattern: x,y"
+        );
         anyhow::ensure!(iter.next().is_none(), "Trailing coordinates found after x,y");
         let (x_str, y_str) = (x_str.unwrap(), y_str.unwrap());
         let x: i32 = x_str.parse()?;

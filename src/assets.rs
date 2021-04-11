@@ -27,7 +27,7 @@ pub struct ColorScheme {
     pub slider: Color,
     pub text_field: TextFieldColors,
 
-    pub titlebar: TitlebarColors
+    pub titlebar: TitlebarColors,
 }
 
 pub struct StatusIcons {
@@ -41,14 +41,14 @@ pub struct FileIcons {
 
 pub struct ColorSwitcherIcons {
     pub dark: Image,
-    pub light: Image
+    pub light: Image,
 }
 
 pub struct Icons {
     pub expand: ExpandIcons,
     pub status: StatusIcons,
     pub file: FileIcons,
-    pub color_switcher: ColorSwitcherIcons
+    pub color_switcher: ColorSwitcherIcons,
 }
 
 pub struct Assets {
@@ -58,7 +58,7 @@ pub struct Assets {
     pub colors: ColorScheme,
     pub icons: Icons,
 
-    pub dark_mode: bool
+    pub dark_mode: bool,
 }
 
 impl Assets {
@@ -102,11 +102,11 @@ impl Assets {
                 },
                 color_switcher: ColorSwitcherIcons {
                     dark: Self::load_icon(DARK_MODE_SVG),
-                    light: Self::load_icon(LIGHT_MODE_SVG)
-                }
+                    light: Self::load_icon(LIGHT_MODE_SVG),
+                },
             },
 
-            dark_mode: false
+            dark_mode: false,
         }
     }
 }
@@ -153,8 +153,8 @@ impl ColorScheme {
                 text: Color::new(0xff000000),
 
                 foreground_hover: Color::new(0xffeeeeee),
-                button: Color::new(0xff000000)
-            }
+                button: Color::new(0xff000000),
+            },
         }
     }
 
@@ -199,8 +199,8 @@ impl ColorScheme {
                 text: Color::new(0xffd5d5d5),
 
                 foreground_hover: Color::new(0xff1f1f1f),
-                button: Color::new(0xffb7b7b7)
-            }
+                button: Color::new(0xffb7b7b7),
+            },
         }
     }
 }
@@ -211,7 +211,7 @@ pub struct TitlebarColors {
     pub text: Color,
 
     pub foreground_hover: Color,
-    pub button: Color
+    pub button: Color,
 }
 
 #[cfg(target_family = "unix")]
@@ -246,9 +246,9 @@ impl Theme for ColorScheme {
 
         if foreground {
             if state == ButtonState::Hovered {
-                return winit_argb_from_skia_color(self.titlebar.foreground_hover);
+                return winit_argb_from_skia_color(self.titlebar.foreground_hover)
             } else {
-                return winit_argb_from_skia_color(self.titlebar.text);
+                return winit_argb_from_skia_color(self.titlebar.text)
             }
         }
 

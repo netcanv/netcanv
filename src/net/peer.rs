@@ -9,7 +9,7 @@ use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
 use skulpin::skia_safe::{Color, Color4f, Point};
 
-use crate::net::socket::{Remote};
+use crate::net::socket::Remote;
 use crate::paint_canvas::{Brush, StrokePoint};
 use crate::util;
 

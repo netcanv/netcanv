@@ -50,13 +50,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event, .. } => {
+            Event::WindowEvent { event, .. } =>
                 if let WindowEvent::CloseRequested = event {
                     *control_flow = ControlFlow::Exit;
                 } else {
                     input.process_event(&event);
-                }
-            }
+                },
 
             Event::MainEventsCleared => {
                 match renderer.draw(&window, |canvas, csh| {
@@ -73,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     _ => (),
                 };
                 input.finish_frame();
-            }
+            },
 
             _ => (),
         }
