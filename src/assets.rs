@@ -26,6 +26,8 @@ pub struct ColorScheme {
     pub expand: ExpandColors,
     pub slider: Color,
     pub text_field: TextFieldColors,
+
+    pub titlebar: TitlebarColors
 }
 
 pub struct StatusIcons {
@@ -145,6 +147,14 @@ impl ColorScheme {
                 text_hint: Color::new(0x7f000000),
                 label: Color::new(0xff000000),
             },
+            titlebar: TitlebarColors {
+                titlebar: Color::new(0xffffffff),
+                separator: Color::new(0x7f000000),
+                text: Color::new(0xff000000),
+
+                foreground_hover: Color::new(0xffeeeeee),
+                button: Color::new(0xff000000)
+            }
         }
     }
 
@@ -183,6 +193,69 @@ impl ColorScheme {
                 text_hint: Color::new(0x7f939393),
                 label: Color::new(0xffd5d5d5),
             },
+            titlebar: TitlebarColors {
+                titlebar: Color::new(0xff383838),
+                separator: Color::new(0x7f939393),
+                text: Color::new(0xffd5d5d5),
+
+                foreground_hover: Color::new(0xff1f1f1f),
+                button: Color::new(0xffb7b7b7)
+            }
+        }
+    }
+}
+
+pub struct TitlebarColors {
+    pub titlebar: Color,
+    pub separator: Color,
+    pub text: Color,
+
+    pub foreground_hover: Color,
+    pub button: Color
+}
+
+#[cfg(target_family = "unix")]
+use winit::platform::unix::*;
+
+#[cfg(target_family = "unix")]
+fn winit_argb_from_skia_color(color: Color) -> ARGBColor {
+    ARGBColor {
+        a: color.a(),
+        r: color.r(),
+        g: color.g(),
+        b: color.b(),
+    }
+}
+
+#[cfg(target_family = "unix")]
+impl Theme for ColorScheme {
+    fn element_color(&self, element: Element, window_active: bool) -> ARGBColor {
+        match element {
+            Element::Bar => winit_argb_from_skia_color(self.titlebar.titlebar),
+            Element::Separator => winit_argb_from_skia_color(self.titlebar.separator),
+            Element::Text => winit_argb_from_skia_color(self.titlebar.text),
+        }
+    }
+
+    fn button_color(&self, button: Button, state: ButtonState, foreground: bool, _window_active: bool) -> ARGBColor {
+        let color = match button {
+            Button::Close => winit_argb_from_skia_color(self.error),
+            Button::Maximize => winit_argb_from_skia_color(self.titlebar.button),
+            Button::Minimize => winit_argb_from_skia_color(self.titlebar.button),
+        };
+
+        if foreground {
+            if state == ButtonState::Hovered {
+                return winit_argb_from_skia_color(self.titlebar.foreground_hover);
+            } else {
+                return winit_argb_from_skia_color(self.titlebar.text);
+            }
+        }
+
+        match state {
+            ButtonState::Disabled => winit_argb_from_skia_color(self.titlebar.separator),
+            ButtonState::Hovered => color,
+            ButtonState::Idle => winit_argb_from_skia_color(self.titlebar.titlebar),
         }
     }
 }
