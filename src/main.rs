@@ -4,8 +4,8 @@ use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_os = "linux")]
-use winit::platform::unix::WindowBuilderExtUnix;
+#[cfg(target_family = "unix")]
+use winit::platform::unix::*;
 use winit::window::WindowBuilder;
 
 mod app;
@@ -35,6 +35,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     .build(&event_loop)?;
 
+    #[cfg(target_family = "unix")]
+    winit_window.set_wayland_theme(ColorScheme::light());
+
     let window = WinitWindow::new(&winit_window);
     let mut renderer = RendererBuilder::new().use_vulkan_debug_layer(false).build(&window)?;
 
@@ -47,12 +50,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event, .. } =>
+            Event::WindowEvent { event, .. } => {
                 if let WindowEvent::CloseRequested = event {
                     *control_flow = ControlFlow::Exit;
                 } else {
                     input.process_event(&event);
-                },
+                }
+            }
 
             Event::MainEventsCleared => {
                 match renderer.draw(&window, |canvas, csh| {
@@ -69,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     _ => (),
                 };
                 input.finish_frame();
-            },
+            }
 
             _ => (),
         }
