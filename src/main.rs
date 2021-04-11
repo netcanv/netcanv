@@ -1,11 +1,11 @@
-use std::{borrow::Borrow, error::Error};
+use std::error::Error;
 
 use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_os = "linux")]
-use winit::platform::unix::WindowBuilderExtUnix;
+#[cfg(target_family = "unix")]
+use winit::platform::unix::*;
 use winit::window::WindowBuilder;
 
 mod app;
@@ -19,54 +19,6 @@ mod viewport;
 use app::*;
 use assets::*;
 use ui::input::*;
-
-#[cfg(target_family = "unix")]
-use winit::platform::unix::*;
-
-#[cfg(target_family = "unix")]
-fn winit_argb_from_skia_color(color: skia_safe::Color) -> ARGBColor {
-    ARGBColor {
-        a: color.a(),
-        r: color.r(),
-        g: color.g(),
-        b: color.b(),
-    }
-}
-
-#[cfg(target_family = "unix")]
-impl Theme for assets::ColorScheme {
-    fn element_color(&self, element: Element, window_active: bool) -> ARGBColor {
-        match element {
-            Element::Bar => winit_argb_from_skia_color(self.text_field.fill),
-            Element::Separator => winit_argb_from_skia_color(self.text_field.text_hint),
-            Element::Text => winit_argb_from_skia_color(self.text_field.text),
-        }
-    }
-
-    fn button_color(&self, button: Button, state: ButtonState, foreground: bool, _window_active: bool) -> ARGBColor {
-        let color: ARGBColor;
-
-        match button {
-            Button::Close => color = winit_argb_from_skia_color(self.error),
-            Button::Maximize => color = winit_argb_from_skia_color(self.text),
-            Button::Minimize => color = winit_argb_from_skia_color(self.text),
-        }
-
-        if foreground {
-            if state == ButtonState::Hovered {
-                return winit_argb_from_skia_color(self.panel);
-            } else {
-                return winit_argb_from_skia_color(self.text_field.text);
-            }
-        }
-
-        match state {
-            ButtonState::Disabled => winit_argb_from_skia_color(self.text_field.text_hint),
-            ButtonState::Hovered => color,
-            ButtonState::Idle => winit_argb_from_skia_color(self.text_field.fill),
-        }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::new();
