@@ -51,6 +51,7 @@ pub struct State {
 
     load_from_file: Option<PathBuf>,
     save_to_file: Option<PathBuf>,
+    last_autosave: Instant,
 
     error: Option<String>,
     log: Log,
@@ -83,6 +84,9 @@ impl State {
     const BAR_SIZE: f32 = 32.0;
     pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
+    // TODO: config
+    const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
+
     pub fn new(assets: Assets, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
             assets,
@@ -105,6 +109,7 @@ impl State {
 
             load_from_file: image_path,
             save_to_file: None,
+            last_autosave: Instant::now(),
 
             error: None,
             log: Log::new(),
@@ -311,7 +316,8 @@ impl State {
                     self.needed_chunks
                         .extend(self.server_side_chunks.difference(&self.requested_chunks));
                 } else if self.downloaded_chunks.len() == self.server_side_chunks.len() {
-                    ok_or_log!(self.log, self.paint_canvas.save(&self.save_to_file.as_ref().unwrap()));
+                    ok_or_log!(self.log, self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap())));
+                    self.last_autosave = Instant::now();
                     self.save_to_file = None;
                 }
             } else {
@@ -475,6 +481,15 @@ impl AppState for State {
                 self.log,
                 self.paint_canvas.load(canvas, &self.load_from_file.take().unwrap())
             );
+        }
+
+        // autosaving
+
+        if self.paint_canvas.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL {
+            eprintln!("autosaving chunks");
+            ok_or_log!(self.log, self.paint_canvas.save(None));
+            eprintln!("autosave complete");
+            self.last_autosave = Instant::now();
         }
 
         // network

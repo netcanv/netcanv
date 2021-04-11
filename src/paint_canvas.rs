@@ -436,11 +436,13 @@ impl PaintCanvas {
         Ok(())
     }
 
-    pub fn save(&mut self, path: &Path) -> anyhow::Result<()> {
+    // if path is None, self.filename will be used
+    pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<()> {
+        let path = path.map(|p| p.to_path_buf()).or(self.filename.clone()).expect("no save path provided");
         if let Some(ext) = path.extension() {
             match ext.to_str() {
-                Some("png") => self.save_as_png(path),
-                Some("netcanv") | Some("toml") => self.save_as_netcanv(path),
+                Some("png") => self.save_as_png(&path),
+                Some("netcanv") | Some("toml") => self.save_as_netcanv(&path),
                 _ => anyhow::bail!("Unsupported save format. Please choose either .png or .netcanv"),
             }
         } else {
@@ -553,5 +555,9 @@ impl PaintCanvas {
             }
         }
         result
+    }
+
+    pub fn filename(&self) -> Option<&Path> {
+        self.filename.as_deref()
     }
 }
