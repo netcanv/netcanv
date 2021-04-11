@@ -19,6 +19,7 @@ crossbeam-channel = "0.4.4"
 anyhow = "1.0.40"
 image = "0.23.14"
 native-dialog = "0.5.5"
+toml = "0.5.8"
 
 netcanv-protocol = { path = "netcanv-protocol" }
 

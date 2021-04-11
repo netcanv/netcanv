@@ -416,6 +416,7 @@ impl State {
             match FileDialog::new()
                 .set_filename("canvas.png")
                 .add_filter("PNG image", &["png"])
+                .add_filter("NetCanv canvas", &["netcanv", "toml"])
                 .show_save_single_file()
             {
                 Ok(Some(path)) => {
@@ -472,8 +473,7 @@ impl AppState for State {
         if self.load_from_file.is_some() {
             ok_or_log!(
                 self.log,
-                self.paint_canvas
-                    .load_from_image_file(canvas, &self.load_from_file.take().unwrap())
+                self.paint_canvas.load(canvas, &self.load_from_file.take().unwrap())
             );
         }
 

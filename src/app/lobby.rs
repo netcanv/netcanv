@@ -220,6 +220,7 @@ impl State {
                     .add_filter("Supported image files", &[
                         "png", "jpg", "jpeg", "jfif", "gif", "bmp", "tif", "tiff", "webp", "avif", "pnm", "tga",
                     ])
+                    .add_filter("NetCanv canvas", &["toml"])
                     .show_open_single_file()
                 {
                     Ok(Some(path)) => {

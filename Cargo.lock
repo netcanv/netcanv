@@ -1125,6 +1125,7 @@ dependencies = [
  "serde",
  "skulpin",
  "tiny-skia",
+ "toml",
  "usvg",
  "winit",
 ]

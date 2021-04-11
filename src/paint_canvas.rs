@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ::image::{
     codecs::png::{PngDecoder, PngEncoder},
-    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, ImageError, Rgba, RgbaImage,
+    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba, RgbaImage,
 };
+use serde::{Serialize, Deserialize};
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
 
@@ -50,6 +52,7 @@ pub struct Chunk {
     surface: RefCell<Surface>,
     png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
     non_empty_subs: [bool; Self::SUB_COUNT],
+    saved_subs: [bool; Self::SUB_COUNT],
 }
 
 impl Chunk {
@@ -70,6 +73,7 @@ impl Chunk {
             surface: RefCell::new(surface),
             png_data: Default::default(),
             non_empty_subs: [false; Self::SUB_COUNT],
+            saved_subs: [false; Self::SUB_COUNT],
         }
     }
 
@@ -130,6 +134,15 @@ impl Chunk {
         )
     }
 
+    // network position of a sub chunk in a master chunk
+    fn chunk_position(master_position: (i32, i32), sub: usize) -> (i32, i32) {
+        let sub_position = Self::sub_position(sub);
+        (
+            (master_position.0 * Self::SUB_CHUNKS.0 as i32) + sub_position.0 as i32,
+            (master_position.1 * Self::SUB_CHUNKS.1 as i32) + sub_position.1 as i32,
+        )
+    }
+
     // reencodes PNG data if necessary.
     // PNG data is reencoded upon outside request, but invalidated if the chunk is modified
     fn png_data(&mut self, sub: usize) -> Option<&[u8]> {
@@ -140,6 +153,7 @@ impl Chunk {
                 let (x, y) = Self::sub_screen_position(sub);
                 let sub_image = chunk_image.view(x, y, Self::SIZE.0, Self::SIZE.1).to_image();
                 if Self::image_is_empty(&sub_image) {
+                    self.non_empty_subs[sub] = false;
                     continue
                 }
                 let mut bytes: Vec<u8> = Vec::new();
@@ -156,6 +170,7 @@ impl Chunk {
                     },
                 }
                 self.png_data[sub] = Some(bytes);
+                self.non_empty_subs[sub] = true;
             }
         }
         self.png_data[sub].as_deref()
@@ -179,8 +194,20 @@ impl Chunk {
         decoder.read_image(&mut image)?;
         if !Self::image_is_empty(&image) {
             self.upload_image(image, Self::sub_screen_position(sub));
+            self.png_data[sub] = Some(Vec::from(data));
+            self.non_empty_subs[sub] = true;
         }
         Ok(())
+    }
+
+    fn mark_dirty(&mut self, sub: usize) {
+        self.png_data[sub] = None;
+        self.non_empty_subs[sub] = true;
+        self.saved_subs[sub] = false;
+    }
+
+    fn mark_saved(&mut self, sub: usize) {
+        self.saved_subs[sub] = true;
     }
 
     fn image_is_empty(image: &RgbaImage) -> bool {
@@ -201,6 +228,15 @@ pub struct PaintCanvas {
     chunks: HashMap<(i32, i32), Chunk>,
     // this set contains all chunks that have already been visited in the current stroke() call
     stroked_chunks: HashSet<(i32, i32)>,
+    filename: Option<PathBuf>,
+}
+
+pub const CANVAS_TOML_VERSION: u32 = 1;
+
+#[derive(Serialize, Deserialize)]
+struct CanvasToml {
+    version: u32,
+    // more stuff to be added in the future
 }
 
 impl PaintCanvas {
@@ -208,6 +244,7 @@ impl PaintCanvas {
         Self {
             chunks: HashMap::new(),
             stroked_chunks: HashSet::new(),
+            filename: None,
         }
     }
 
@@ -257,8 +294,7 @@ impl PaintCanvas {
                             .borrow_mut()
                             .canvas()
                             .draw_line(a - screen_position, b - screen_position, &paint);
-                        chunk.png_data[sub] = None;
-                        chunk.non_empty_subs[sub] = true;
+                        chunk.mark_dirty(sub);
                     }
                     self.stroked_chunks.insert(master);
                     p.offset(delta);
@@ -293,7 +329,7 @@ impl PaintCanvas {
         chunk.decode_png_data(Chunk::sub(to_chunk), data)
     }
 
-    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
+    fn save_as_png(&self, path: &Path) -> anyhow::Result<()> {
         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         for (chunk_position, _) in &self.chunks {
             left = left.min(chunk_position.0);
@@ -331,7 +367,88 @@ impl PaintCanvas {
         Ok(())
     }
 
-    pub fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+    fn validate_netcanv_save_path(path: &Path) -> anyhow::Result<PathBuf> {
+        // condition #1: remove canvas.toml
+        let mut result = PathBuf::from(path);
+        if result.file_name() == Some(OsStr::new("canvas.toml")) {
+            result.pop();
+        }
+        // condition #2: make sure that the directory name ends with .netcanv
+        if result.extension() != Some(OsStr::new("netcanv")) {
+            anyhow::bail!("Please select a valid canvas folder (one whose name ends with .netcanv)")
+        }
+        Ok(result)
+    }
+
+    fn clear_netcanv_save(path: &Path) -> anyhow::Result<()> {
+        eprintln!("clearing older netcanv save {:?}", path);
+        for entry in std::fs::read_dir(path)? {
+            let path = entry?.path();
+            if path.is_file() {
+                if path.extension() == Some(OsStr::new("png")) ||
+                    path.file_name() == Some(OsStr::new("canvas.toml")) {
+                    std::fs::remove_file(path)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn save_as_netcanv(&mut self, path: &Path) -> anyhow::Result<()> {
+        // create the directory
+        eprintln!("creating or reusing existing directory ({:?})", path);
+        let path = Self::validate_netcanv_save_path(path)?;
+        std::fs::create_dir_all(path.clone())?; // use create_dir_all to not fail if the dir already exists
+        if self.filename != Some(path.clone()) {
+            Self::clear_netcanv_save(&path)?;
+        }
+        // save the canvas.toml manifest
+        eprintln!("saving canvas.toml");
+        let canvas_toml = CanvasToml {
+            version: CANVAS_TOML_VERSION,
+        };
+        std::fs::write(path.join(Path::new("canvas.toml")), toml::to_string(&canvas_toml)?)?;
+        // save all the chunks
+        eprintln!("saving chunks");
+        for (master_position, chunk) in &mut self.chunks {
+            for sub in 0..Chunk::SUB_COUNT {
+                if !chunk.non_empty_subs[sub] || chunk.saved_subs[sub] {
+                    continue
+                }
+                let chunk_position = Chunk::chunk_position(*master_position, sub);
+                eprintln!("  chunk {:?}", chunk_position);
+                let saved =
+                    if let Some(png_data) = chunk.png_data(sub) {
+                        let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
+                        let filepath = path.join(Path::new(&filename));
+                        eprintln!("  saving to {:?}", filepath);
+                        std::fs::write(filepath, png_data)?;
+                        true
+                    } else {
+                        false
+                    };
+                if saved {
+                    chunk.mark_saved(sub);
+                }
+            }
+        }
+        self.filename = Some(path);
+        Ok(())
+    }
+
+    pub fn save(&mut self, path: &Path) -> anyhow::Result<()> {
+        if let Some(ext) = path.extension() {
+            match ext.to_str() {
+                Some("png") => self.save_as_png(path),
+                Some("netcanv") | Some("toml") => self.save_as_netcanv(path),
+                _ => anyhow::bail!("Unsupported save format. Please choose either .png or .netcanv"),
+            }
+        } else {
+            anyhow::bail!("Can't save a canvas without an extension")
+        }
+    }
+
+    fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
         use ::image::io::Reader as ImageReader;
 
         let image = ImageReader::open(path)?.decode()?.into_rgba8();
@@ -370,21 +487,68 @@ impl PaintCanvas {
         Ok(())
     }
 
+    fn parse_chunk_position(coords: &str) -> anyhow::Result<(i32, i32)> {
+        let mut iter = coords.split(',');
+        let x_str = iter.next();
+        let y_str = iter.next();
+        anyhow::ensure!(x_str.is_some() && y_str.is_some(), "Chunk position must follow the pattern: x,y");
+        anyhow::ensure!(iter.next().is_none(), "Trailing coordinates found after x,y");
+        let (x_str, y_str) = (x_str.unwrap(), y_str.unwrap());
+        let x: i32 = x_str.parse()?;
+        let y: i32 = y_str.parse()?;
+        Ok((x, y))
+    }
+
+    fn load_from_netcanv(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+        let path = Self::validate_netcanv_save_path(path)?;
+        eprintln!("loading canvas from {:?}", path);
+        // load canvas.toml
+        eprintln!("loading canvas.toml");
+        let canvas_toml_path = path.join(Path::new("canvas.toml"));
+        let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(&canvas_toml_path)?)?;
+        if canvas_toml.version < CANVAS_TOML_VERSION {
+            anyhow::bail!("Version mismatch in canvas.toml. Try updating your client");
+        }
+        // load chunks
+        eprintln!("loading chunks");
+        for entry in std::fs::read_dir(path.clone())? {
+            let path = entry?.path();
+            if path.is_file() && path.extension() == Some(OsStr::new("png")) {
+                if let Some(position_osstr) = path.file_stem() {
+                    if let Some(position_str) = position_osstr.to_str() {
+                        let chunk_position = Self::parse_chunk_position(&position_str)?;
+                        eprintln!("chunk {:?}", chunk_position);
+                        let master = Chunk::master(chunk_position);
+                        let sub = Chunk::sub(chunk_position);
+                        self.ensure_chunk_exists(canvas, master);
+                        let chunk = self.chunks.get_mut(&master).unwrap();
+                        chunk.decode_png_data(sub, &std::fs::read(path)?)?;
+                        chunk.mark_saved(sub);
+                    }
+                }
+            }
+        }
+        self.filename = Some(path);
+        Ok(())
+    }
+
+    pub fn load(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+        if let Some(ext) = path.extension() {
+            match ext.to_str() {
+                Some("netcanv") | Some("toml") => self.load_from_netcanv(canvas, path),
+                _ => self.load_from_image_file(canvas, path),
+            }
+        } else {
+            self.load_from_image_file(canvas, path)
+        }
+    }
+
     pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
         let mut result = Vec::new();
         for (master_position, chunk) in &self.chunks {
-            let master_chunk_position = (
-                master_position.0 * Chunk::SUB_CHUNKS.0 as i32,
-                master_position.1 * Chunk::SUB_CHUNKS.1 as i32,
-            );
             for (sub, non_empty) in chunk.non_empty_subs.iter().enumerate() {
                 if *non_empty {
-                    let sub_position = Chunk::sub_position(sub);
-                    let chunk_position = (
-                        master_chunk_position.0 + sub_position.0 as i32,
-                        master_chunk_position.1 + sub_position.1 as i32,
-                    );
-                    result.push(chunk_position);
+                    result.push(Chunk::chunk_position(*master_position, sub));
                 }
             }
         }
