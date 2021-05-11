@@ -39,3 +39,16 @@ $ cargo run --release
 ```
 
 Thanks, mature ecosystem!
+
+### Matchmaker
+
+NetCanv assumes that you have your own matchmaker up: currently the default value
+in the matchmaker textbox is `localhost:62137`, for easy testing.
+
+To run the matchmaker, simply do:
+```sh
+$ cd netcanv-matchmaker
+$ cargo run --release
+```
+
+This will allow you to host and join new rooms locally.
