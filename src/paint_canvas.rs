@@ -451,6 +451,22 @@ impl PaintCanvas {
         }
     }
 
+    fn parse_chunk_offset(path: &Path) -> (i32, i32) {
+        // parse any offset from the filename
+        if let Some(osstr) = path.file_name() {
+            if let Some(filename) = osstr.to_str() {
+                if let Some((head, _ext)) = filename.rsplit_once(".") {
+                    if let Some((_name, coords)) = head.rsplit_once("!org") {
+                        if let Ok(result) = Self::parse_chunk_position(coords) {
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+        return (0 as i32, 0 as i32);
+    }
+
     fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
         use ::image::io::Reader as ImageReader;
 
@@ -458,11 +474,13 @@ impl PaintCanvas {
         eprintln!("image size: {:?}", image.dimensions());
         let chunks_x = (image.width() as f32 / Chunk::SURFACE_SIZE.0 as f32).ceil() as i32;
         let chunks_y = (image.height() as f32 / Chunk::SURFACE_SIZE.1 as f32).ceil() as i32;
+        let offset = Self::parse_chunk_offset(path);
         eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+        eprintln!("chunk offset: x={}, y={}", offset.0, offset.1);
 
         for y in 0..chunks_y {
             for x in 0..chunks_x {
-                let chunk_position = (x, y);
+                let chunk_position = (x - offset.0, y - offset.1);
                 self.ensure_chunk_exists(canvas, chunk_position);
                 let chunk = self.chunks.get_mut(&chunk_position).unwrap();
                 let pixel_position = (
