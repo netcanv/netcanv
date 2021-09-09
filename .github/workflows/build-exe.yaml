@@ -1,0 +1,32 @@
+name: Build Windows executable
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Compile application
+      run: cargo build --release
+    - name: Compile matchmaker
+      working-directory: netcanv-matchmaker
+      run: cargo build --release
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: Windows executables
+        path: |
+          target/release/netcanv.exe
+          target/release/netcanv-matchmaker.exe
+
