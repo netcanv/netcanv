@@ -69,9 +69,7 @@ enum Error {
     Io(#[from] std::io::Error),
     #[error("Unrecognized or unimplemented packet")]
     InvalidPacket,
-    #[error("Invalid packet (bad encoding)")]
-    Deserialize,
-    #[error("Serialization error: {0}")]
+    #[error("(De)serialization error: {0}")]
     Serialize(#[from] bincode::Error),
     #[error("Invalid address: {0}")]
     InvalidAddr(#[from] AddrParseError),
@@ -308,7 +306,7 @@ impl Matchmaker {
                     }
                 }
                 let _ = bincode::deserialize_from(&mut *stream.reader.lock().unwrap()) // what
-                    .map_err(|_| Error::Deserialize)
+                    .map_err(|error| Error::Serialize(error))
                     .and_then(|decoded| Self::incoming_packet(mm.clone(), peer_addr, stream.clone(), decoded))
                     .or_else(|error| -> Result<_, ()> {
                         eprintln!("! error/packet decode from {}: {}", peer_addr, error);

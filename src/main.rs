@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::error::Error;
 
 use skulpin::*;
@@ -23,14 +25,12 @@ use ui::input::*;
 fn main() -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::new();
     let winit_window = {
-        let mut b = WindowBuilder::new()
+        let b = WindowBuilder::new()
             .with_inner_size(LogicalSize::new(1024, 600))
             .with_title("NetCanv")
             .with_resizable(true);
         #[cfg(target_os = "linux")]
-        {
-            b = b.with_app_id("netcanv".into())
-        }
+        let b = b.with_app_id("netcanv".into());
         b
     }
     .build(&event_loop)?;
