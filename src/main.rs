@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::error::Error;
 
@@ -74,6 +74,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     _ => (),
                 };
                 input.finish_frame();
+            },
+
+            Event::LoopDestroyed => {
+                // Fix for SIGSEGV inside of skia-[un]safe due to a Surface not being dropped properly.
+                // Not sure what that's all about, but this little snippet fixes the bug so eh, why not.
+                drop(app.take().unwrap());
             },
 
             _ => (),
