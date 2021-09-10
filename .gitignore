@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 .lite_project.lua
+.vscode
 
 appimage/out
 appimage/linuxdeploy-*
