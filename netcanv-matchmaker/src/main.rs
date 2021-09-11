@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::error;
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{AddrParseError, SocketAddr, TcpListener, TcpStream};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
@@ -92,9 +92,11 @@ impl Matchmaker {
             packet => eprintln!("- sending packet {} -> {:?}", stream.peer_addr()?, packet),
         }
         let mut writer = stream.writer.lock().unwrap();
-        bincode::serialize_into(&mut *writer, packet)?;
-        writer.flush()?;
-        Ok(())
+        let serialize_result = bincode::serialize_into(&mut *writer, packet);
+        let flush_result = writer.flush();
+        serialize_result
+            .map_err(|e| e.into())
+            .and(flush_result.map_err(|e| e.into()))
     }
 
     /// Sends an error packet into the stream.
@@ -285,12 +287,13 @@ impl Matchmaker {
 
     /// Starts a new client handler thread that reads packets from the client and deserializes them,
     /// then passing them into the incoming_packet function.
-    fn start_client_thread(mm: Arc<Mutex<Self>>, stream: TcpStream) -> Result<(), Error> {
-        let peer_addr = stream.peer_addr()?;
-        let stream = Arc::new(BufStream::new(stream)?);
+    fn start_client_thread(mm: Arc<Mutex<Self>>, tcp_stream: TcpStream) -> Result<(), Error> {
+        let peer_addr = tcp_stream.peer_addr()?;
+        let stream = Arc::new(BufStream::new(tcp_stream)?);
         eprintln!("* mornin' mr. {}", peer_addr);
         let _ = std::thread::spawn(move || {
-            loop {
+            let mut running = true;
+            while running {
                 let mut buf = [0; 1];
                 if let Ok(n) = stream.peek(&mut buf) {
                     if n == 0 {
@@ -306,7 +309,10 @@ impl Matchmaker {
                     }
                 }
                 let _ = bincode::deserialize_from(&mut *stream.reader.lock().unwrap()) // what
-                    .map_err(|error| Error::Serialize(error))
+                    .map_err(|error| {
+                        running = false;
+                        Error::Serialize(error)
+                    })
                     .and_then(|decoded| Self::incoming_packet(mm.clone(), peer_addr, stream.clone(), decoded))
                     .or_else(|error| -> Result<_, ()> {
                         eprintln!("! error/packet decode from {}: {}", peer_addr, error);
@@ -340,7 +346,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     for connection in listener.incoming() {
         connection
             .map_err(|error| Error::from(error))
-            .and_then(|stream| Matchmaker::start_client_thread(state.clone(), stream))
+            .and_then(|stream| {
+                stream.set_nodelay(true)?;
+                Matchmaker::start_client_thread(state.clone(), stream)
+            })
             .or_else(|error| -> Result<_, ()> {
                 eprintln!("! error/connect: {}", error);
                 Ok(())

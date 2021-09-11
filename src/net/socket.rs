@@ -80,8 +80,9 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
                     break
                 }
                 while let Ok(packet) = from_main.recv() {
-                    bincode::serialize_into(&mut writer, &packet)?;
-                    writer.flush()?;
+                    bincode::serialize_into(&mut writer, &packet)
+                        .map_err(|e| anyhow::Error::from(e))
+                        .and_then(|_| writer.flush().map_err(|e| anyhow::Error::from(e)))?;
                 }
             }
             Ok(())

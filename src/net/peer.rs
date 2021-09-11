@@ -334,6 +334,7 @@ impl Peer {
 
     pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         assert!(self.host.is_some(), "only non-hosts can download chunks");
+        eprintln!("downloading {} chunks from the host", positions.len());
         self.send(self.host, cl::Packet::GetChunks(positions))
     }
 
