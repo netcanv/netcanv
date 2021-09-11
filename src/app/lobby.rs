@@ -8,6 +8,7 @@ use skulpin::skia_safe::*;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
+use crate::config;
 use crate::net::{Message, Peer};
 use crate::ui::*;
 use crate::util::get_window_size;
@@ -360,7 +361,7 @@ impl AppState for State {
                 height: 32.0,
                 colors: &self.assets.colors.tool_button,
             },
-            if self.assets.dark_mode {
+            if config.ui.color_scheme == config::ColorScheme::Dark {
                 &self.assets.icons.color_switcher.light
             } else {
                 &self.assets.icons.color_switcher.dark
@@ -368,12 +369,18 @@ impl AppState for State {
         )
         .clicked()
         {
-            self.assets.dark_mode = !self.assets.dark_mode;
+            config.ui.color_scheme = match config.ui.color_scheme {
+                config::ColorScheme::Light => config::ColorScheme::Dark,
+                config::ColorScheme::Dark => config::ColorScheme::Light,
+            };
+            self.status = match config.save() {
+                Ok(..) => Status::None,
+                Err(error) => error.into(),
+            };
 
-            if self.assets.dark_mode {
-                self.assets.colors = ColorScheme::dark();
-            } else {
-                self.assets.colors = ColorScheme::light();
+            match config.ui.color_scheme {
+                config::ColorScheme::Dark => self.assets.colors = ColorScheme::dark(),
+                config::ColorScheme::Light => self.assets.colors = ColorScheme::light(),
             }
         }
 

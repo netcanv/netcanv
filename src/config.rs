@@ -11,7 +11,7 @@ pub struct LobbyConfig {
     pub matchmaker: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ColorScheme {
     Light,
     Dark,
