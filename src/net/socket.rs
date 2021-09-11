@@ -80,6 +80,8 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
                     break
                 }
                 while let Ok(packet) = from_main.recv() {
+                    // #[cfg(debug_assertions)]
+                    // eprintln!("{:?} send {:?}", std::thread::current().id(), packet);
                     bincode::serialize_into(&mut writer, &packet)?;
                     writer.flush()?;
                 }
@@ -94,6 +96,10 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
                     break
                 }
                 let packet = bincode::deserialize_from(&mut reader)?;
+
+                // #[cfg(debug_assertions)]
+                // eprintln!("{:?} recv {:?}", std::thread::current().id(), packet);
+
                 if to_main.send(packet).is_err() {
                     anyhow::bail!("Couldn't send packet over to the main thread")
                 }
