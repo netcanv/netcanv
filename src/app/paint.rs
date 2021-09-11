@@ -472,6 +472,7 @@ impl AppState for State {
             canvas,
             coordinate_system_helper,
             input,
+            config,
         }: StateArgs,
     ) {
         canvas.clear(Color::WHITE);

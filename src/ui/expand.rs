@@ -11,6 +11,7 @@ pub struct ExpandIcons {
     pub shrink: Image,
 }
 
+#[derive(Clone)]
 pub struct ExpandColors {
     pub text: Color,
     pub icon: Color,

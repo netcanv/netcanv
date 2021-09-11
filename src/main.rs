@@ -2,6 +2,7 @@
 
 use std::error::Error;
 
+use config::UserConfig;
 use skulpin::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -12,6 +13,7 @@ use winit::window::WindowBuilder;
 
 mod app;
 mod assets;
+mod config;
 mod net;
 mod paint_canvas;
 mod ui;
@@ -37,13 +39,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     .build(&event_loop)?;
 
+    let mut config = UserConfig::load_or_create()?;
+    let color_scheme = match config.ui.color_scheme {
+        config::ColorScheme::Light => ColorScheme::light(),
+        config::ColorScheme::Dark => ColorScheme::dark(),
+    };
+
     #[cfg(target_family = "unix")]
-    winit_window.set_wayland_theme(ColorScheme::light());
+    winit_window.set_wayland_theme(color_scheme.clone());
 
     let window = WinitWindow::new(&winit_window);
     let mut renderer = RendererBuilder::new().use_vulkan_debug_layer(false).build(&window)?;
 
-    let assets = Assets::new(ColorScheme::light());
+    let assets = Assets::new(color_scheme);
     let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, None)) as _);
     let mut input = Input::new();
 
@@ -67,6 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         canvas,
                         coordinate_system_helper: &csh,
                         input: &mut input,
+                        config: &mut config,
                     });
                     app = Some(app.take().unwrap().next_state());
                 }) {

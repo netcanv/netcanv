@@ -4,6 +4,7 @@ use crate::ui::*;
 
 pub struct Button;
 
+#[derive(Clone)]
 pub struct ButtonColors {
     pub outline: Color,
     pub text: Color,

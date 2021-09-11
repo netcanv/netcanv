@@ -14,6 +14,7 @@ const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 
+#[derive(Clone)]
 pub struct ColorScheme {
     pub text: Color,
     pub panel: Color,
@@ -205,6 +206,7 @@ impl ColorScheme {
     }
 }
 
+#[derive(Clone)]
 pub struct TitlebarColors {
     pub titlebar: Color,
     pub separator: Color,
