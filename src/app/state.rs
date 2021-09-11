@@ -4,11 +4,10 @@ use skulpin::CoordinateSystemHelper;
 use crate::config::UserConfig;
 use crate::ui::*;
 
-pub struct StateArgs<'a, 'b, 'c, 'd> {
+pub struct StateArgs<'a, 'b, 'c> {
     pub canvas: &'a mut Canvas,
     pub coordinate_system_helper: &'b CoordinateSystemHelper,
     pub input: &'c mut Input,
-    pub config: &'d mut UserConfig,
 }
 
 pub trait AppState {

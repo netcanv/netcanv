@@ -9,6 +9,7 @@ use skulpin::skia_safe::*;
 
 use crate::app::*;
 use crate::assets::*;
+use crate::config::UserConfig;
 use crate::net::{Message, Peer, Timer};
 use crate::paint_canvas::*;
 use crate::ui::*;
@@ -32,6 +33,7 @@ struct Tip {
 
 pub struct State {
     assets: Assets,
+    config: UserConfig,
 
     ui: Ui,
     paint_canvas: PaintCanvas,
@@ -86,9 +88,10 @@ impl State {
     const BAR_SIZE: f32 = 32.0;
     pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
-    pub fn new(assets: Assets, peer: Peer, image_path: Option<PathBuf>) -> Self {
+    pub fn new(assets: Assets, config: UserConfig, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
             assets,
+            config,
 
             ui: Ui::new(),
             paint_canvas: PaintCanvas::new(),
@@ -472,7 +475,6 @@ impl AppState for State {
             canvas,
             coordinate_system_helper,
             input,
-            config,
         }: StateArgs,
     ) {
         canvas.clear(Color::WHITE);
@@ -588,7 +590,7 @@ impl AppState for State {
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
         if let Some(error) = self.error {
-            Box::new(lobby::State::new(self.assets, Some(&error)))
+            Box::new(lobby::State::new(self.assets, self.config, Some(&error)))
         } else {
             self
         }

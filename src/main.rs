@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut renderer = RendererBuilder::new().use_vulkan_debug_layer(false).build(&window)?;
 
     let assets = Assets::new(color_scheme);
-    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, None)) as _);
+    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config, None)) as _);
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
@@ -75,7 +75,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         canvas,
                         coordinate_system_helper: &csh,
                         input: &mut input,
-                        config: &mut config,
                     });
                     app = Some(app.take().unwrap().next_state());
                 }) {

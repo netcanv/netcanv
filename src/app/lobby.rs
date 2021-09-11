@@ -8,7 +8,7 @@ use skulpin::skia_safe::*;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
-use crate::config;
+use crate::config::{self, UserConfig};
 use crate::net::{Message, Peer};
 use crate::ui::*;
 use crate::util::get_window_size;
@@ -20,6 +20,17 @@ enum Status {
     Error(String),
 }
 
+impl Status {
+    fn catch<T, E: Display>(&mut self, result: Result<T, E>) {
+        match result {
+            Ok(..) => (),
+            Err(error) => {
+                let _ = std::mem::replace(self, error.into());
+            },
+        }
+    }
+}
+
 impl<T: Display> From<T> for Status {
     fn from(error: T) -> Self {
         Self::Error(format!("{}", error))
@@ -28,6 +39,7 @@ impl<T: Display> From<T> for Status {
 
 pub struct State {
     assets: Assets,
+    config: UserConfig,
     ui: Ui,
 
     // UI elements
@@ -46,12 +58,15 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(assets: Assets, error: Option<&str>) -> Self {
+    pub fn new(assets: Assets, config: UserConfig, error: Option<&str>) -> Self {
+        let nickname_field = TextField::new(Some(&config.lobby.nickname));
+        let matchmaker_field = TextField::new(Some(&config.lobby.matchmaker));
         Self {
             assets,
+            config,
             ui: Ui::new(),
-            nickname_field: TextField::new(Some("Anon")),
-            matchmaker_field: TextField::new(Some("localhost:62137")),
+            nickname_field,
+            matchmaker_field,
             room_id_field: TextField::new(None),
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
@@ -97,7 +112,7 @@ impl State {
 
         let button = ButtonArgs {
             height: 32.0,
-            colors: &self.assets.colors.button,
+            colors: &self.assets.colors.button.clone(),
         };
         let textfield = TextFieldArgs {
             width: 160.0,
@@ -212,6 +227,7 @@ impl State {
             self.ui
                 .push_group((self.ui.remaining_width(), 32.0), Layout::Horizontal);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
+                self.save_config();
                 host_room!();
             }
             self.ui.space(8.0);
@@ -226,6 +242,7 @@ impl State {
                 {
                     Ok(Some(path)) => {
                         self.image_file = Some(path);
+                        self.save_config();
                         host_room!();
                     },
                     Err(error) => self.status = Status::from(error),
@@ -304,6 +321,15 @@ impl State {
             .map_err(|_| Status::Error("Room ID must be an integer".into()))?;
         Ok(Peer::join(nickname, matchmaker_addr_str, room_id)?)
     }
+
+    fn save_config(&mut self) {
+        self.config.lobby.nickname = self.nickname_field.text().to_owned();
+        self.config.lobby.matchmaker = self.matchmaker_field.text().to_owned();
+        self.status = match self.config.save() {
+            Ok(..) => Status::None,
+            Err(error) => error.into(),
+        };
+    }
 }
 
 impl AppState for State {
@@ -313,7 +339,6 @@ impl AppState for State {
             canvas,
             coordinate_system_helper,
             input,
-            config,
         }: StateArgs,
     ) {
         canvas.clear(self.assets.colors.panel);
@@ -361,7 +386,7 @@ impl AppState for State {
                 height: 32.0,
                 colors: &self.assets.colors.tool_button,
             },
-            if config.ui.color_scheme == config::ColorScheme::Dark {
+            if self.config.ui.color_scheme == config::ColorScheme::Dark {
                 &self.assets.icons.color_switcher.light
             } else {
                 &self.assets.icons.color_switcher.dark
@@ -369,18 +394,14 @@ impl AppState for State {
         )
         .clicked()
         {
-            config.ui.color_scheme = match config.ui.color_scheme {
+            self.config.ui.color_scheme = match self.config.ui.color_scheme {
                 config::ColorScheme::Light => config::ColorScheme::Dark,
                 config::ColorScheme::Dark => config::ColorScheme::Light,
             };
-            self.status = match config.save() {
-                Ok(..) => Status::None,
-                Err(error) => error.into(),
-            };
-
-            match config.ui.color_scheme {
-                config::ColorScheme::Dark => self.assets.colors = ColorScheme::dark(),
+            self.save_config();
+            match self.config.ui.color_scheme {
                 config::ColorScheme::Light => self.assets.colors = ColorScheme::light(),
+                config::ColorScheme::Dark => self.assets.colors = ColorScheme::dark(),
             }
         }
 
@@ -389,7 +410,12 @@ impl AppState for State {
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
         if self.connected {
-            Box::new(paint::State::new(self.assets, self.peer.unwrap(), self.image_file))
+            Box::new(paint::State::new(
+                self.assets,
+                self.config,
+                self.peer.unwrap(),
+                self.image_file,
+            ))
         } else {
             self
         }
