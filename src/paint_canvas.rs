@@ -453,39 +453,54 @@ impl PaintCanvas {
         }
     }
 
+    fn extract_chunk_origin_from_filename(path: &Path) -> Option<(i32, i32)> {
+        const ORG: &str = "!org";
+        let filename = path.file_stem()?.to_str()?;
+        let org_index = filename.rfind(ORG)?;
+        let chunk_position = &filename[org_index + ORG.len()..];
+        Self::parse_chunk_position(chunk_position).ok()
+    }
+
     fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
         use ::image::io::Reader as ImageReader;
 
         let image = ImageReader::open(path)?.decode()?.into_rgba8();
         eprintln!("image size: {:?}", image.dimensions());
-        let chunks_x = (image.width() as f32 / Chunk::SURFACE_SIZE.0 as f32).ceil() as i32;
-        let chunks_y = (image.height() as f32 / Chunk::SURFACE_SIZE.1 as f32).ceil() as i32;
+        let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
+        let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
         eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+        let (origin_x, origin_y) = Self::extract_chunk_origin_from_filename(path).unwrap_or((0, 0));
 
         for y in 0..chunks_y {
             for x in 0..chunks_x {
                 let chunk_position = (x, y);
-                self.ensure_chunk_exists(canvas, chunk_position);
-                let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+                let offset_chunk_position = (x - origin_x, y - origin_y);
+                // From the bottom of my heart, screw this stupid master-sub chunk system.
+                // I wish Skia wasn't so slow at rendering large amounts of surfaces.
+                let master_chunk = Chunk::master(offset_chunk_position);
+                let sub_chunk = Chunk::sub_position(Chunk::sub(offset_chunk_position));
+                self.ensure_chunk_exists(canvas, master_chunk);
+                let chunk = self.chunks.get_mut(&master_chunk).unwrap();
                 let pixel_position = (
-                    (Chunk::SURFACE_SIZE.0 as i32 * chunk_position.0) as u32,
-                    (Chunk::SURFACE_SIZE.1 as i32 * chunk_position.1) as u32,
+                    Chunk::SIZE.0 * chunk_position.0 as u32,
+                    Chunk::SIZE.1 * chunk_position.1 as u32,
                 );
-                eprintln!("plopping chunk at {:?}", pixel_position);
-                let right = (pixel_position.0 + Chunk::SURFACE_SIZE.0).min(image.width() - 1);
-                let bottom = (pixel_position.1 + Chunk::SURFACE_SIZE.1).min(image.height() - 1);
-                eprintln!("  to {:?}", (right, bottom));
+                eprintln!(
+                    "plopping chunk at {:?} (master {:?} sub {:?} pxp {:?})",
+                    offset_chunk_position, master_chunk, sub_chunk, pixel_position
+                );
+                let right = (pixel_position.0 + Chunk::SIZE.0).min(image.width() - 1);
+                let bottom = (pixel_position.1 + Chunk::SIZE.1).min(image.height() - 1);
                 let width = right - pixel_position.0;
                 let height = bottom - pixel_position.1;
-                let mut chunk_image =
-                    RgbaImage::from_pixel(Chunk::SURFACE_SIZE.0, Chunk::SURFACE_SIZE.1, Rgba([0, 0, 0, 0]));
+                let mut chunk_image = RgbaImage::from_pixel(Chunk::SIZE.0, Chunk::SIZE.1, Rgba([0, 0, 0, 0]));
                 let sub_image = image.view(pixel_position.0, pixel_position.1, width, height);
                 chunk_image.copy_from(&sub_image, 0, 0)?;
                 if Chunk::image_is_empty(&chunk_image) {
                     continue
                 }
                 chunk.non_empty_subs = [true; Chunk::SUB_COUNT];
-                chunk.upload_image(chunk_image, (0, 0));
+                chunk.upload_image(chunk_image, (sub_chunk.0 * Chunk::SIZE.0, sub_chunk.1 * Chunk::SIZE.1));
             }
         }
 
