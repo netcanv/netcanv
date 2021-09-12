@@ -15,10 +15,18 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Generate AppImages
-      run: cd resources ; ../contrib/generate.sh
-    - name: Upload AppImages as Artifact
+
+    - name: Compile application
+      run: cargo build --release
+    - name: Compile matchmaker
+      working-directory: netcanv-matchmaker
+      run: cargo build --release
+
+    - name: Build AppImages
+      run: bash build/appimages.sh
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v2.2.2
       with:
         name: AppImages
-        path: appimage/out/
+        path: appimages
