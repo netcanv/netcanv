@@ -227,7 +227,6 @@ impl State {
             self.ui
                 .push_group((self.ui.remaining_width(), 32.0), Layout::Horizontal);
             if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
-                self.save_config();
                 host_room!();
             }
             self.ui.space(8.0);
@@ -242,7 +241,6 @@ impl State {
                 {
                     Ok(Some(path)) => {
                         self.image_file = Some(path);
-                        self.save_config();
                         host_room!();
                     },
                     Err(error) => self.status = Status::from(error),
@@ -410,11 +408,13 @@ impl AppState for State {
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
         if self.connected {
+            let mut this = *self;
+            this.save_config();
             Box::new(paint::State::new(
-                self.assets,
-                self.config,
-                self.peer.unwrap(),
-                self.image_file,
+                this.assets,
+                this.config,
+                this.peer.unwrap(),
+                this.image_file,
             ))
         } else {
             self
