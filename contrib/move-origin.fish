@@ -5,7 +5,7 @@
 # Usage: move-origin.fish <path> <x> <y>
 # Moves a .netcanv canvas's origin to the provided coordinates.
 
-if [ count $argv -ne 3 ]
+if [ (count $argv) -ne 3 ]
   echo "usage: move-origin.fish <path> <x> <y>"
   exit 1
 end
@@ -20,14 +20,14 @@ mkdir "$work_dir" || exit 1
 
 function move-png -a png
   # Parse the position.
-  set -l raw_coordinates (basename $png .png)
-  set -l original_position (string split , $raw_coordinates)
+  set -l raw_coordinates (basename -- $png .png)
+  set -l original_position (string split , -- $raw_coordinates)
   set -l x $original_position[1]
   set -l y $original_position[2]
   # Offset the coordinates by the origin.
-  set -l new_x (math "$x" - "$origin_x")
-  set -l new_y (math "$y" - "$origin_y")
-  mv $png "$work_dir/$new_x,$new_y.png"
+  set -l new_x (math -- "$x" - "$origin_x")
+  set -l new_y (math -- "$y" - "$origin_y")
+  mv -- $png "$work_dir/$new_x,$new_y.png"
 end
 
 # Iterate over all PNG files in the folder, and start their move jobs.
@@ -41,5 +41,5 @@ wait
 mv $work_dir/*.png $path
 
 # Clean up.
-rm "$work_dir"
+rmdir "$work_dir"
 
