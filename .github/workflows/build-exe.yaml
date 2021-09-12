@@ -22,10 +22,13 @@ jobs:
       working-directory: netcanv-matchmaker
       run: cargo build --release
 
+    - name: Apply resources
+      run: bash build/windows-icons.sh
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: Windows executables
+        name: netcanv-nightly-windows
         path: |
           target/release/netcanv.exe
           target/release/netcanv-matchmaker.exe

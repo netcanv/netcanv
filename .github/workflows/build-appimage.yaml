@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Generate AppImages
-      run: cd appimage ; ./generate.sh
+      run: cd resources ; ../contrib/generate.sh
     - name: Upload AppImages as Artifact
       uses: actions/upload-artifact@v2.2.2
       with:
