@@ -38,14 +38,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     .build(&event_loop)?;
 
-    let mut config = UserConfig::load_or_create()?;
+    let config = UserConfig::load_or_create()?;
     let color_scheme = match config.ui.color_scheme {
         config::ColorScheme::Light => ColorScheme::light(),
         config::ColorScheme::Dark => ColorScheme::dark(),
     };
 
     #[cfg(target_family = "unix")]
-    window.set_wayland_theme(ColorScheme::light());
+    window.set_wayland_theme(color_scheme.clone());
 
     let window_size = get_window_extents(&window);
     let mut renderer = RendererBuilder::new().build(&window, window_size)?;
