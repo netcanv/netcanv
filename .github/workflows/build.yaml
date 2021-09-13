@@ -43,8 +43,8 @@ jobs:
       working-directory: netcanv-matchmaker
       run: cargo build --release
 
-    - name: Apply resources
-      run: bash build/windows-icons.sh
+    - name: Apply icons to executables
+      run: ./build/windows-icons.ps1
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
