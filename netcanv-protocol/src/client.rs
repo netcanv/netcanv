@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 // the version constant. increased by 100 every minor client version, and by 10000 every major
 // version. eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
 // if two versions' hundreds places differ, the versions are incompatible.
-pub const PROTOCOL_VERSION: u32 = 200;
+pub const PROTOCOL_VERSION: u32 = 300;
 
 pub fn versions_compatible(v1: u32, v2: u32) -> bool {
     v1 / 100 == v2 / 100
@@ -75,6 +75,11 @@ pub enum Packet {
 
     // response from the other peer with the chunks encoded as PNG images.
     Chunks(Vec<((i32, i32), Vec<u8>)>),
+    /* ---
+     * VERSION 0.3.0 (protocol 300)
+     * ---
+     * No changes in available packets, but chunks may now be sent in webp which makes hosts using
+     * this version incompatible with older clients. */
 }
 
 /// converts a float to a fixed-point 29.3
