@@ -59,6 +59,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'Release' && github.event.action == 'Created'
+    needs: [build-appimage, build-exe]
 
     steps:
     - name: Download all artifacts
