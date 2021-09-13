@@ -44,9 +44,8 @@ pub enum Packet {
     // response from the other clients with their nicknames
     HiThere(String),
 
-    // image data sent to a client by the host when it first joins
-    #[deprecated(since = "0.2.0", note = "use Chunks instead; will be removed in 0.3.0")]
-    CanvasData((i32, i32), Vec<u8>),
+    // reserved, formerly CanvasData
+    Reserved,
 
     //
     // painting

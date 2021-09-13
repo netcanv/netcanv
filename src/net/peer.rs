@@ -209,10 +209,7 @@ impl Peer {
                 }
                 return Some(Message::Stroke(points))
             },
-            #[allow(deprecated)] // remove when 0.3.0 is released
-            cl::Packet::CanvasData(chunk_position, png_data) =>
-                return Some(Message::Chunks(vec![(chunk_position, png_data)])),
-            //
+            cl::Packet::Reserved => (),
             // 0.2.0
             cl::Packet::Version(version) if !cl::compatible_with(version) =>
                 return Some(Message::Error("Client is too old.".into())),
@@ -320,12 +317,6 @@ impl Peer {
                     .collect(),
             ),
         )
-    }
-
-    #[allow(deprecated)]
-    #[deprecated(since = "0.2.0", note = "use send_chunks instead")]
-    pub fn send_canvas_data(&self, to: SocketAddr, chunk: (i32, i32), png_data: Vec<u8>) -> anyhow::Result<()> {
-        self.send(Some(to), cl::Packet::CanvasData(chunk, png_data))
     }
 
     pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
