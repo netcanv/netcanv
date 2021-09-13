@@ -63,7 +63,9 @@ impl Chunk {
         (Self::SIZE.0 * Self::SUB_CHUNKS.0) as u32,
         (Self::SIZE.1 * Self::SUB_CHUNKS.1) as u32,
     );
-    const WEBP_QUALITY: f32 = 0.9;
+    // Note to self in the future: the libwebp quality factor ranges from 0.0 to 100.0, not
+    // from 0.0 to 1.0.
+    const WEBP_QUALITY: f32 = 80.0;
 
     fn new(canvas: &mut Canvas) -> Self {
         let surface = match canvas.new_surface(&Self::image_info(Self::SURFACE_SIZE), None) {
