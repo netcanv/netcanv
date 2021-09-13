@@ -58,7 +58,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: github.event_name == "Release" && github.event.action == "Created"
+    if: github.event_name == 'Release' && github.event.action == 'Created'
 
     steps:
     - name: Download all artifacts
