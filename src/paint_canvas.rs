@@ -203,12 +203,18 @@ impl Chunk {
 
     fn network_data(&mut self, sub: usize) -> Option<&[u8]> {
         let png_data = self.png_data(sub)?;
-        if png_data.len() > Self::MAX_PNG_SIZE {
+        let png_size = png_data.len();
+        if png_size > Self::MAX_PNG_SIZE {
             eprintln!(
                 "  png data is larger than {} KiB, fetching webp data instead",
                 Self::MAX_PNG_SIZE / 1024
             );
-            self.webp_data(sub)
+            let webp_data = self.webp_data(sub)?;
+            eprintln!(
+                "  the webp data came out to be {}% the size of the png data",
+                (webp_data.len() as f32 / png_size as f32 * 100.0) as i32
+            );
+            Some(webp_data)
         } else {
             // Need to call the function here a second time because otherwise the borrow checker
             // gets mad.
