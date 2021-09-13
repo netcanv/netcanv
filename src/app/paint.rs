@@ -314,10 +314,15 @@ impl State {
             }
             // chunk downloading
             if self.save_to_file.is_some() {
-                if self.requested_chunks.len() < self.server_side_chunks.len() {
+                eprintln!(
+                    "downloaded {} / {} chunks",
+                    self.downloaded_chunks.len(),
+                    self.server_side_chunks.len()
+                );
+                if self.downloaded_chunks.len() < self.server_side_chunks.len() {
                     self.needed_chunks
                         .extend(self.server_side_chunks.difference(&self.requested_chunks));
-                } else if self.downloaded_chunks.len() == self.server_side_chunks.len() {
+                } else {
                     ok_or_log!(
                         self.log,
                         self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap()))
