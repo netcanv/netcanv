@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  release:
+    types: [created]
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,3 +55,17 @@ jobs:
         path: |
           target/release/netcanv.exe
           target/release/netcanv-matchmaker.exe
+
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == "Release" && github.event.action == "Created"
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v2
+
+    - name: Upload artifacts as release assets
+      uses: AButler/upload-release-assets@v2.0
+      with:
+        files: "netcanv-nightly-windows/*;netcanv-nightly-linux/*"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
