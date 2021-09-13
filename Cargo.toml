@@ -21,6 +21,7 @@ image = "0.23.14"
 native-dialog = "0.5.5"
 toml = "0.5.8"
 directories = "3.0.2"
+webp = { version = "0.2.0", features = ["img"] }
 
 netcanv-protocol = { path = "netcanv-protocol" }
 

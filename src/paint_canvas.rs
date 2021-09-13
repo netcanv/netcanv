@@ -4,10 +4,8 @@ use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use ::image::{
-    codecs::png::{PngDecoder, PngEncoder},
-    ColorType, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba, RgbaImage,
-};
+use ::image::codecs::png::{PngDecoder, PngEncoder};
+use ::image::{ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use skulpin::skia_safe as skia;
 use skulpin::skia_safe::*;
@@ -51,11 +49,13 @@ impl Brush {
 pub struct Chunk {
     surface: RefCell<Surface>,
     png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
+    webp_data: [Option<Vec<u8>>; Self::SUB_COUNT],
     non_empty_subs: [bool; Self::SUB_COUNT],
     saved_subs: [bool; Self::SUB_COUNT],
 }
 
 impl Chunk {
+    const MAX_PNG_SIZE: usize = 32 * 1024;
     pub const SIZE: (u32, u32) = (256, 256);
     const SUB_CHUNKS: (u32, u32) = (4, 4);
     const SUB_COUNT: usize = (Self::SUB_CHUNKS.0 * Self::SUB_CHUNKS.1) as usize;
@@ -63,6 +63,7 @@ impl Chunk {
         (Self::SIZE.0 * Self::SUB_CHUNKS.0) as u32,
         (Self::SIZE.1 * Self::SUB_CHUNKS.1) as u32,
     );
+    const WEBP_QUALITY: f32 = 0.9;
 
     fn new(canvas: &mut Canvas) -> Self {
         let surface = match canvas.new_surface(&Self::image_info(Self::SURFACE_SIZE), None) {
@@ -72,6 +73,7 @@ impl Chunk {
         Self {
             surface: RefCell::new(surface),
             png_data: Default::default(),
+            webp_data: Default::default(),
             non_empty_subs: [false; Self::SUB_COUNT],
             saved_subs: [false; Self::SUB_COUNT],
         }
@@ -176,6 +178,42 @@ impl Chunk {
         self.png_data[sub].as_deref()
     }
 
+    fn webp_data(&mut self, sub: usize) -> Option<&[u8]> {
+        if self.webp_data[sub].is_none() {
+            eprintln!("  webp data doesn't exist, encoding");
+            let chunk_image = self.download_image();
+            for sub in 0..Self::SUB_COUNT {
+                let (x, y) = Self::sub_screen_position(sub);
+                let sub_image = chunk_image.view(x, y, Self::SIZE.0, Self::SIZE.1).to_image();
+                if Self::image_is_empty(&sub_image) {
+                    self.non_empty_subs[sub] = false;
+                    continue
+                }
+                let image = DynamicImage::ImageRgba8(sub_image);
+                let encoder = webp::Encoder::from_image(&image).unwrap();
+                let bytes = encoder.encode(Self::WEBP_QUALITY);
+                self.webp_data[sub] = Some(bytes.to_owned());
+                self.non_empty_subs[sub] = true;
+            }
+        }
+        self.webp_data[sub].as_deref()
+    }
+
+    fn network_data(&mut self, sub: usize) -> Option<&[u8]> {
+        let png_data = self.png_data(sub)?;
+        if png_data.len() > Self::MAX_PNG_SIZE {
+            eprintln!(
+                "  png data is larger than {} KiB, fetching webp data instead",
+                Self::MAX_PNG_SIZE / 1024
+            );
+            self.webp_data(sub)
+        } else {
+            // Need to call the function here a second time because otherwise the borrow checker
+            // gets mad.
+            self.png_data(sub)
+        }
+    }
+
     fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
         let decoder = PngDecoder::new(Cursor::new(data))?;
         if decoder.color_type() != ColorType::Rgba8 {
@@ -198,6 +236,29 @@ impl Chunk {
             self.non_empty_subs[sub] = true;
         }
         Ok(())
+    }
+
+    fn decode_webp_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+        let image = match webp::Decoder::new(data).decode() {
+            Some(image) => image.to_image(),
+            None => anyhow::bail!("got non-webp image"),
+        }
+        .into_rgba8();
+        if !Self::image_is_empty(&image) {
+            self.upload_image(image, Self::sub_screen_position(sub));
+            self.webp_data[sub] = Some(Vec::from(data));
+            self.non_empty_subs[sub] = true;
+        }
+        Ok(())
+    }
+
+    fn decode_network_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+        // Try webp first.
+        if let Ok(()) = self.decode_webp_data(sub, data) {
+            Ok(())
+        } else {
+            self.decode_png_data(sub, data)
+        }
     }
 
     fn mark_dirty(&mut self, sub: usize) {
@@ -318,20 +379,21 @@ impl PaintCanvas {
         }
     }
 
-    pub fn png_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
-        eprintln!("fetching png data for {:?}", chunk_position);
+    pub fn network_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
+        eprintln!("fetching data for network transmission from chunk {:?}", chunk_position);
         self.chunks
             .get_mut(&Chunk::master(chunk_position))?
-            .png_data(Chunk::sub(chunk_position))
+            .network_data(Chunk::sub(chunk_position))
     }
 
-    pub fn decode_png_data(&mut self, canvas: &mut Canvas, to_chunk: (i32, i32), data: &[u8]) -> anyhow::Result<()> {
+    pub fn decode_network_data(&mut self, canvas: &mut Canvas, to_chunk: (i32, i32), data: &[u8]) -> anyhow::Result<()> {
         self.ensure_chunk_exists(canvas, Chunk::master(to_chunk));
         let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
-        chunk.decode_png_data(Chunk::sub(to_chunk), data)
+        chunk.decode_network_data(Chunk::sub(to_chunk), data)
     }
 
     fn save_as_png(&self, path: &Path) -> anyhow::Result<()> {
+        eprintln!("saving png {:?}", path);
         let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         for (chunk_position, _) in &self.chunks {
             left = left.min(chunk_position.0);

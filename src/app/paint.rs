@@ -162,7 +162,7 @@ impl State {
         chunk_position: (i32, i32),
         png_image: &[u8],
     ) {
-        ok_or_log!(log, paint_canvas.decode_png_data(canvas, chunk_position, png_image));
+        ok_or_log!(log, paint_canvas.decode_network_data(canvas, chunk_position, png_image));
     }
 
     fn process_log(&mut self, canvas: &mut Canvas) {
@@ -553,7 +553,7 @@ impl AppState for State {
                             .iter()
                             .filter_map(|position| {
                                 paint_canvas
-                                    .png_data(*position)
+                                    .network_data(*position)
                                     .map(|slice| (*position, Vec::from(slice)))
                             })
                             .collect();
