@@ -1,3 +1,5 @@
+//! NetCanv's bespoke immediate UI library.
+
 use std::cell::{Ref, RefMut};
 
 use skulpin::skia_safe::*;
@@ -16,6 +18,7 @@ pub use input::*;
 pub use slider::*;
 pub use textfield::*;
 
+/// Horizontal alignment.
 #[derive(Copy, Clone, Debug)]
 pub enum AlignH {
     Left,
@@ -23,6 +26,7 @@ pub enum AlignH {
     Right,
 }
 
+/// Vertical alignment.
 #[derive(Copy, Clone, Debug)]
 pub enum AlignV {
     Top,
@@ -30,8 +34,10 @@ pub enum AlignV {
     Bottom,
 }
 
+/// A tuple storing both horizontal and vertical alignment.
 pub type Alignment = (AlignH, AlignV);
 
+/// A group layout.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Layout {
     Freeform,
@@ -41,6 +47,7 @@ pub enum Layout {
     VerticalRev,
 }
 
+/// A group.
 struct Group {
     rect: Rect,
     layout: Layout,
@@ -50,50 +57,64 @@ struct Group {
     font_height_in_pixels: f32,
 }
 
+/// UI state.
 pub struct Ui {
     group_stack: Vec<Group>,
 }
 
 impl Ui {
+    /// Creates a new UI state.
     pub fn new() -> Self {
         Self {
             group_stack: Vec::new(),
         }
     }
 
+    /// Returns a reference the group on the very top of the stack.
     fn top(&self) -> &Group {
         self.group_stack.last().unwrap()
     }
 
+    /// Returns a mutable reference to the group on the very top of the stack.
     fn top_mut(&mut self) -> &mut Group {
         self.group_stack.last_mut().unwrap()
     }
 
+    /// Returns the size of the topmost group.
     pub fn size(&self) -> (f32, f32) {
         let Size { width, height } = self.top().rect.size();
         (width, height)
     }
 
+    /// Returns the width of the topmost group.
     pub fn width(&self) -> f32 {
         self.size().0
     }
 
+    /// Returns the height of the topmost group.
     pub fn height(&self) -> f32 {
         self.size().1
     }
 
+    /// Returns the "remaining width" in the group, that is, the maximum width of a group for it to
+    /// not overflow the current group's size.
     pub fn remaining_width(&self) -> f32 {
         self.size().0 - self.top().layout_position.x
     }
 
+    /// Returns the "remaining height" in the group, that is, the maximum height of a group for it
+    /// to not overflow the current group's size.
     pub fn remaining_height(&self) -> f32 {
         self.size().1 - self.top().layout_position.y
     }
 
+    /// Returns the "remaining size" of the group, as computed by `remaining_width` and
+    /// `remaining_height`.
     pub fn remaining_size(&self) -> (f32, f32) {
         (self.remaining_width(), self.remaining_height())
     }
 
+    /// Begins a UI frame.
     pub fn begin(&mut self, window_size: (f32, f32), layout: Layout) {
         self.group_stack.clear();
         let group = Group {
@@ -107,6 +128,7 @@ impl Ui {
         self.group_stack.push(group);
     }
 
+    /// Pushes a new group onto the stack.
     pub fn push_group(&mut self, size: (f32, f32), layout: Layout) {
         let top_rect = self.top().rect;
         let position = match self.top().layout {
@@ -127,6 +149,7 @@ impl Ui {
         self.group_stack.push(group);
     }
 
+    /// Pops the topmost group off of the stack.
     pub fn pop_group(&mut self) {
         let group = self.group_stack.pop().expect("unbalanced group stack");
         match self.top().layout {
@@ -146,6 +169,7 @@ impl Ui {
         }
     }
 
+    /// Aligns the current group's position inside of the parent group.
     pub fn align(&mut self, alignment: Alignment) {
         assert!(
             self.group_stack.len() >= 2,
@@ -169,6 +193,7 @@ impl Ui {
         child.rect.set_xywh(x, y, child.rect.width(), child.rect.height());
     }
 
+    /// Adds padding across the edges of the topmost group.
     pub fn pad(&mut self, padding: (f32, f32)) {
         self.top_mut().rect.left += padding.0 / 2.0;
         self.top_mut().rect.right -= padding.0 / 2.0;
@@ -176,6 +201,7 @@ impl Ui {
         self.top_mut().rect.bottom -= padding.1 / 2.0;
     }
 
+    /// Adds spacing between the last and next element in the group.
     pub fn space(&mut self, offset: f32) {
         match self.top().layout {
             Layout::Freeform => panic!("only Vertical and Horizontal layouts can be spaced"),
@@ -186,10 +212,12 @@ impl Ui {
         }
     }
 
+    /// Offsets placement of elements in the group.
     pub fn offset(&mut self, vector: impl Into<Vector>) {
         self.top_mut().layout_position.offset(vector.into());
     }
 
+    /// Shrinks the size of the topmost group to fit its children.
     pub fn fit(&mut self) {
         let (x, y) = (self.top().rect.left, self.top().rect.top);
         let (mut width, mut height) = self.size();
@@ -201,22 +229,14 @@ impl Ui {
         self.top_mut().rect.set_xywh(x, y, width, height);
     }
 
-    // for wallhackd and future use
-    #[allow(unused)]
-    pub fn set_absolute_position(&mut self, position: impl Into<Point>) {
-        let position = position.into();
-        let rect = self.top().rect;
-        self.top_mut()
-            .rect
-            .set_xywh(position.x, position.y, rect.width(), rect.height());
-    }
-
+    /// Fills the topmost group's area with the given color.
     pub fn fill(&self, canvas: &mut Canvas, color: impl Into<Color4f>) {
         let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(false);
         canvas.draw_rect(self.top().rect, &paint);
     }
 
+    /// Outlines the topmost group's area with the given color and stroke thickness.
     pub fn outline(&self, canvas: &mut Canvas, color: impl Into<Color4f>, thickness: f32) {
         let mut paint = Paint::new(color.into(), None);
         paint.set_anti_alias(false);
@@ -228,6 +248,7 @@ impl Ui {
         canvas.draw_rect(rect, &paint);
     }
 
+    /// Clips rendering in the canvas to the area of the topmost group.
     pub fn clip(&self, canvas: &mut Canvas) {
         canvas.clip_rect(self.top().rect, ClipOp::Intersect, false);
     }
@@ -240,10 +261,12 @@ impl Ui {
         (advance, self.top().font_height_in_pixels)
     }
 
+    /// Returns the font used by the current group.
     pub fn font(&self) -> Option<&RcFont> {
         self.top().font.as_ref()
     }
 
+    /// Returns the size of the font used by the current group.
     pub fn font_size(&self) -> f32 {
         self.top().font_size
     }
@@ -270,6 +293,7 @@ impl Ui {
         self.top_mut().font_height_in_pixels = metrics.cap_height.abs();
     }
 
+    /// Sets the font used by the current group.
     pub fn set_font(&mut self, new_font: RcFont) {
         self.top_mut().font = Some(new_font);
         if self.top().font_size > 0.0 {
@@ -277,6 +301,7 @@ impl Ui {
         }
     }
 
+    /// Sets the size of the font used by the current group.
     pub fn set_font_size(&mut self, new_font_size: f32) {
         assert!(new_font_size >= 0.0, "font size must be zero or positive");
         self.top_mut().font_size = new_font_size;
@@ -300,6 +325,7 @@ impl Ui {
         (Point::new(x, y), text_width)
     }
 
+    /// Draws text aligned inside of the group.
     pub fn text(&self, canvas: &mut Canvas, text: &str, color: impl Into<Color4f>, alignment: Alignment) -> f32 {
         assert!(self.top().font_size >= 0.0, "font size must be provided");
 
@@ -317,14 +343,24 @@ impl Ui {
         advance
     }
 
+    /// Returns the width and height of the given string, using the current font and font size.
     pub fn text_size(&self, text: &str) -> (f32, f32) {
         self.text_size_impl(text, &mut self.borrow_font_mut())
     }
 
+    /// Returns the position of where text would be drawn in the current group, given the provided
+    /// alignment.
     pub fn text_origin(&self, text: &str, alignment: Alignment) -> Point {
         self.text_origin_impl(text, alignment, &mut self.borrow_font_mut()).0
     }
 
+    /// Draws an icon inside the current group.
+    ///
+    /// This creates a new group, and so offsets placement of any elements after it.
+    ///
+    /// The `color` is used to tint the icon with a specific color.
+    ///
+    /// The `group_size`, if provided, can override the size of the group created to fit the icon.
     pub fn icon(
         &mut self,
         canvas: &mut Canvas,
@@ -351,6 +387,10 @@ impl Ui {
         self.pop_group();
     }
 
+    /// Draws lines of text.
+    ///
+    /// The lines of text create new groups, so this function offsets the element placement
+    /// position.
     pub fn paragraph(
         &mut self,
         canvas: &mut Canvas,
@@ -372,6 +412,8 @@ impl Ui {
         self.pop_group();
     }
 
+    /// Performs custom drawing on the canvas, with the transform matrix translated to the topmost
+    /// group's position.
     pub fn draw_on_canvas(&self, canvas: &mut Canvas, callback: impl FnOnce(&mut Canvas)) {
         let offset = Point::new(self.top().rect.left, self.top().rect.top);
         canvas.save();
@@ -380,10 +422,12 @@ impl Ui {
         canvas.restore();
     }
 
+    /// Returns the position of the mouse inside the current group.
     pub fn mouse_position(&self, input: &Input) -> Point {
         input.mouse_position() - self.top().rect.to_quad()[0]
     }
 
+    /// Returns whether the topmost group has the mouse cursor.
     pub fn has_mouse(&self, input: &Input) -> bool {
         let mouse = self.mouse_position(input);
         let Size { width, height } = self.top().rect.size();
@@ -391,21 +435,23 @@ impl Ui {
     }
 }
 
+/// A trait implemented by elements that can be (un)focused.
 pub trait Focus {
     fn focused(&self) -> bool;
     fn set_focus(&mut self, focused: bool);
 }
 
+/// Creates a _focus chain_, that is, a list of elements that can be `Tab`bed between.
 pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
     if input.key_just_typed(VirtualKeyCode::Tab) {
         let mut had_focus = false;
-        for text_field in fields.iter_mut() {
+        for element in fields.iter_mut() {
             if had_focus {
-                text_field.set_focus(true);
+                element.set_focus(true);
                 return
             }
-            if text_field.focused() {
-                text_field.set_focus(false);
+            if element.focused() {
+                element.set_focus(false);
                 had_focus = true;
             }
         }

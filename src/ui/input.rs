@@ -1,3 +1,5 @@
+//! Simplified input handling facility.
+
 use std::time::Instant;
 
 use skulpin::skia_safe::*;
@@ -8,6 +10,7 @@ use winit::event::{KeyboardInput, WindowEvent};
 const MOUSE_BUTTON_COUNT: usize = 8;
 const KEY_CODE_COUNT: usize = 256;
 
+/// Input state.
 pub struct Input {
     // mouse input
     mouse_position: Point,
@@ -28,6 +31,7 @@ pub struct Input {
 }
 
 impl Input {
+    /// Creates a new input state.
     pub fn new() -> Self {
         Self {
             mouse_position: Point::new(0.0, 0.0),
@@ -43,18 +47,22 @@ impl Input {
         }
     }
 
+    /// Returns the position of the mouse.
     pub fn mouse_position(&self) -> Point {
         self.mouse_position
     }
 
+    /// Returns the position of the mouse, as it was on the previous frame.
     pub fn previous_mouse_position(&self) -> Point {
         self.previous_mouse_position
     }
 
+    /// Returns the mouse's scroll delta.
     pub fn mouse_scroll(&self) -> Vector {
         self.mouse_scroll
     }
 
+    /// Returns whether the given mouse button is being held down.
     pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
             return false
@@ -66,6 +74,7 @@ impl Input {
         }
     }
 
+    /// Returns whether the given mouse button has just been clicked.
     pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
             return false
@@ -77,6 +86,7 @@ impl Input {
         }
     }
 
+    /// Returns whether the given mouse button has just been released.
     pub fn mouse_button_just_released(&self, button: MouseButton) -> bool {
         if self.mouse_buttons_locked {
             return false
@@ -88,18 +98,24 @@ impl Input {
         }
     }
 
+    /// Locks interaction with mouse buttons. Any calls to `mouse_button_is_down`,
+    /// `mouse_button_just_pressed`, and `mouse_button_just_released` will return false until
+    /// `unlock_mouse_buttons` is called.
     pub fn lock_mouse_buttons(&mut self) {
         self.mouse_buttons_locked = true;
     }
 
+    /// Unlocks mouse button interaction.
     pub fn unlock_mouse_buttons(&mut self) {
         self.mouse_buttons_locked = false;
     }
 
+    /// Returns the characters that were typed during this frame.
     pub fn characters_typed(&self) -> &[char] {
         &self.char_buffer
     }
 
+    /// Returns whether the provided key was just typed.
     pub fn key_just_typed(&self, key: VirtualKeyCode) -> bool {
         if let Some(i) = Self::key_index(key) {
             self.key_just_typed[i]
@@ -108,11 +124,13 @@ impl Input {
         }
     }
 
+    /// Returns the time elapsed since this `Input` was created, in seconds.
     pub fn time_in_seconds(&self) -> f32 {
         let now = self.time_origin.elapsed();
         now.as_millis() as f32 / 1_000.0
     }
 
+    /// Processes a `WindowEvent`.
     pub fn process_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
@@ -146,6 +164,9 @@ impl Input {
         }
     }
 
+    /// Finishes an input frame. This resets pressed/released states, resets the previous mouse
+    /// position, scroll delta, among other things, so this must be called at the end of each
+    /// frame.
     pub fn finish_frame(&mut self) {
         for state in &mut self.mouse_button_just_pressed {
             *state = false;
@@ -161,6 +182,8 @@ impl Input {
         self.char_buffer.clear();
     }
 
+    /// Returns the numeric index of the mouse given button, or `None` if the mouse button is not
+    /// supported.
     fn mouse_button_index(button: MouseButton) -> Option<usize> {
         let i: usize = match button {
             MouseButton::Left => 0,
@@ -176,6 +199,7 @@ impl Input {
         }
     }
 
+    /// Processes a mouse input event.
     fn process_mouse_input(&mut self, button: MouseButton, state: ElementState) {
         if let Some(i) = Self::mouse_button_index(button) {
             match state {
@@ -191,6 +215,7 @@ impl Input {
         }
     }
 
+    /// Returns the numeric index of the key code, or `None` if the key code is not supported.
     fn key_index(key: VirtualKeyCode) -> Option<usize> {
         let i = key as usize;
         if i < KEY_CODE_COUNT {
@@ -200,6 +225,7 @@ impl Input {
         }
     }
 
+    /// Processes a keyboard input event.
     fn process_keyboard_input(&mut self, key: VirtualKeyCode, state: ElementState) {
         if let Some(i) = Self::key_index(key) {
             if state == ElementState::Pressed {

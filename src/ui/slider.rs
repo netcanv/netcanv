@@ -1,14 +1,20 @@
+//! A slider control.
+
 use skulpin::app::MouseButton;
 use skulpin::skia_safe::*;
 
 use crate::ui::*;
 use crate::util::quantize;
 
+/// The step of a slider.
 pub enum SliderStep {
+    /// Smooth step - the slider can have any value.
     Smooth,
+    /// Discrete step - the slider can only have values that are multiples of the given `f32`.
     Discrete(f32),
 }
 
+/// The state of a slider.
 pub struct Slider {
     value: f32,
     min: f32,
@@ -17,6 +23,7 @@ pub struct Slider {
     sliding: bool,
 }
 
+/// Slider processing arguments.
 #[derive(Clone, Copy)]
 pub struct SliderArgs {
     pub width: f32,
@@ -24,6 +31,7 @@ pub struct SliderArgs {
 }
 
 impl Slider {
+    /// Creates a new slider state.
     pub fn new(value: f32, min: f32, max: f32, step: SliderStep) -> Self {
         Self {
             value: (value - min) / (max - min),
@@ -34,6 +42,7 @@ impl Slider {
         }
     }
 
+    /// Returns the number of steps on the slider, if it's discrete. Panics otherwise.
     fn step_count(&self) -> u32 {
         if let SliderStep::Discrete(step) = self.step {
             ((self.max - self.min) / step) as u32
@@ -42,6 +51,7 @@ impl Slider {
         }
     }
 
+    /// Processes a slider.
     pub fn process(&mut self, ui: &mut Ui, canvas: &mut Canvas, input: &Input, SliderArgs { width, color }: SliderArgs) {
         ui.push_group((width, ui.height()), Layout::Freeform);
 
@@ -90,6 +100,7 @@ impl Slider {
         ui.pop_group();
     }
 
+    /// Returns the slider's value.
     pub fn value(&self) -> f32 {
         let raw = (self.value * (self.max - self.min)) + self.min;
         match self.step {

@@ -1,16 +1,21 @@
+//! Expand widgets group elements together and form what's called an "accordion".
+
 use skulpin::skia_safe::*;
 
 use crate::ui::*;
 
+/// An Expand's state.
 pub struct Expand {
     expanded: bool,
 }
 
+/// The icons to use for the expanded and shrinked state.
 pub struct ExpandIcons {
     pub expand: Image,
     pub shrink: Image,
 }
 
+/// The color scheme of an Expand.
 #[derive(Clone)]
 pub struct ExpandColors {
     pub text: Color,
@@ -19,6 +24,7 @@ pub struct ExpandColors {
     pub pressed: Color,
 }
 
+/// Processing arguments for an Expand.
 #[derive(Clone, Copy)]
 pub struct ExpandArgs<'a, 'b, 'c> {
     pub label: &'a str,
@@ -27,16 +33,19 @@ pub struct ExpandArgs<'a, 'b, 'c> {
     pub colors: &'c ExpandColors,
 }
 
+/// The result result of processing an `Expand`.
 pub struct ExpandProcessResult {
     expanded: bool,
     just_clicked: bool,
 }
 
 impl Expand {
+    /// Creates a new Expand.
     pub fn new(expanded: bool) -> Self {
         Self { expanded }
     }
 
+    /// Processes an Expand.
     #[must_use]
     pub fn process(
         &mut self,
@@ -99,6 +108,8 @@ impl Expand {
 }
 
 impl ExpandProcessResult {
+    /// Shrinks the other Expand if the Expand this `ExpandProcessResult` is a result of was just
+    /// expanded.
     pub fn mutually_exclude(self, other: &mut Expand) -> Self {
         if self.expanded && self.just_clicked {
             other.expanded = false;
@@ -106,6 +117,7 @@ impl ExpandProcessResult {
         self
     }
 
+    /// Returns whether the Expand is expanded.
     pub fn expanded(self) -> bool {
         self.expanded
     }

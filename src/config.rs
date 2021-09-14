@@ -5,23 +5,27 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+/// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
 pub struct LobbyConfig {
     pub nickname: String,
     pub matchmaker: String,
 }
 
+/// The color scheme variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ColorScheme {
     Light,
     Dark,
 }
 
+/// UI-related configuration options.
 #[derive(Deserialize, Serialize)]
 pub struct UiConfig {
     pub color_scheme: ColorScheme,
 }
 
+/// A user `config.toml` file.
 #[derive(Deserialize, Serialize)]
 pub struct UserConfig {
     pub lobby: LobbyConfig,
@@ -29,15 +33,21 @@ pub struct UserConfig {
 }
 
 impl UserConfig {
+    /// Returns the platform-specific configuration directory.
     pub fn config_dir() -> PathBuf {
         let project_dirs = ProjectDirs::from("", "", "NetCanv").expect("cannot determine config directories");
         project_dirs.config_dir().to_owned()
     }
 
+    /// Returns the path to the `config.toml` file.
     pub fn path() -> PathBuf {
         Self::config_dir().join("config.toml")
     }
 
+    /// Loads the `config.toml` file.
+    ///
+    /// If the `config.toml` doesn't exist, it's created with values inherited from
+    /// `UserConfig::default`.
     pub fn load_or_create() -> anyhow::Result<Self> {
         let config_dir = Self::config_dir();
         let config_file = Self::path();
@@ -60,6 +70,7 @@ impl UserConfig {
         }
     }
 
+    /// Saves the user configuration to the `config.toml` file.
     pub fn save(&self) -> anyhow::Result<()> {
         // Assumes that `config_dir` was already created in `load_or_create`.
         let config_file = Self::path();

@@ -1,4 +1,4 @@
-// socket abstraction.
+//! An abstraction for sockets.
 
 use std::fmt::Display;
 use std::io::{BufReader, BufWriter, Write};
@@ -10,12 +10,14 @@ use serde::{de::DeserializeOwned, Serialize};
 struct Finished<T: Display + Send>(Option<T>);
 struct Abort;
 
+/// A thread that can be signalled to stop execution.
 struct ControllableThread<T: Display + Send> {
     finished: Receiver<Finished<T>>,
     abort: Sender<Abort>,
 }
 
 impl<T: Display + Send + 'static> ControllableThread<T> {
+    /// Creates a new controllable thread.
     fn new<F>(name: &'static str, f: F) -> Self
     where
         F: FnOnce(Receiver<Abort>) -> Result<(), T> + Send + 'static,
@@ -39,6 +41,7 @@ impl<T: Display + Send + 'static> ControllableThread<T> {
         }
     }
 
+    /// Ticks the controllable thread's channels.
     fn tick(&self) -> Result<bool, T> {
         match self.finished.try_recv() {
             Ok(Finished(result)) => match result {
@@ -50,12 +53,13 @@ impl<T: Display + Send + 'static> ControllableThread<T> {
         }
     }
 
+    /// Sends a quit request to the thread.
     fn abort(&self) {
         let _ = self.abort.send(Abort);
     }
 }
 
-// P is the packet type
+/// A remote server that exchanges packets of the provided type.
 pub struct Remote<P: Serialize + DeserializeOwned + Send + 'static> {
     rx: Receiver<P>,
     tx: Sender<P>,
@@ -64,6 +68,7 @@ pub struct Remote<P: Serialize + DeserializeOwned + Send + 'static> {
 }
 
 impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote<P> {
+    /// Establishes connection to a server.
     pub fn new(addr: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_nodelay(true)?;
@@ -114,6 +119,7 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         })
     }
 
+    /// Sends the given packet to the server.
     pub fn send(&self, packet: P) -> anyhow::Result<()> {
         if self.tx.send(packet).is_err() {
             anyhow::bail!("Couldn't send packet over to the network thread")
@@ -122,10 +128,13 @@ impl<P: Serialize + DeserializeOwned + Send + core::fmt::Debug + 'static> Remote
         }
     }
 
+    /// Tries to receive a packet from the server. Returns `Some(packet)` if there was a packet
+    /// available, or `None` if no packets were ready.
     pub fn try_recv(&self) -> Option<P> {
         self.rx.try_recv().ok()
     }
 
+    /// Ticks the server.
     pub fn tick(&self) -> anyhow::Result<bool> {
         self.send.tick().and(self.recv.tick())
     }

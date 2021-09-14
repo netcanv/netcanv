@@ -1,5 +1,4 @@
 use std::collections::{HashSet, VecDeque};
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -16,6 +15,10 @@ use crate::ui::*;
 use crate::util::*;
 use crate::viewport::Viewport;
 
+/// The current mode of painting.
+///
+/// This is either `Paint` or `Erase` when the mouse buttons are held, and `None` when it's
+/// released.
 #[derive(PartialEq, Eq)]
 enum PaintMode {
     None,
@@ -23,14 +26,21 @@ enum PaintMode {
     Erase,
 }
 
+/// A log message in the lower left corner.
+///
+/// These are used for displaying errors and joined/left messages.
 type Log = Vec<(String, Instant)>;
 
+/// A small tip in the upper left corner.
+///
+/// These are used for displaying the panning and zoom level.
 struct Tip {
     text: String,
     created: Instant,
     visible_duration: Duration,
 }
 
+/// The paint app state.
 pub struct State {
     assets: Assets,
     config: UserConfig,
@@ -63,6 +73,7 @@ pub struct State {
     viewport: Viewport,
 }
 
+/// The palette of colors at the bottom of the screen.
 const COLOR_PALETTE: &'static [u32] = &[
     0x100820ff, 0xff003eff, 0xff7b00ff, 0xffff00ff, 0x2dd70eff, 0x03cbfbff, 0x0868ebff, 0xa315d7ff, 0xffffffff,
 ];
@@ -83,11 +94,14 @@ macro_rules! ok_or_log {
 }
 
 impl State {
-    // TODO: config
+    /// The interval of automatic saving.
     const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
+    /// The height of the bottom bar.
     const BAR_SIZE: f32 = 32.0;
+    /// The network communication tick interval.
     pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
+    /// Creates a new paint state.
     pub fn new(assets: Assets, config: UserConfig, peer: Peer, image_path: Option<PathBuf>) -> Self {
         let mut this = Self {
             assets,
@@ -134,6 +148,7 @@ impl State {
         this
     }
 
+    /// Shows a tip in the upper left corner.
     fn show_tip(&mut self, text: &str, duration: Duration) {
         self.tip = Tip {
             text: text.into(),
@@ -142,6 +157,7 @@ impl State {
         };
     }
 
+    /// Performs a fellow peer's stroke on the canvas.
     fn fellow_stroke(canvas: &mut Canvas, paint_canvas: &mut PaintCanvas, points: &[StrokePoint]) {
         if points.is_empty() {
             return
@@ -155,16 +171,21 @@ impl State {
         }
     }
 
+    /// Decodes canvas data to the given chunk.
     fn canvas_data(
         log: &mut Log,
         canvas: &mut Canvas,
         paint_canvas: &mut PaintCanvas,
         chunk_position: (i32, i32),
-        png_image: &[u8],
+        image_file: &[u8],
     ) {
-        ok_or_log!(log, paint_canvas.decode_network_data(canvas, chunk_position, png_image));
+        ok_or_log!(
+            log,
+            paint_canvas.decode_network_data(canvas, chunk_position, image_file)
+        );
     }
 
+    /// Processes the message log.
     fn process_log(&mut self, canvas: &mut Canvas) {
         self.log
             .retain(|(_, time_created)| time_created.elapsed() < Duration::from_secs(5));
@@ -179,16 +200,17 @@ impl State {
         });
     }
 
+    /// Processes the paint canvas.
     fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
         self.ui
             .push_group((self.ui.width(), self.ui.height() - Self::BAR_SIZE), Layout::Freeform);
         let canvas_size = self.ui.size();
 
         //
-        // input
+        // Input
         //
 
-        // drawing
+        // Drawing
 
         if self.ui.has_mouse(input) {
             if input.mouse_button_just_pressed(MouseButton::Left) {
@@ -208,7 +230,7 @@ impl State {
         let mouse_position = input.mouse_position();
         let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
         loop {
-            // give me back my labelled blocks
+            // Give me back my labelled blocks.
             let brush = match self.paint_mode {
                 PaintMode::None => break,
                 PaintMode::Paint => Brush::Draw {
@@ -231,7 +253,7 @@ impl State {
             break
         }
 
-        // panning and zooming
+        // Panning and zooming
 
         if self.ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
             self.panning = true;
@@ -253,7 +275,7 @@ impl State {
         }
 
         //
-        // rendering
+        // Rendering
         //
 
         let paint_canvas = &self.paint_canvas;
@@ -301,18 +323,18 @@ impl State {
         self.ui.pop_group();
 
         //
-        // networking
+        // Networking
         //
 
         for _ in self.update_timer.tick() {
-            // mouse / drawing
+            // Mouse / drawing
             if input.previous_mouse_position() != input.mouse_position() {
                 ok_or_log!(self.log, self.peer.send_cursor(to, brush_size));
             }
             if !self.stroke_buffer.is_empty() {
                 ok_or_log!(self.log, self.peer.send_stroke(self.stroke_buffer.drain(..)));
             }
-            // chunk downloading
+            // Chunk downloading
             if self.save_to_file.is_some() {
                 eprintln!(
                     "downloaded {} / {} chunks",
@@ -342,6 +364,7 @@ impl State {
         }
     }
 
+    /// Processes the bottom bar.
     fn process_bar(&mut self, canvas: &mut Canvas, input: &mut Input) {
         if self.paint_mode != PaintMode::None {
             input.lock_mouse_buttons();
@@ -352,7 +375,7 @@ impl State {
         self.ui.fill(canvas, self.assets.colors.panel);
         self.ui.pad((16.0, 0.0));
 
-        // palette
+        // Color palette
 
         for hex_color in COLOR_PALETTE {
             let color = hex_color4f(*hex_color);
@@ -377,7 +400,7 @@ impl State {
         }
         self.ui.space(16.0);
 
-        // brush size
+        // Brush size
 
         self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
         self.ui.text(
@@ -408,15 +431,14 @@ impl State {
         self.ui.pop_group();
 
         //
-        // right side
+        // Right side
         //
 
-        // room ID
+        // Room ID display
 
+        // Note that elements in HorizontalRev go from right to left rather than left to right.
         self.ui
             .push_group((self.ui.remaining_width(), self.ui.height()), Layout::HorizontalRev);
-        // note that the elements go from right to left
-        // the save button
         if Button::with_icon(
             &mut self.ui,
             canvas,
@@ -443,7 +465,7 @@ impl State {
             }
         }
         if self.peer.is_host() {
-            // the room ID itself
+            // The room ID itself
             let id_text = format!("{:04}", self.peer.room_id().unwrap());
             self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
             self.ui.set_font(self.assets.sans_bold.clone());
@@ -484,7 +506,7 @@ impl AppState for State {
     ) {
         canvas.clear(Color::WHITE);
 
-        // loading from file
+        // Loading from file
 
         if self.load_from_file.is_some() {
             ok_or_log!(
@@ -493,7 +515,7 @@ impl AppState for State {
             );
         }
 
-        // autosaving
+        // Autosaving
 
         if self.paint_canvas.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL {
             eprintln!("autosaving chunks");
@@ -502,7 +524,7 @@ impl AppState for State {
             self.last_autosave = Instant::now();
         }
 
-        // network
+        // Network
 
         match self.peer.tick() {
             Ok(messages) =>
@@ -586,10 +608,10 @@ impl AppState for State {
         self.ui.set_font(self.assets.sans.clone());
         self.ui.set_font_size(14.0);
 
-        // canvas
+        // Paint canvas
         self.process_canvas(canvas, input);
 
-        // bar
+        // Bar
         self.process_bar(canvas, input);
     }
 

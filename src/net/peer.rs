@@ -1,6 +1,3 @@
-// use std::net::{SocketAddr, ToSocketAddrs, TcpStream};
-// use std::thread;
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
@@ -13,45 +10,44 @@ use crate::net::socket::Remote;
 use crate::paint_canvas::{Brush, StrokePoint};
 use crate::util;
 
+/// A message sent between the peer and the current app state.
 #[derive(Debug)]
 pub enum Message {
     //
-    // general
-    //
-
-    // return to the lobby with an error message
+    // General
+    // -------
+    /// Return to the lobby with an error message.
     Error(String),
 
     //
-    // connection
-    //
-
-    // created a room or connected to the host
+    // Connection
+    // ----------
+    /// The connection to the matchmaker was successfully established.
     Connected,
 
     //
-    // painting
-    //
-
-    // someone has joined, maybe send them all chunk positions
+    // Painting
+    // --------
+    /// Someone has joined the room, and needs chunk positions.
     Joined(String, Option<SocketAddr>),
 
-    // someone has left
+    /// Someone left the room.
     Left(String),
 
-    // stroke packet received
+    /// Someone sent a stroke packet.
     Stroke(Vec<StrokePoint>),
 
-    // ChunkPositions packet received
+    /// The host sent the chunk positions packet.
     ChunkPositions(Vec<(i32, i32)>),
 
-    // GetChunks packet received
+    /// The host received a GetChunks packet.
     GetChunks(SocketAddr, Vec<(i32, i32)>),
 
-    // a Chunks-compatible packet received
+    /// The client received a Chunks packet.
     Chunks(Vec<((i32, i32), Vec<u8>)>),
 }
 
+/// Another person in the same room.
 pub struct Mate {
     pub cursor: Point,
     pub cursor_prev: Point,
@@ -60,6 +56,7 @@ pub struct Mate {
     pub brush_size: f32,
 }
 
+/// A connection to the matchmaker.
 pub struct Peer {
     matchmaker: Option<Remote<mm::Packet>>,
     is_self: bool,
@@ -71,6 +68,7 @@ pub struct Peer {
     host: Option<SocketAddr>,
 }
 
+/// An iterator over a peer's messages.
 pub struct Messages<'a> {
     peer: &'a mut Peer,
 }
@@ -88,6 +86,7 @@ macro_rules! try_or_message {
 }
 
 impl Peer {
+    /// Host a new room on the given matchmaker.
     pub fn host(nickname: &str, matchmaker_addr: &str) -> anyhow::Result<Self> {
         let mm = Remote::new(matchmaker_addr)?;
         mm.send(mm::Packet::Host)?;
@@ -104,6 +103,7 @@ impl Peer {
         })
     }
 
+    /// Join an existing room on the given matchmaker.
     pub fn join(nickname: &str, matchmaker_addr: &str, room_id: u32) -> anyhow::Result<Self> {
         let mm = Remote::new(matchmaker_addr)?;
         mm.send(mm::Packet::GetHost(room_id))?;
@@ -120,16 +120,18 @@ impl Peer {
         })
     }
 
-    // is_relayed is an output variable to appease the borrow checker. can't borrow &mut self because of
-    // the literal first borrow in next_packet
+    // `is_relayed` is an output variable to appease the borrow checker. We can't borrow &mut self
+    // because of the literal first borrow in `next_packet`.
     fn connect_to_host(mm: &Remote<mm::Packet>, host_addr: SocketAddr, is_relayed: &mut bool) -> anyhow::Result<()> {
-        // for now we'll always relay packets because i don't think it's possible to do hole punching with
-        // rust's stdlib TcpStream
+        // For now we'll always relay packets, because I don't think it's possible to do hole punching with
+        // Rust's standard library TcpStream.
         mm.send(mm::Packet::RequestRelay(Some(host_addr)))?;
         *is_relayed = true;
         Ok(())
     }
 
+    /// Sends a client packet to the peer with the given address, or if no address is provided, to
+    /// everyone.
     fn send(&self, to: Option<SocketAddr>, packet: cl::Packet) -> anyhow::Result<()> {
         // TODO: no matchmaker relay
         self.matchmaker
@@ -139,6 +141,7 @@ impl Peer {
         Ok(())
     }
 
+    /// Adds another peer into the list of registered peers.
     fn add_mate(&mut self, addr: SocketAddr, nickname: String) {
         self.mates.insert(addr, Mate {
             cursor: Point::new(0.0, 0.0),
@@ -149,6 +152,7 @@ impl Peer {
         });
     }
 
+    /// Decodes a client packet.
     fn decode_payload(&mut self, sender_addr: SocketAddr, payload: &[u8]) -> Option<Message> {
         let packet = match bincode::deserialize::<cl::Packet>(payload) {
             Err(_) if self.is_host() => return None,
@@ -222,6 +226,8 @@ impl Peer {
         None
     }
 
+    /// Processes the next packet received from the matchmaker, and maybe returns a message
+    /// converted from to that packet.
     fn next_packet(&mut self) -> Option<Message> {
         enum Then {
             Continue,
@@ -250,7 +256,7 @@ impl Peer {
                                 .map_or(Message::Connected, |e| Message::Error(format!("{}", e))),
                         );
                     },
-                    mm::Packet::ClientAddress(addr) => (),
+                    mm::Packet::ClientAddress(_addr) => (),
                     mm::Packet::Relayed(_, payload) if payload.len() == 0 => then = Then::SayHello,
                     mm::Packet::Relayed(from, payload) => then = Then::ReadRelayed(*from, payload.to_vec()),
                     mm::Packet::Disconnected(addr) =>
@@ -274,6 +280,7 @@ impl Peer {
         message
     }
 
+    /// Ticks the peer, and returns an iterator over all of its messages.
     pub fn tick<'a>(&'a mut self) -> anyhow::Result<Messages<'a>> {
         if let Some(mm) = &self.matchmaker {
             let _ = mm.tick()?;
@@ -281,6 +288,7 @@ impl Peer {
         Ok(Messages { peer: self })
     }
 
+    /// Sends a cursor packet.
     pub fn send_cursor(&self, cursor: Point, brush_size: f32) -> anyhow::Result<()> {
         self.send(
             None,
@@ -292,6 +300,7 @@ impl Peer {
         )
     }
 
+    /// Sends a brush stroke packet.
     pub fn send_stroke(&self, iterator: impl Iterator<Item = StrokePoint>) -> anyhow::Result<()> {
         self.send(
             None,
@@ -319,29 +328,34 @@ impl Peer {
         )
     }
 
+    /// Sends a chunk positions packet.
     pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         self.send(Some(to), cl::Packet::ChunkPositions(positions))
     }
 
+    /// Requests chunk data from the host.
     pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         assert!(self.host.is_some(), "only non-hosts can download chunks");
         eprintln!("downloading {} chunks from the host", positions.len());
         self.send(self.host, cl::Packet::GetChunks(positions))
     }
 
+    /// Sends chunks to the given peer.
     pub fn send_chunks(&self, to: SocketAddr, chunks: Vec<((i32, i32), Vec<u8>)>) -> anyhow::Result<()> {
         self.send(Some(to), cl::Packet::Chunks(chunks))
     }
 
+    /// Returns whether this peer is the host.
     pub fn is_host(&self) -> bool {
         self.is_host
     }
 
-    // this will return None if we're not connected yet
+    /// Returns the ID of the room, or `None` if a connection hasn't been established.
     pub fn room_id(&self) -> Option<u32> {
         self.room_id
     }
 
+    /// Returns the list of peers connected to the same room.
     pub fn mates(&self) -> &HashMap<SocketAddr, Mate> {
         &self.mates
     }
@@ -356,6 +370,7 @@ impl Iterator for Messages<'_> {
 }
 
 impl Mate {
+    /// Returns the interpolated cursor position of this mate.
     pub fn lerp_cursor(&self) -> Point {
         use crate::app::paint::State;
         let elapsed_ms = self.last_cursor.elapsed().as_millis() as f32;

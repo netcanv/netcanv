@@ -1,3 +1,5 @@
+//! Handling of assets such as icons, fonts, etc.
+
 use skulpin::skia_safe::*;
 
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
@@ -14,6 +16,7 @@ const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 
+/// A color scheme.
 #[derive(Clone)]
 pub struct ColorScheme {
     pub text: Color,
@@ -31,20 +34,24 @@ pub struct ColorScheme {
     pub titlebar: TitlebarColors,
 }
 
+/// Icons for status messages.
 pub struct StatusIcons {
     pub info: Image,
     pub error: Image,
 }
 
+/// Icons for file operations.
 pub struct FileIcons {
     pub save: Image,
 }
 
+/// Icons for the color scheme switcher.
 pub struct ColorSwitcherIcons {
     pub dark: Image,
     pub light: Image,
 }
 
+/// Icons, rendered to images at startup.
 pub struct Icons {
     pub expand: ExpandIcons,
     pub status: StatusIcons,
@@ -52,17 +59,17 @@ pub struct Icons {
     pub color_switcher: ColorSwitcherIcons,
 }
 
+/// App assets. This constitutes fonts, color schemes, icons, and the like.
 pub struct Assets {
     pub sans: RcFont,
     pub sans_bold: RcFont,
 
     pub colors: ColorScheme,
     pub icons: Icons,
-
-    pub dark_mode: bool,
 }
 
 impl Assets {
+    /// Loads an icon from an SVG file.
     fn load_icon(data: &[u8]) -> Image {
         use usvg::{FitTo, NodeKind, Tree};
 
@@ -84,6 +91,7 @@ impl Assets {
         Image::from_raster_data(&image_info, Data::new_copy(pixmap.data()), stride).unwrap()
     }
 
+    /// Creates a new instance of Assets with the provided color scheme.
     pub fn new(colors: ColorScheme) -> Self {
         Self {
             sans: new_rc_font(SANS_TTF, 14.0),
@@ -106,13 +114,12 @@ impl Assets {
                     light: Self::load_icon(LIGHT_MODE_SVG),
                 },
             },
-
-            dark_mode: false,
         }
     }
 }
 
 impl ColorScheme {
+    /// Constructs and returns the light color scheme.
     pub fn light() -> Self {
         Self {
             text: Color::new(0xff000000),
@@ -159,6 +166,7 @@ impl ColorScheme {
         }
     }
 
+    /// Constructs and returns the dark color scheme.
     pub fn dark() -> Self {
         Self {
             text: Color::new(0xffb7b7b7),
@@ -206,6 +214,8 @@ impl ColorScheme {
     }
 }
 
+/// The title bar's color scheme. This only applies to title bars on Wayland, where the compositor
+/// does not always provide a server-side title bar.
 #[derive(Clone)]
 pub struct TitlebarColors {
     pub titlebar: Color,
@@ -231,7 +241,7 @@ fn winit_argb_from_skia_color(color: Color) -> ARGBColor {
 
 #[cfg(target_family = "unix")]
 impl Theme for ColorScheme {
-    fn element_color(&self, element: Element, window_active: bool) -> ARGBColor {
+    fn element_color(&self, element: Element, _window_active: bool) -> ARGBColor {
         match element {
             Element::Bar => winit_argb_from_skia_color(self.titlebar.titlebar),
             Element::Separator => winit_argb_from_skia_color(self.titlebar.separator),
