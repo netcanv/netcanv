@@ -28,6 +28,7 @@ bincode = "1.3.2"
 
 # Multithreading
 crossbeam-channel = "0.4.4"
+nysa = "0.1.0"
 
 # Utilities
 directories = "3.0.2"
