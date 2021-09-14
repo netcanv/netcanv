@@ -8,21 +8,32 @@ edition = "2018"
 members = ["netcanv-matchmaker", "netcanv-protocol"]
 
 [dependencies]
+
+# Common things
+anyhow = "1.0.40"
+
+# Windowing and graphics
 winit = "0.24.0"
 skulpin = { version = "0.14.0", features = ["skia-complete", "winit-app", "winit-24"] }
+native-dialog = "0.5.5"
+image = "0.23.14"
+webp = { version = "0.2.0", features = ["img"] }
 usvg = "0.14.0"
 resvg = "0.14.0"
 tiny-skia = "0.5.0"
+
+# Networking
 serde = { version = "1.0.123", features = ["derive"] }
 bincode = "1.3.2"
-crossbeam-channel = "0.4.4"
-anyhow = "1.0.40"
-image = "0.23.14"
-native-dialog = "0.5.5"
-toml = "0.5.8"
-directories = "3.0.2"
-webp = { version = "0.2.0", features = ["img"] }
 
+# Multithreading
+crossbeam-channel = "0.4.4"
+
+# Utilities
+directories = "3.0.2"
+toml = "0.5.8"
+
+# Workspace
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]
