@@ -154,6 +154,7 @@ impl ColorScheme {
                 text: Color::new(0xff000000),
                 text_hint: Color::new(0x7f000000),
                 label: Color::new(0xff000000),
+                selection: Color::new(0x7f000000)
             },
             titlebar: TitlebarColors {
                 titlebar: Color::new(0xffffffff),
@@ -201,6 +202,7 @@ impl ColorScheme {
                 text: Color::new(0xffd5d5d5),
                 text_hint: Color::new(0x7f939393),
                 label: Color::new(0xffd5d5d5),
+                selection: Color::new(0x7f939393)
             },
             titlebar: TitlebarColors {
                 titlebar: Color::new(0xff383838),

@@ -1,5 +1,7 @@
 //! A fairly simplistic text field implementation.
 
+use std::ops::Range;
+
 use skulpin::skia_safe::*;
 
 use crate::ui::*;
@@ -10,7 +12,9 @@ pub struct TextField {
     text_utf8: String,
     focused: bool,
     blink_start: f32,
+
     cursor_pos: usize,
+    selection_cursor_pos: usize,
 }
 
 /// A text field's color scheme.
@@ -22,6 +26,7 @@ pub struct TextFieldColors {
     pub text: Color,
     pub text_hint: Color,
     pub label: Color,
+    pub selection: Color,
 }
 
 /// Processing arguments for a text field.
@@ -49,7 +54,9 @@ impl TextField {
             text_utf8,
             focused: false,
             blink_start: 0.0,
+
             cursor_pos: length,
+            selection_cursor_pos: length,
         }
     }
 
@@ -120,6 +127,34 @@ impl TextField {
             });
         }
 
+        if self.cursor_pos != self.selection_cursor_pos {
+            ui.draw_on_canvas(canvas, |canvas| {
+                let mut paint = Paint::new(Color4f::from(colors.selection), None);
+                paint.set_anti_alias(true);
+
+                let pre_selection_text: String = self.text[..self.selection_cursor_pos].iter().collect();
+                let pre_sel_text_width = ui.borrow_font().measure_str(pre_selection_text, None).0;
+
+                let sel_text_width = if self.cursor_pos < self.selection_cursor_pos {
+                    let selection_text: String = self.text[self.cursor_pos..self.selection_cursor_pos].iter().collect();
+                    -(ui.borrow_font().measure_str(selection_text, None).0)
+                } else {
+                    let selection_text: String = self.text[self.selection_cursor_pos..self.cursor_pos].iter().collect();
+                    ui.borrow_font().measure_str(selection_text, None).0
+                };
+
+                let rrect = RRect::new_rect_xy(
+                    &Rect::from_point_and_size(
+                        (pre_sel_text_width.round(), (Self::height(ui) * 0.2).round()),
+                        (sel_text_width.round(), (Self::height(ui) * 0.7).round()),
+                    ),
+                    0.0,
+                    0.0,
+                );
+                canvas.draw_rrect(rrect, &paint);
+            });
+        }
+
         canvas.restore();
         ui.pop_group();
 
@@ -129,6 +164,11 @@ impl TextField {
         ui.pop_group();
     }
 
+    /// Get selection length
+    fn selection_length(&self) -> isize {
+        (self.cursor_pos as isize - self.selection_cursor_pos as isize).abs()
+    }
+
     /// Resets the text field's blink timer.
     fn reset_blink(&mut self, input: &Input) {
         self.blink_start = input.time_in_seconds();
@@ -136,17 +176,33 @@ impl TextField {
 
     /// Appends a character to the cursor position.
     fn append(&mut self, ch: char) {
-        self.text.insert(self.cursor_pos, ch);
+        if self.selection_length() != 0 {
+            if self.cursor_pos < self.selection_cursor_pos {
+                self.text.splice(self.cursor_pos..self.selection_cursor_pos, vec![ch]);
+                self.cursor_pos = self.selection_cursor_pos - self.selection_length() as usize;
+            } else {
+                self.text.splice(self.selection_cursor_pos..self.cursor_pos, vec![ch]);
+                self.cursor_pos = self.selection_cursor_pos;
+            }
 
-        self.cursor_pos += 1;
+            self.cursor_pos += 1;
+            self.selection_cursor_pos = self.cursor_pos;
+        } else {
+            self.text.insert(self.cursor_pos, ch);
+            self.cursor_pos += 1;
+            self.selection_cursor_pos += 1;
+        }
 
         self.update_utf8();
     }
 
     /// Removes a character at cursor position.
     fn backspace(&mut self) {
-        if self.cursor_pos > 0 {
+        if self.selection_length() != 0 {
+            self.delete();
+        } else if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
+            self.selection_cursor_pos -= 1;
             self.text.remove(self.cursor_pos);
         }
 
@@ -155,11 +211,60 @@ impl TextField {
 
     /// Removes character after cursor
     fn delete(&mut self) {
-        if self.text.len() > 0 {
-            self.text.remove(self.cursor_pos);
+        if self.selection_length() != 0 {
+            if self.cursor_pos < self.selection_cursor_pos {
+                self.text.drain(self.cursor_pos..self.selection_cursor_pos);
+                self.cursor_pos = self.selection_cursor_pos - self.selection_length() as usize;
+            } else {
+                self.text.drain(self.selection_cursor_pos..self.cursor_pos);
+                self.cursor_pos = self.selection_cursor_pos;
+            }
+
+            self.selection_cursor_pos = self.cursor_pos;
+        } else {
+            if self.text.len() > 0 {
+                self.text.remove(self.cursor_pos);
+            }
         }
 
         self.update_utf8();
+    }
+
+    fn key_ctrl_down(&self, input: &Input) -> bool {
+        input.key_down(VirtualKeyCode::LControl) || input.key_down(VirtualKeyCode::RControl)
+    }
+
+    fn key_shift_down(&self, input: &Input) -> bool {
+        input.key_down(VirtualKeyCode::LShift) || input.key_down(VirtualKeyCode::RShift)
+    }
+
+    fn handle_word_selection(&mut self, input: &Input, not_found_ws_value: usize, range: Range<usize>) {
+        let mut ix = self.text[range.clone()].len();
+        let mut found_ws = false;
+
+        for char in self.text[range].iter().rev() {
+            ix -= 1;
+
+            if char.is_whitespace() {
+                self.cursor_pos = ix + 1;
+
+                if !self.key_shift_down(input) {
+                    self.selection_cursor_pos = self.cursor_pos;
+                }
+
+                found_ws = true;
+
+                break
+            }
+        }
+
+        if !found_ws {
+            self.cursor_pos = not_found_ws_value;
+
+            if !self.key_shift_down(input) {
+                self.selection_cursor_pos = self.cursor_pos;
+            }
+        }
     }
 
     /// Processes input events.
@@ -178,14 +283,32 @@ impl TextField {
             if input.key_just_typed(VirtualKeyCode::Left) {
                 if self.cursor_pos != 0 {
                     self.reset_blink(input);
+
                     self.cursor_pos -= 1;
+                }
+
+                if !self.key_shift_down(input) {
+                    self.selection_cursor_pos = self.cursor_pos;
+                }
+
+                if self.key_ctrl_down(input) {
+                    self.handle_word_selection(input, 0, 0..self.cursor_pos);
                 }
             }
 
             if input.key_just_typed(VirtualKeyCode::Right) {
                 if self.cursor_pos < self.text.len() {
                     self.reset_blink(input);
+
                     self.cursor_pos += 1;
+                }
+
+                if !(input.key_down(VirtualKeyCode::LShift) || input.key_down(VirtualKeyCode::RShift)) {
+                    self.selection_cursor_pos = self.cursor_pos;
+                }
+
+                if self.key_ctrl_down(input) {
+                    self.handle_word_selection(input, self.text.len(), self.cursor_pos..self.text.len());
                 }
             }
 
@@ -196,12 +319,23 @@ impl TextField {
 
             if input.key_just_typed(VirtualKeyCode::Home) {
                 self.cursor_pos = 0;
+                self.selection_cursor_pos = self.cursor_pos;
+
                 self.reset_blink(input);
             }
 
             if input.key_just_typed(VirtualKeyCode::End) {
                 self.cursor_pos = self.text.len();
+                self.selection_cursor_pos = self.cursor_pos;
+
                 self.reset_blink(input);
+            }
+
+            if self.key_ctrl_down(input) {
+                if input.key_just_typed(VirtualKeyCode::A) {
+                    self.selection_cursor_pos = 0;
+                    self.cursor_pos = self.text.len();
+                }
             }
 
             for ch in input.characters_typed() {
