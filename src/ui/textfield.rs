@@ -10,6 +10,7 @@ pub struct TextField {
     text_utf8: String,
     focused: bool,
     blink_start: f32,
+    cursor_pos: usize,
 }
 
 /// A text field's color scheme.
@@ -41,11 +42,14 @@ impl TextField {
     /// Creates a new text field, with the optionally provided initial text.
     pub fn new(initial_text: Option<&str>) -> Self {
         let text_utf8: String = initial_text.unwrap_or("").into();
+        let length = text_utf8.len();
+
         Self {
             text: text_utf8.chars().collect(),
             text_utf8,
             focused: false,
             blink_start: 0.0,
+            cursor_pos: length,
         }
     }
 
@@ -69,7 +73,7 @@ impl TextField {
     ) {
         ui.push_group((width, Self::height(ui)), Layout::Freeform);
 
-        // rendering: box
+        // Rendering: box
         ui.draw_on_canvas(canvas, |canvas| {
             let mut paint = Paint::new(Color4f::from(colors.fill), None);
             paint.set_anti_alias(true);
@@ -85,16 +89,19 @@ impl TextField {
             canvas.draw_rrect(rrect, &paint);
         });
 
-        // rendering: text
+        // Rendering: text
         ui.push_group(ui.size(), Layout::Freeform);
         ui.pad((16.0, 0.0));
         canvas.save();
         ui.clip(canvas);
 
-        // render hint
+        // Rendering: hint
         if hint.is_some() && self.text.len() == 0 {
             ui.text(canvas, hint.unwrap(), colors.text_hint, (AlignH::Left, AlignV::Middle));
         }
+
+        ui.text(canvas, &self.text_utf8, colors.text, (AlignH::Left, AlignV::Middle));
+
         let text_advance = ui.text(canvas, &self.text_utf8, colors.text, (AlignH::Left, AlignV::Middle));
 
         if self.focused && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK {
@@ -102,7 +109,11 @@ impl TextField {
                 let mut paint = Paint::new(Color4f::from(colors.text), None);
                 paint.set_anti_alias(false);
                 paint.set_style(paint::Style::Stroke);
-                let x = text_advance + 1.0;
+
+                let curr_text: String = self.text[..self.cursor_pos].iter().collect();
+                let cursor_x = ui.borrow_font().measure_str(curr_text, None).0;
+
+                let x = cursor_x + 1.0;
                 let y1 = Self::height(ui) * 0.2;
                 let y2 = Self::height(ui) * 0.8;
                 canvas.draw_line((x, y1), (x, y2), &paint);
@@ -112,7 +123,7 @@ impl TextField {
         canvas.restore();
         ui.pop_group();
 
-        // process events
+        // Process events
         self.process_events(ui, input);
 
         ui.pop_group();
@@ -123,15 +134,31 @@ impl TextField {
         self.blink_start = input.time_in_seconds();
     }
 
-    /// Appends a character to the end of the text.
+    /// Appends a character to the cursor position.
     fn append(&mut self, ch: char) {
-        self.text.push(ch);
+        self.text.insert(self.cursor_pos, ch);
+
+        self.cursor_pos += 1;
+
         self.update_utf8();
     }
 
-    /// Removes a character from the end of the text.
+    /// Removes a character at cursor position.
     fn backspace(&mut self) {
-        self.text.pop();
+        if self.cursor_pos > 0 {
+            self.cursor_pos -= 1;
+            self.text.remove(self.cursor_pos);
+        }
+
+        self.update_utf8();
+    }
+
+    /// Removes character after cursor
+    fn delete(&mut self) {
+        if self.text.len() > 0 {
+            self.text.remove(self.cursor_pos);
+        }
+
         self.update_utf8();
     }
 
@@ -147,6 +174,36 @@ impl TextField {
             if !input.characters_typed().is_empty() {
                 self.reset_blink(input);
             }
+
+            if input.key_just_typed(VirtualKeyCode::Left) {
+                if self.cursor_pos != 0 {
+                    self.reset_blink(input);
+                    self.cursor_pos -= 1;
+                }
+            }
+
+            if input.key_just_typed(VirtualKeyCode::Right) {
+                if self.cursor_pos < self.text.len() {
+                    self.reset_blink(input);
+                    self.cursor_pos += 1;
+                }
+            }
+
+            if input.key_just_typed(VirtualKeyCode::Delete) {
+                self.delete();
+                self.reset_blink(input);
+            }
+
+            if input.key_just_typed(VirtualKeyCode::Home) {
+                self.cursor_pos = 0;
+                self.reset_blink(input);
+            }
+
+            if input.key_just_typed(VirtualKeyCode::End) {
+                self.cursor_pos = self.text.len();
+                self.reset_blink(input);
+            }
+
             for ch in input.characters_typed() {
                 match *ch {
                     _ if !ch.is_control() => self.append(*ch),
