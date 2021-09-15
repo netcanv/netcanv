@@ -1,7 +1,8 @@
 //! A fairly simplistic text field implementation.
 
-use std::ops::Range;
+use std::{borrow::BorrowMut, ops::Range};
 
+use copypasta::{ClipboardContext, ClipboardProvider};
 use skulpin::skia_safe::*;
 
 use crate::ui::*;
@@ -15,6 +16,8 @@ pub struct TextField {
 
     cursor_pos: usize,
     selection_cursor_pos: usize,
+
+    clipboad_context: ClipboardContext,
 }
 
 /// A text field's color scheme.
@@ -57,6 +60,8 @@ impl TextField {
 
             cursor_pos: length,
             selection_cursor_pos: length,
+
+            clipboad_context: ClipboardContext::new().unwrap(),
         }
     }
 
@@ -167,6 +172,28 @@ impl TextField {
     /// Get selection length
     fn selection_length(&self) -> isize {
         (self.cursor_pos as isize - self.selection_cursor_pos as isize).abs()
+    }
+
+    // Get selection content
+    fn selection_text(&self) -> String {
+        if self.selection_length() == 0 {
+            return String::new()
+        }
+
+        if self.cursor_pos < self.selection_cursor_pos {
+            self.text[self.cursor_pos..self.selection_cursor_pos].iter().collect()
+        } else {
+            self.text[self.selection_cursor_pos..self.cursor_pos].iter().collect()
+        }
+    }
+
+    // Set text
+    fn set_text(&mut self, text: String) {
+        self.text = text.chars().collect();
+        self.update_utf8();
+
+        self.cursor_pos = self.text.len();
+        self.selection_cursor_pos = self.cursor_pos;
     }
 
     /// Resets the text field's blink timer.
@@ -335,6 +362,33 @@ impl TextField {
                 if input.key_just_typed(VirtualKeyCode::A) {
                     self.selection_cursor_pos = 0;
                     self.cursor_pos = self.text.len();
+                }
+
+                if input.key_just_typed(VirtualKeyCode::C) {
+                    self.clipboad_context.set_contents(self.selection_text()).unwrap();
+                }
+
+                if input.key_just_typed(VirtualKeyCode::V) {
+                    let content = self.clipboad_context.get_contents();
+
+                    if content.is_ok() {
+                        if self.selection_length() > 0 {
+                            let mut new_text: String = self.text.iter().collect();
+                            new_text = new_text.replace(self.selection_text().as_str(), content.unwrap().as_str());
+
+                            self.set_text(new_text);
+                        } else {
+                            let mut new_text: String = self.text.iter().collect();
+                            new_text.push_str(content.unwrap().as_str());
+
+                            self.set_text(new_text);
+                        }
+                    }
+                }
+
+                if input.key_just_typed(VirtualKeyCode::X) {
+                    self.clipboad_context.set_contents(self.selection_text()).unwrap();
+                    self.set_text("".to_owned());
                 }
             }
 
