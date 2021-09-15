@@ -26,7 +26,7 @@ pub struct Input {
     char_buffer: Vec<char>,
 
     key_just_typed: [bool; KEY_CODE_COUNT],
-    key_down: [bool; KEY_CODE_COUNT],
+    key_is_down: [bool; KEY_CODE_COUNT],
 
     // time
     time_origin: Instant,
@@ -47,7 +47,7 @@ impl Input {
 
             char_buffer: Vec::new(),
             key_just_typed: [false; KEY_CODE_COUNT],
-            key_down: [false; KEY_CODE_COUNT],
+            key_is_down: [false; KEY_CODE_COUNT],
 
             time_origin: Instant::now(),
         }
@@ -131,9 +131,9 @@ impl Input {
     }
 
     /// Returns wheter the provided key is down
-    pub fn key_down(&self, key: VirtualKeyCode) -> bool {
+    pub fn key_is_down(&self, key: VirtualKeyCode) -> bool {
         if let Some(i) = Self::key_index(key) {
-            self.key_down[i]
+            self.key_is_down[i]
         } else {
             false
         }
@@ -245,11 +245,11 @@ impl Input {
         if let Some(i) = Self::key_index(key) {
             if state == ElementState::Pressed {
                 self.key_just_typed[i] = true;
-                self.key_down[i] = true;
+                self.key_is_down[i] = true;
             }
 
             if state == ElementState::Released {
-                self.key_down[i] = false;
+                self.key_is_down[i] = false;
             }
         }
     }

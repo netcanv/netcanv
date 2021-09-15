@@ -14,10 +14,10 @@ pub struct TextField {
     focused: bool,
     blink_start: f32,
 
-    cursor_pos: usize,
-    selection_cursor_pos: usize,
+    cursor_position: usize,
+    selection_start_cursor_position: usize,
 
-    clipboad_context: ClipboardContext,
+    clipboard_context: ClipboardContext,
 }
 
 /// A text field's color scheme.
@@ -58,10 +58,10 @@ impl TextField {
             focused: false,
             blink_start: 0.0,
 
-            cursor_pos: length,
-            selection_cursor_pos: length,
+            cursor_position: length,
+            selection_start_cursor_position: length,
 
-            clipboad_context: ClipboardContext::new().unwrap(),
+            clipboard_context: ClipboardContext::new().unwrap(),
         }
     }
 
@@ -122,35 +122,38 @@ impl TextField {
                 paint.set_anti_alias(false);
                 paint.set_style(paint::Style::Stroke);
 
-                let curr_text: String = self.text[..self.cursor_pos].iter().collect();
-                let cursor_x = ui.borrow_font().measure_str(curr_text, None).0;
+                let current_text: String = self.text[..self.cursor_position].iter().collect();
+                let current_text_width = ui.borrow_font().measure_str(current_text, None).0;
 
-                let x = cursor_x + 1.0;
+                let x = current_text_width + 1.0;
                 let y1 = Self::height(ui) * 0.2;
                 let y2 = Self::height(ui) * 0.8;
                 canvas.draw_line((x, y1), (x, y2), &paint);
             });
         }
 
-        if self.cursor_pos != self.selection_cursor_pos {
+        if self.cursor_position != self.selection_start_cursor_position {
             ui.draw_on_canvas(canvas, |canvas| {
                 let mut paint = Paint::new(Color4f::from(colors.selection), None);
                 paint.set_anti_alias(true);
 
-                let pre_selection_text: String = self.text[..self.selection_cursor_pos].iter().collect();
-                let pre_sel_text_width = ui.borrow_font().measure_str(pre_selection_text, None).0;
+                // Get all text from textfield start to current selection cursor position.
+                // This will act as base position for selection.
+                let text_to_selection_start: String = self.text[..self.selection_start_cursor_position].iter().collect();
+                let text_to_selection_start_width = ui.borrow_font().measure_str(text_to_selection_start, None).0;
 
-                let sel_text_width = if self.cursor_pos < self.selection_cursor_pos {
-                    let selection_text: String = self.text[self.cursor_pos..self.selection_cursor_pos].iter().collect();
+                // Get text left to right or right to left depending on end cursor position.
+                let sel_text_width = if self.cursor_position < self.selection_start_cursor_position {
+                    let selection_text: String = self.text[self.cursor_position..self.selection_start_cursor_position].iter().collect();
                     -(ui.borrow_font().measure_str(selection_text, None).0)
                 } else {
-                    let selection_text: String = self.text[self.selection_cursor_pos..self.cursor_pos].iter().collect();
+                    let selection_text: String = self.text[self.selection_start_cursor_position..self.cursor_position].iter().collect();
                     ui.borrow_font().measure_str(selection_text, None).0
                 };
 
                 let rrect = RRect::new_rect_xy(
                     &Rect::from_point_and_size(
-                        (pre_sel_text_width.round(), (Self::height(ui) * 0.2).round()),
+                        (text_to_selection_start_width.round(), (Self::height(ui) * 0.2).round()),
                         (sel_text_width.round(), (Self::height(ui) * 0.7).round()),
                     ),
                     0.0,
@@ -171,7 +174,7 @@ impl TextField {
 
     /// Get selection length
     fn selection_length(&self) -> isize {
-        (self.cursor_pos as isize - self.selection_cursor_pos as isize).abs()
+        (self.cursor_position as isize - self.selection_start_cursor_position as isize).abs()
     }
 
     // Get selection content
@@ -180,10 +183,10 @@ impl TextField {
             return String::new()
         }
 
-        if self.cursor_pos < self.selection_cursor_pos {
-            self.text[self.cursor_pos..self.selection_cursor_pos].iter().collect()
+        if self.cursor_position < self.selection_start_cursor_position {
+            self.text[self.cursor_position..self.selection_start_cursor_position].iter().collect()
         } else {
-            self.text[self.selection_cursor_pos..self.cursor_pos].iter().collect()
+            self.text[self.selection_start_cursor_position..self.cursor_position].iter().collect()
         }
     }
 
@@ -192,8 +195,8 @@ impl TextField {
         self.text = text.chars().collect();
         self.update_utf8();
 
-        self.cursor_pos = self.text.len();
-        self.selection_cursor_pos = self.cursor_pos;
+        self.cursor_position = self.text.len();
+        self.selection_start_cursor_position = self.cursor_position;
     }
 
     /// Resets the text field's blink timer.
@@ -202,55 +205,57 @@ impl TextField {
     }
 
     /// Appends a character to the cursor position.
+    /// Or replaces selection if any.
     fn append(&mut self, ch: char) {
         if self.selection_length() != 0 {
-            if self.cursor_pos < self.selection_cursor_pos {
-                self.text.splice(self.cursor_pos..self.selection_cursor_pos, vec![ch]);
-                self.cursor_pos = self.selection_cursor_pos - self.selection_length() as usize;
+            if self.cursor_position < self.selection_start_cursor_position {
+                self.text.splice(self.cursor_position..self.selection_start_cursor_position, vec![ch]);
+                self.selection_start_cursor_position -= self.selection_length() as usize;
             } else {
-                self.text.splice(self.selection_cursor_pos..self.cursor_pos, vec![ch]);
-                self.cursor_pos = self.selection_cursor_pos;
+                self.text.splice(self.selection_start_cursor_position..self.cursor_position, vec![ch]);
             }
 
-            self.cursor_pos += 1;
-            self.selection_cursor_pos = self.cursor_pos;
+            self.cursor_position = self.selection_start_cursor_position + 1;
+            self.selection_start_cursor_position = self.cursor_position;
         } else {
-            self.text.insert(self.cursor_pos, ch);
-            self.cursor_pos += 1;
-            self.selection_cursor_pos += 1;
+            self.text.insert(self.cursor_position, ch);
+
+            self.cursor_position += 1;
+            self.selection_start_cursor_position = self.cursor_position;
         }
 
         self.update_utf8();
     }
 
     /// Removes a character at cursor position.
+    /// Or removes selection if any.
     fn backspace(&mut self) {
         if self.selection_length() != 0 {
             self.delete();
-        } else if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
-            self.selection_cursor_pos -= 1;
-            self.text.remove(self.cursor_pos);
+        } else if self.cursor_position > 0 {
+            self.cursor_position -= 1;
+            self.selection_start_cursor_position -= 1;
+            self.text.remove(self.cursor_position);
         }
 
         self.update_utf8();
     }
 
-    /// Removes character after cursor
+    /// Removes character after cursor position.
+    /// Or selection if any.
     fn delete(&mut self) {
         if self.selection_length() != 0 {
-            if self.cursor_pos < self.selection_cursor_pos {
-                self.text.drain(self.cursor_pos..self.selection_cursor_pos);
-                self.cursor_pos = self.selection_cursor_pos - self.selection_length() as usize;
+            if self.cursor_position < self.selection_start_cursor_position {
+                self.text.drain(self.cursor_position..self.selection_start_cursor_position);
+                self.selection_start_cursor_position -= self.selection_length() as usize;
             } else {
-                self.text.drain(self.selection_cursor_pos..self.cursor_pos);
-                self.cursor_pos = self.selection_cursor_pos;
+                self.text.drain(self.selection_start_cursor_position..self.cursor_position);
             }
 
-            self.selection_cursor_pos = self.cursor_pos;
+            self.cursor_position = self.selection_start_cursor_position;
         } else {
             if self.text.len() > 0 {
-                self.text.remove(self.cursor_pos);
+                self.text.remove(self.cursor_position);
             }
         }
 
@@ -258,11 +263,11 @@ impl TextField {
     }
 
     fn key_ctrl_down(&self, input: &Input) -> bool {
-        input.key_down(VirtualKeyCode::LControl) || input.key_down(VirtualKeyCode::RControl)
+        input.key_is_down(VirtualKeyCode::LControl) || input.key_is_down(VirtualKeyCode::RControl)
     }
 
     fn key_shift_down(&self, input: &Input) -> bool {
-        input.key_down(VirtualKeyCode::LShift) || input.key_down(VirtualKeyCode::RShift)
+        input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)
     }
 
     fn handle_word_selection(&mut self, input: &Input, not_found_ws_value: usize, range: Range<usize>) {
@@ -273,10 +278,10 @@ impl TextField {
             ix -= 1;
 
             if char.is_whitespace() {
-                self.cursor_pos = ix + 1;
+                self.cursor_position = ix + 1;
 
                 if !self.key_shift_down(input) {
-                    self.selection_cursor_pos = self.cursor_pos;
+                    self.selection_start_cursor_position = self.cursor_position;
                 }
 
                 found_ws = true;
@@ -286,10 +291,10 @@ impl TextField {
         }
 
         if !found_ws {
-            self.cursor_pos = not_found_ws_value;
+            self.cursor_position = not_found_ws_value;
 
             if !self.key_shift_down(input) {
-                self.selection_cursor_pos = self.cursor_pos;
+                self.selection_start_cursor_position = self.cursor_position;
             }
         }
     }
@@ -308,34 +313,34 @@ impl TextField {
             }
 
             if input.key_just_typed(VirtualKeyCode::Left) {
-                if self.cursor_pos != 0 {
+                if self.cursor_position != 0 {
                     self.reset_blink(input);
 
-                    self.cursor_pos -= 1;
+                    self.cursor_position -= 1;
                 }
 
                 if !self.key_shift_down(input) {
-                    self.selection_cursor_pos = self.cursor_pos;
+                    self.selection_start_cursor_position = self.cursor_position;
                 }
 
                 if self.key_ctrl_down(input) {
-                    self.handle_word_selection(input, 0, 0..self.cursor_pos);
+                    self.handle_word_selection(input, 0, 0..self.cursor_position);
                 }
             }
 
             if input.key_just_typed(VirtualKeyCode::Right) {
-                if self.cursor_pos < self.text.len() {
+                if self.cursor_position < self.text.len() {
                     self.reset_blink(input);
 
-                    self.cursor_pos += 1;
+                    self.cursor_position += 1;
                 }
 
-                if !(input.key_down(VirtualKeyCode::LShift) || input.key_down(VirtualKeyCode::RShift)) {
-                    self.selection_cursor_pos = self.cursor_pos;
+                if !(input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)) {
+                    self.selection_start_cursor_position = self.cursor_position;
                 }
 
                 if self.key_ctrl_down(input) {
-                    self.handle_word_selection(input, self.text.len(), self.cursor_pos..self.text.len());
+                    self.handle_word_selection(input, self.text.len(), self.cursor_position..self.text.len());
                 }
             }
 
@@ -345,31 +350,31 @@ impl TextField {
             }
 
             if input.key_just_typed(VirtualKeyCode::Home) {
-                self.cursor_pos = 0;
-                self.selection_cursor_pos = self.cursor_pos;
+                self.cursor_position = 0;
+                self.selection_start_cursor_position = self.cursor_position;
 
                 self.reset_blink(input);
             }
 
             if input.key_just_typed(VirtualKeyCode::End) {
-                self.cursor_pos = self.text.len();
-                self.selection_cursor_pos = self.cursor_pos;
+                self.cursor_position = self.text.len();
+                self.selection_start_cursor_position = self.cursor_position;
 
                 self.reset_blink(input);
             }
 
             if self.key_ctrl_down(input) {
                 if input.key_just_typed(VirtualKeyCode::A) {
-                    self.selection_cursor_pos = 0;
-                    self.cursor_pos = self.text.len();
+                    self.selection_start_cursor_position = 0;
+                    self.cursor_position = self.text.len();
                 }
 
                 if input.key_just_typed(VirtualKeyCode::C) {
-                    self.clipboad_context.set_contents(self.selection_text()).unwrap();
+                    self.clipboard_context.set_contents(self.selection_text()).unwrap();
                 }
 
                 if input.key_just_typed(VirtualKeyCode::V) {
-                    let content = self.clipboad_context.get_contents();
+                    let content = self.clipboard_context.get_contents();
 
                     if content.is_ok() {
                         if self.selection_length() > 0 {
@@ -387,7 +392,7 @@ impl TextField {
                 }
 
                 if input.key_just_typed(VirtualKeyCode::X) {
-                    self.clipboad_context.set_contents(self.selection_text()).unwrap();
+                    self.clipboard_context.set_contents(self.selection_text()).unwrap();
                     self.set_text("".to_owned());
                 }
             }
