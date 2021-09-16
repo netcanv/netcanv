@@ -8,10 +8,10 @@ use skulpin::skia_safe::*;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
+use crate::common::get_window_size;
 use crate::config::{self, UserConfig};
 use crate::net::{Message, Peer};
 use crate::ui::*;
-use crate::util::get_window_size;
 
 /// A status returned from some other part of the app.
 #[derive(Debug)]

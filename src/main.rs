@@ -39,11 +39,11 @@ use winit::window::{Window, WindowBuilder};
 
 mod app;
 mod assets;
+mod common;
 mod config;
 mod net;
 mod paint_canvas;
 mod ui;
-mod util;
 mod viewport;
 
 use app::*;

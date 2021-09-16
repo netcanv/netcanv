@@ -6,9 +6,9 @@ use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
 use skulpin::skia_safe::{Color, Color4f, Point};
 
+use crate::common;
 use crate::net::socket::Remote;
 use crate::paint_canvas::{Brush, StrokePoint};
-use crate::util;
 
 /// A message sent between the peer and the current app state.
 #[derive(Debug)]
@@ -375,6 +375,6 @@ impl Mate {
         use crate::app::paint::State;
         let elapsed_ms = self.last_cursor.elapsed().as_millis() as f32;
         let t = (elapsed_ms / State::TIME_PER_UPDATE.as_millis() as f32).min(1.0);
-        util::lerp_point(self.cursor_prev, self.cursor, t)
+        common::lerp_point(self.cursor_prev, self.cursor, t)
     }
 }

@@ -3,8 +3,8 @@
 use skulpin::app::MouseButton;
 use skulpin::skia_safe::*;
 
+use crate::common::quantize;
 use crate::ui::*;
-use crate::util::quantize;
 
 /// The step of a slider.
 pub enum SliderStep {

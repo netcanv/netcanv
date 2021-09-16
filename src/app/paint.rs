@@ -8,11 +8,11 @@ use skulpin::skia_safe::*;
 
 use crate::app::*;
 use crate::assets::*;
+use crate::common::*;
 use crate::config::UserConfig;
 use crate::net::{Message, Peer, Timer};
 use crate::paint_canvas::*;
 use crate::ui::*;
-use crate::util::*;
 use crate::viewport::Viewport;
 
 /// The current mode of painting.
