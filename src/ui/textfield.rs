@@ -191,7 +191,7 @@ impl TextField {
                 let selection_anchor_text: String = self.text[..self.selection.start()].iter().collect();
                 let selection_anchor_text_width = ui.borrow_font().measure_str(selection_anchor_text, None).0;
 
-                // Get text selected text
+                // Get selected text.
                 let selection_text: String = self.text[self.selection.normalize()].iter().collect();
                 let selection_text_width = ui.borrow_font().measure_str(selection_text, None).0;
 
