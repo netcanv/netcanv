@@ -1,25 +1,27 @@
 //! A fairly simplistic text field implementation.
 
-use std::{borrow::BorrowMut, ops::Range};
+use std::ops::Range;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 use skulpin::skia_safe::*;
 
 use crate::ui::*;
 
-/// Text field selection struct
+/// Text field selection.
+/// Stores two cursors: the text cursor and the selection anchor.
+/// These cursors are modified appropriately as the user edits text.
 struct Selection {
-    pub first: usize,
-    pub second: usize,
+    cursor: usize,
+    anchor: usize,
 }
 
 impl Selection {
     pub fn start(&self) -> usize {
-        self.first.min(self.second)
+        self.cursor.min(self.anchor)
     }
 
     pub fn end(&self) -> usize {
-        self.first.max(self.second)
+        self.cursor.max(self.anchor)
     }
 
     pub fn normalize(&self) -> Range<usize> {
@@ -30,21 +32,27 @@ impl Selection {
         self.end() - self.start()
     }
 
-    pub fn move_cursors(&mut self, position: usize) {
-        self.first = position;
-        self.second = self.first;
+    pub fn move_to(&mut self, position: usize) {
+        self.cursor = position;
+        self.anchor = self.cursor;
     }
 
-    pub fn move_cursors_left(&mut self) {
-        if self.first > 0 {
-            self.first -= 1;
-            self.second = self.first;
+    pub fn move_left(&mut self, is_shift_down: bool) {
+        if self.cursor > 0 {
+            self.cursor -= 1;
+
+            if !is_shift_down {
+                self.anchor = self.cursor;
+            }
         }
     }
 
-    pub fn move_cursors_right(&mut self) {
-        self.first += 1;
-        self.second = self.first;
+    pub fn move_right(&mut self, is_shift_down: bool) {
+        self.cursor += 1;
+
+        if !is_shift_down {
+            self.anchor = self.cursor;
+        }
     }
 }
 
@@ -90,17 +98,18 @@ impl TextField {
     /// Creates a new text field, with the optionally provided initial text.
     pub fn new(initial_text: Option<&str>) -> Self {
         let text_utf8: String = initial_text.unwrap_or("").into();
-        let length = text_utf8.len();
+        let text: Vec<char> = text_utf8.chars().collect();
+        let length = text.len();
 
         Self {
-            text: text_utf8.chars().collect(),
+            text,
             text_utf8,
             focused: false,
             blink_start: 0.0,
 
             selection: Selection {
-                first: length,
-                second: length,
+                cursor: length,
+                anchor: length,
             },
 
             clipboard_context: ClipboardContext::new().unwrap(),
@@ -162,7 +171,7 @@ impl TextField {
                 paint.set_anti_alias(false);
                 paint.set_style(paint::Style::Stroke);
 
-                let current_text: String = self.text[..self.selection.first].iter().collect();
+                let current_text: String = self.text[..self.selection.cursor].iter().collect();
                 let current_text_width = ui.borrow_font().measure_str(current_text, None).0;
 
                 let x = current_text_width + 1.0;
@@ -172,7 +181,7 @@ impl TextField {
             });
         }
 
-        if self.selection.first != self.selection.second {
+        if self.selection.cursor != self.selection.anchor {
             ui.draw_on_canvas(canvas, |canvas| {
                 let mut paint = Paint::new(Color4f::from(colors.selection), None);
                 paint.set_anti_alias(true);
@@ -182,7 +191,7 @@ impl TextField {
                 let selection_anchor_text: String = self.text[..self.selection.start()].iter().collect();
                 let selection_anchor_text_width = ui.borrow_font().measure_str(selection_anchor_text, None).0;
 
-                // Get text left to right or right to left depending on end cursor position.
+                // Get text selected text
                 let selection_text: String = self.text[self.selection.normalize()].iter().collect();
                 let selection_text_width = ui.borrow_font().measure_str(selection_text, None).0;
 
@@ -221,7 +230,7 @@ impl TextField {
         self.text = text.chars().collect();
         self.update_utf8();
 
-        self.selection.move_cursors(self.text.len());
+        self.selection.move_to(self.text.len());
     }
 
     /// Resets the text field's blink timer.
@@ -235,10 +244,10 @@ impl TextField {
         if self.selection.len() > 0 {
             self.text.splice(self.selection.normalize(), vec![ch]);
 
-            self.selection.move_cursors(self.selection.start() + 1);
+            self.selection.move_to(self.selection.start() + 1);
         } else {
-            self.text.insert(self.selection.first, ch);
-            self.selection.move_cursors_right();
+            self.text.insert(self.selection.cursor, ch);
+            self.selection.move_right(false);
         }
 
         self.update_utf8();
@@ -249,9 +258,9 @@ impl TextField {
     fn backspace(&mut self) {
         if self.selection.len() != 0 {
             self.delete();
-        } else if self.selection.first > 0 {
-            self.selection.move_cursors_left();
-            self.text.remove(self.selection.first);
+        } else if self.selection.cursor > 0 {
+            self.selection.move_left(false);
+            self.text.remove(self.selection.cursor);
         }
 
         self.update_utf8();
@@ -262,9 +271,9 @@ impl TextField {
     fn delete(&mut self) {
         if self.selection.len() != 0 {
             self.text.drain(self.selection.normalize());
-            self.selection.move_cursors(self.selection.start());
-        } else if self.selection.first != self.text.len() {
-            self.text.remove(self.selection.first);
+            self.selection.move_to(self.selection.start());
+        } else if self.selection.cursor != self.text.len() {
+            self.text.remove(self.selection.cursor);
         }
 
         self.update_utf8();
@@ -278,7 +287,7 @@ impl TextField {
         input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)
     }
 
-    fn handle_word_skipping_and_selection(
+    fn process_word_skipping_and_selection(
         &mut self,
         input: &Input,
         not_found_ws_value: usize,
@@ -288,30 +297,30 @@ impl TextField {
         let mut found_ws = false;
 
         if right {
-            let mut ix = self.selection.first;
+            let mut ix = self.selection.cursor;
 
             for char in self.text[range].iter() {
                 ix += 1;
 
                 if char.is_whitespace() {
-                    self.selection.first = ix - 1;
+                    self.selection.cursor = ix - 1;
                     if !self.key_shift_down(input) {
-                        self.selection.second = self.selection.first;
+                        self.selection.anchor = self.selection.cursor;
                     }
                     found_ws = true;
                     break
                 }
             }
         } else {
-            let mut ix = self.selection.first;
+            let mut ix = self.selection.cursor;
 
             for char in self.text[range].iter().rev() {
                 ix -= 1;
 
                 if char.is_whitespace() {
-                    self.selection.first = ix + 1;
+                    self.selection.cursor = ix + 1;
                     if !self.key_shift_down(input) {
-                        self.selection.second = self.selection.first;
+                        self.selection.anchor = self.selection.cursor;
                     }
                     found_ws = true;
                     break
@@ -320,10 +329,10 @@ impl TextField {
         }
 
         if !found_ws {
-            self.selection.first = not_found_ws_value;
+            self.selection.cursor = not_found_ws_value;
 
             if !self.key_shift_down(input) {
-                self.selection.second = self.selection.first;
+                self.selection.anchor = self.selection.cursor;
             }
         }
     }
@@ -342,35 +351,25 @@ impl TextField {
             }
 
             if input.key_just_typed(VirtualKeyCode::Left) {
-                if self.selection.first > 0 {
-                    self.reset_blink(input);
-                    self.selection.first -= 1;
-                }
-
-                if !self.key_shift_down(input) {
-                    self.selection.second = self.selection.first;
-                }
+                self.reset_blink(input);
+                self.selection.move_left(self.key_shift_down(input));
 
                 if self.key_ctrl_down(input) {
-                    self.handle_word_skipping_and_selection(input, 0, 0..self.selection.first, false);
+                    self.process_word_skipping_and_selection(input, 0, 0..self.selection.cursor, false);
                 }
             }
 
             if input.key_just_typed(VirtualKeyCode::Right) {
-                if self.selection.first < self.text.len() {
+                if self.selection.cursor < self.text.len() {
                     self.reset_blink(input);
-                    self.selection.first += 1;
-                }
-
-                if !self.key_shift_down(input) {
-                    self.selection.second = self.selection.first;
+                    self.selection.move_right(self.key_shift_down(input));
                 }
 
                 if self.key_ctrl_down(input) {
-                    self.handle_word_skipping_and_selection(
+                    self.process_word_skipping_and_selection(
                         input,
                         self.text.len(),
-                        self.selection.first..self.text.len(),
+                        self.selection.cursor..self.text.len(),
                         true,
                     );
                 }
@@ -382,19 +381,19 @@ impl TextField {
             }
 
             if input.key_just_typed(VirtualKeyCode::Home) {
-                self.selection.move_cursors(0);
+                self.selection.move_to(0);
                 self.reset_blink(input);
             }
 
             if input.key_just_typed(VirtualKeyCode::End) {
-                self.selection.move_cursors(self.text.len());
+                self.selection.move_to(self.text.len());
                 self.reset_blink(input);
             }
 
             if self.key_ctrl_down(input) {
                 if input.key_just_typed(VirtualKeyCode::A) {
-                    self.selection.second = 0;
-                    self.selection.first = self.text.len();
+                    self.selection.anchor = 0;
+                    self.selection.cursor = self.text.len();
                 }
 
                 if input.key_just_typed(VirtualKeyCode::C) {
