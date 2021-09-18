@@ -2,15 +2,19 @@
 
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use native_dialog::FileDialog;
+use netcanv_protocol::matchmaker;
+use nysa::global as bus;
 use skulpin::skia_safe::*;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
-use crate::common::get_window_size;
+use crate::common::{get_window_size, Error, Fatal};
 use crate::config::{self, UserConfig};
-use crate::net::{Message, Peer};
+use crate::net::peer::{self, Peer};
+use crate::net::socket::SocketSystem;
 use crate::ui::*;
 
 /// A status returned from some other part of the app.
@@ -45,6 +49,9 @@ pub struct State {
     config: UserConfig,
     ui: Ui,
 
+    // Subsystems
+    matchmaker_socksys: Arc<SocketSystem<matchmaker::Packet>>,
+
     // UI elements
     nickname_field: TextField,
     matchmaker_field: TextField,
@@ -69,11 +76,16 @@ impl State {
             assets,
             config,
             ui: Ui::new(),
+
+            matchmaker_socksys: SocketSystem::new(),
+
             nickname_field,
             matchmaker_field,
             room_id_field: TextField::new(None),
+
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
+
             status: match error {
                 Some(err) => Status::Error(err.into()),
                 None => Status::None,
@@ -181,13 +193,14 @@ impl State {
             self.ui.offset((16.0, 16.0));
             if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
                 match Self::join_room(
+                    &self.matchmaker_socksys,
                     self.nickname_field.text(),
                     self.matchmaker_field.text(),
                     self.room_id_field.text(),
                 ) {
                     Ok(peer) => {
                         self.peer = Some(peer);
-                        self.status = Status::None;
+                        self.status = Status::Info("Connecting…".into());
                     },
                     Err(status) => self.status = status,
                 }
@@ -221,7 +234,11 @@ impl State {
 
             macro_rules! host_room {
                 () => {
-                    match Self::host_room(self.nickname_field.text(), self.matchmaker_field.text()) {
+                    match Self::host_room(
+                        &self.matchmaker_socksys,
+                        self.nickname_field.text(),
+                        self.matchmaker_field.text(),
+                    ) {
                         Ok(peer) => {
                             self.peer = Some(peer);
                             self.status = Status::None;
@@ -314,13 +331,22 @@ impl State {
     }
 
     /// Establishes a connection to the matchmaker and hosts a new room.
-    fn host_room(nickname: &str, matchmaker_addr_str: &str) -> Result<Peer, Status> {
+    fn host_room(
+        socksys: &Arc<SocketSystem<matchmaker::Packet>>,
+        nickname: &str,
+        matchmaker_addr_str: &str,
+    ) -> Result<Peer, Status> {
         Self::validate_nickname(nickname)?;
-        Ok(Peer::host(nickname, matchmaker_addr_str)?)
+        Ok(Peer::host(socksys, nickname, matchmaker_addr_str)?)
     }
 
     /// Establishes a connection to the matchmaker and joins an existing room.
-    fn join_room(nickname: &str, matchmaker_addr_str: &str, room_id_str: &str) -> Result<Peer, Status> {
+    fn join_room(
+        socksys: &Arc<SocketSystem<matchmaker::Packet>>,
+        nickname: &str,
+        matchmaker_addr_str: &str,
+        room_id_str: &str,
+    ) -> Result<Peer, Status> {
         if !matches!(room_id_str.len(), 4..=6) {
             return Err(Status::Error("Room ID must be a number with 4–6 digits".into()))
         }
@@ -328,7 +354,7 @@ impl State {
         let room_id: u32 = room_id_str
             .parse()
             .map_err(|_| Status::Error("Room ID must be an integer".into()))?;
-        Ok(Peer::join(nickname, matchmaker_addr_str, room_id)?)
+        Ok(Peer::join(socksys, nickname, matchmaker_addr_str, room_id)?)
     }
 
     /// Saves the user configuration.
@@ -354,19 +380,7 @@ impl AppState for State {
         canvas.clear(self.assets.colors.panel);
 
         if let Some(peer) = &mut self.peer {
-            match peer.tick() {
-                Ok(messages) =>
-                    for message in messages {
-                        match message {
-                            Message::Error(error) => self.status = Status::Error(error.into()),
-                            Message::Connected => self.connected = true,
-                            _ => (),
-                        }
-                    },
-                Err(error) => {
-                    self.status = error.into();
-                },
-            }
+            catch!(peer.communicate());
         }
 
         self.ui
@@ -416,10 +430,32 @@ impl AppState for State {
         }
 
         self.ui.pop_group();
+
+        for message in &bus::retrieve_all::<Error>() {
+            let error = message.consume().0;
+            eprintln!("error: {}", error);
+            self.status = Status::Error(error.to_string());
+        }
+        for message in &bus::retrieve_all::<Fatal>() {
+            let fatal = message.consume().0;
+            eprintln!("fatal: {}", fatal);
+            self.status = Status::Error(format!("Fatal: {}", fatal));
+        }
     }
 
     fn next_state(self: Box<Self>) -> Box<dyn AppState> {
-        if self.connected {
+        let mut connected = false;
+        if let Some(peer) = &self.peer {
+            for message in &bus::retrieve_all::<peer::Connected>() {
+                eprintln!("connection established");
+                if message.peer == peer.token() {
+                    message.consume();
+                    connected = true;
+                }
+            }
+        }
+
+        if connected {
             let mut this = *self;
             this.save_config();
             Box::new(paint::State::new(

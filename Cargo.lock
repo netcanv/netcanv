@@ -1290,9 +1290,9 @@ dependencies = [
 
 [[package]]
 name = "nysa"
-version = "0.1.1"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63733d42d8d8bfb67f34d05ae85e8cda4260d4f0a3dbdf1433374d5653b9005"
+checksum = "946a736064712ef4ad570623d1340001f8cdfc87cec461bcb188e8a001e04c80"
 dependencies = [
  "lazy_static",
 ]

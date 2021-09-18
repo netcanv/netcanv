@@ -1,41 +1,148 @@
 //! An abstraction for sockets, communicating over the global bus.
 
-use std::cell::RefCell;
-use std::fmt::Display;
+use std::fmt::Debug;
 use std::io::{BufReader, BufWriter, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::marker::PhantomData;
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 
 use nysa::global as bus;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
+use crate::token::Token;
 
 /// A token for connecting a socket asynchronously.
 ///
 /// Once a socket connects successfully, [`Connected`] is pushed onto the bus, containing this
 /// token and the socket handle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConnectionToken(usize);
 
 /// A successful connection message.
-pub struct Connected(ConnectionToken, Socket);
+pub struct Connected<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    pub token: ConnectionToken,
+    pub socket: Socket<T>,
+}
+
+/// A message pushed onto the bus when there's a new packet incoming from a socket.
+pub struct IncomingPacket<T>
+where
+    T: DeserializeOwned,
+{
+    pub token: ConnectionToken,
+    pub data: T,
+}
+
+/// A message to the network subsystem that a packet should be sent with the given data.
+enum SendPacket<T>
+where
+    T: DeserializeOwned + Serialize,
+{
+    Packet(IncomingPacket<T>),
+    Quit(ConnectionToken),
+}
+
+/// A message asking the rx thread with associated token to shut down.
+struct QuitReceive(ConnectionToken);
+
+/// A trait describing a valid, (de)serializable, owned packet.
+pub trait Packet: 'static + Send + DeserializeOwned + Serialize {}
 
 /// A unique handle to a socket.
+//
 // These handles cannot be cloned or copied, as each handle owns a single socket thread.
-// Once a handle is dropped, its associated thread is also
-pub struct Socket {
-    system: Arc<SocketSystem>,
+// Once a handle is dropped, its associated thread is also asked to quit, and joined to the calling
+// thread.
+pub struct Socket<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    token: ConnectionToken,
+    system: Arc<SocketSystem<T>>,
     thread_slot: usize,
 }
 
-/// The socket handling subsystem.
-pub struct SocketSystem {
-    inner: Mutex<SocketSystemInner>,
+impl<T> Socket<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    /// Returns the socket's connection token.
+    pub fn token(&self) -> ConnectionToken {
+        self.token
+    }
+
+    /// Issues a request that a packet with the provided data should be serialized and sent over the
+    /// socket.
+    pub fn send(&self, data: T) {
+        bus::push(SendPacket::Packet(IncomingPacket {
+            token: self.token,
+            data,
+        }))
+    }
 }
 
-impl SocketSystem {
-    pub fn new() -> Self {
-        Self {
+impl<T> Drop for Socket<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    fn drop(&mut self) {
+        bus::push(SendPacket::Quit::<T>(self.token));
+
+        let mut system_inner = self.system.inner.lock().unwrap();
+        let (receiving, sending) = system_inner.socket_threads[self.thread_slot].take().unwrap();
+        receiving.join().expect("receiving thread panicked");
+        sending.join().expect("sending thread panicked");
+    }
+}
+
+/// A socket handling subsystem for the given packet type `T`.
+pub struct SocketSystem<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    inner: Mutex<SocketSystemInner<T>>,
+}
+
+static CONNECTION_TOKEN: Token = Token::new();
+
+impl<T> SocketSystem<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
             inner: Mutex::new(SocketSystemInner::new()),
-        }
+        })
+    }
+
+    pub fn connect<Address>(self: &Arc<Self>, address: Address) -> anyhow::Result<ConnectionToken>
+    where
+        Address: 'static + Send + ToSocketAddrs,
+    {
+        let token = ConnectionToken(CONNECTION_TOKEN.next());
+
+        let this = Arc::clone(self);
+        thread::Builder::new()
+            .name("network connection thread".into())
+            .spawn(move || {
+                let thread_slot = {
+                    let mut inner = this.inner.lock().unwrap();
+                    catch!(inner.connect(token, address))
+                };
+                let socket = Socket {
+                    token,
+                    system: this,
+                    thread_slot,
+                };
+                bus::push(Connected { token, socket });
+            })?;
+
+        Ok(token)
     }
 }
 
@@ -43,17 +150,25 @@ impl SocketSystem {
 type Slot = Option<(JoinHandle<()>, JoinHandle<()>)>;
 
 /// The inner, non thread-safe data of `SocketSystem`.
-struct SocketSystemInner {
+struct SocketSystemInner<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
     socket_threads: Vec<Slot>,
+    _phantom_data: PhantomData<T>,
 }
 
-impl SocketSystemInner {
+impl<T> SocketSystemInner<T>
+where
+    T: 'static + Send + DeserializeOwned + Serialize + Debug,
+{
     // This "inner" version of SocketSystem contains methods that operate on the inner vec of socket
     // threads. These are "raw" versions of the public, safe API.
 
     fn new() -> Self {
         Self {
             socket_threads: Vec::new(),
+            _phantom_data: PhantomData,
         }
     }
 
@@ -61,19 +176,53 @@ impl SocketSystemInner {
         self.socket_threads.iter().position(|slot| slot.is_none())
     }
 
-    fn connect(&mut self, address: impl ToSocketAddrs) -> anyhow::Result<usize> {
-        let stream = Arc::new(TcpStream::connect(address)?);
+    fn connect(&mut self, token: ConnectionToken, address: impl ToSocketAddrs) -> anyhow::Result<usize> {
+        let stream = TcpStream::connect(address)?;
+        stream.set_nodelay(true)?;
 
-        let receiving_thread = {
-            let stream = Arc::clone(&stream);
-            std::thread::Builder::new()
-                .name("network receiving thread".into())
-                .spawn(move || {})?
-        };
+        const KILOBYTE: usize = 1024;
 
-        let sending_thread = std::thread::Builder::new()
+        // Reading and writing is buffered so as not to slow down performance when big packets are sent.
+
+        let mut reader = stream.try_clone()?; // BufReader::with_capacity(64 * KILOBYTE, stream.try_clone()?);
+        let receiving_thread = thread::Builder::new()
+            .name("network receiving thread".into())
+            .spawn(move || loop {
+                // Quit when the owning socket's dropped.
+                for message in &bus::retrieve_all::<QuitReceive>() {
+                    if message.0 == token {
+                        message.consume();
+                        return
+                    }
+                }
+                // Read packets from the stream. `deserialize_from` will block until a packet is read successfully.
+                let data: T = catch!(bincode::deserialize_from(&mut reader));
+                bus::push(IncomingPacket { token, data });
+            })?;
+
+        let mut writer = BufWriter::with_capacity(64 * KILOBYTE, stream.try_clone()?);
+        let sending_thread = thread::Builder::new()
             .name("network sending thread".into())
-            .spawn(move || {})?;
+            .spawn(move || loop {
+                let message = bus::wait_for::<SendPacket<T>>();
+                match &*message {
+                    // Serialize and send the packet.
+                    SendPacket::Packet(packet) if packet.token == token => {
+                        catch!(bincode::serialize_into(&mut writer, &packet.data));
+                        catch!(writer.flush());
+                        message.consume();
+                    },
+                    // Quit when the owning socket is dropped.
+                    SendPacket::Quit(quit_token) if *quit_token == token => {
+                        // The read stream is most certainly still blocking, trying to read a packet.
+                        // Thus, we shutdown the stream completely, which should make it stop reading.
+                        catch!(stream.shutdown(Shutdown::Both));
+                        message.consume();
+                        return
+                    },
+                    _ => (),
+                }
+            })?;
 
         Ok(match self.find_free_slot() {
             Some(slot) => {

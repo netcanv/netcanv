@@ -10,7 +10,8 @@ use crate::app::*;
 use crate::assets::*;
 use crate::common::*;
 use crate::config::UserConfig;
-use crate::net::{Message, Peer, Timer};
+use crate::net::peer::Peer;
+use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
@@ -59,7 +60,6 @@ pub struct State {
     requested_chunks: HashSet<(i32, i32)>,
     downloaded_chunks: HashSet<(i32, i32)>,
     needed_chunks: HashSet<(i32, i32)>,
-    deferred_message_queue: VecDeque<Message>,
 
     load_from_file: Option<PathBuf>,
     save_to_file: Option<PathBuf>,
@@ -121,7 +121,6 @@ impl State {
             requested_chunks: HashSet::new(),
             downloaded_chunks: HashSet::new(),
             needed_chunks: HashSet::new(),
-            deferred_message_queue: VecDeque::new(),
 
             load_from_file: image_path,
             save_to_file: None,
@@ -526,71 +525,70 @@ impl AppState for State {
 
         // Network
 
-        match self.peer.tick() {
-            Ok(messages) =>
-                for message in messages {
-                    match message {
-                        Message::Error(error) => self.error = Some(error),
-                        Message::Connected => unimplemented!(
-                            "Message::Connected shouldn't be generated after connecting to the matchmaker"
-                        ),
-                        Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
-                        Message::Stroke(points) => Self::fellow_stroke(canvas, &mut self.paint_canvas, &points),
-                        Message::ChunkPositions(mut positions) => {
-                            eprintln!("received {} chunk positions", positions.len());
-                            eprintln!("the positions are: {:?}", &positions);
-                            self.server_side_chunks = positions.drain(..).collect();
-                        },
-                        Message::Chunks(chunks) => {
-                            eprintln!("received {} chunks", chunks.len());
-                            for (chunk_position, png_data) in chunks {
-                                Self::canvas_data(
-                                    &mut self.log,
-                                    canvas,
-                                    &mut self.paint_canvas,
-                                    chunk_position,
-                                    &png_data,
-                                );
-                                self.downloaded_chunks.insert(chunk_position);
-                            }
-                        },
-                        message => self.deferred_message_queue.push_back(message),
-                    }
-                },
-            Err(error) => {
-                self.error = Some(format!("{}", error));
-            },
-        }
+        ok_or_log!(self.log, self.peer.communicate());
+        // Ok(messages) =>
+        //     for message in messages {
+        //         match message {
+        //             Message::Error(error) => self.error = Some(error),
+        //             Message::Connected => unimplemented!(
+        //                 "Message::Connected shouldn't be generated after connecting to the matchmaker"
+        //             ),
+        //             Message::Left(nickname) => log!(self.log, "{} left the room", nickname),
+        //             Message::Stroke(points) => Self::fellow_stroke(canvas, &mut self.paint_canvas,
+        // &points),             Message::ChunkPositions(mut positions) => {
+        //                 eprintln!("received {} chunk positions", positions.len());
+        //                 eprintln!("the positions are: {:?}", &positions);
+        //                 self.server_side_chunks = positions.drain(..).collect();
+        //             },
+        //             Message::Chunks(chunks) => {
+        //                 eprintln!("received {} chunks", chunks.len());
+        //                 for (chunk_position, png_data) in chunks {
+        //                     Self::canvas_data(
+        //                         &mut self.log,
+        //                         canvas,
+        //                         &mut self.paint_canvas,
+        //                         chunk_position,
+        //                         &png_data,
+        //                     );
+        //                     self.downloaded_chunks.insert(chunk_position);
+        //                 }
+        //             },
+        //             message => self.deferred_message_queue.push_back(message),
+        //         }
+        //     },
+        // Err(error) => {
+        //     self.error = Some(format!("{}", error));
+        // },
 
-        for message in self.deferred_message_queue.drain(..) {
-            match message {
-                Message::Joined(nickname, addr) => {
-                    log!(self.log, "{} joined the room", nickname);
-                    if let Some(addr) = addr {
-                        let positions = self.paint_canvas.chunk_positions();
-                        ok_or_log!(self.log, self.peer.send_chunk_positions(addr, positions));
-                    }
-                },
-                Message::GetChunks(addr, positions) => {
-                    eprintln!("got request from {} for {} chunks", addr, positions.len());
-                    let paint_canvas = &mut self.paint_canvas;
-                    for (i, chunks) in positions.chunks(32).enumerate() {
-                        eprintln!("  sending packet #{} containing {} chunks", i, chunks.len());
-                        let packet: Vec<((i32, i32), Vec<u8>)> = chunks
-                            .iter()
-                            .filter_map(|position| {
-                                paint_canvas
-                                    .network_data(*position)
-                                    .map(|slice| (*position, Vec::from(slice)))
-                            })
-                            .collect();
-                        ok_or_log!(self.log, self.peer.send_chunks(addr, packet));
-                    }
-                    eprintln!("  all packets sent");
-                },
-                _ => unreachable!("unhandled peer message type"),
-            }
-        }
+        // for message in self.deferred_message_queue.drain(..) {
+        //     match message {
+        //         Message::Joined(nickname, addr) => {
+        //             log!(self.log, "{} joined the room", nickname);
+        //             if let Some(addr) = addr {
+        //                 let positions = self.paint_canvas.chunk_positions();
+        //                 ok_or_log!(self.log, self.peer.send_chunk_positions(addr, positions));
+        //             }
+        //         },
+        //         Message::GetChunks(addr, positions) => {
+        //             eprintln!("got request from {} for {} chunks", addr, positions.len());
+        //             let paint_canvas = &mut self.paint_canvas;
+        //             for (i, chunks) in positions.chunks(32).enumerate() {
+        //                 eprintln!("  sending packet #{} containing {} chunks", i, chunks.len());
+        //                 let packet: Vec<((i32, i32), Vec<u8>)> = chunks
+        //                     .iter()
+        //                     .filter_map(|position| {
+        //                         paint_canvas
+        //                             .network_data(*position)
+        //                             .map(|slice| (*position, Vec::from(slice)))
+        //                     })
+        //                     .collect();
+        //                 ok_or_log!(self.log, self.peer.send_chunks(addr, packet));
+        //             }
+        //             eprintln!("  all packets sent");
+        //         },
+        //         _ => unreachable!("unhandled peer message type"),
+        //     }
+        // }
 
         if self.needed_chunks.len() > 0 {
             for chunk in &self.needed_chunks {

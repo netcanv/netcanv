@@ -187,6 +187,9 @@ impl Matchmaker {
             .clients
             .push(Arc::downgrade(&stream));
 
+        // Don't forget to notify the requester that the relay is now ready.
+        Self::send_packet(&stream, &Packet::Relayed(peer_addr, vec![]))?;
+
         Ok(())
     }
 
