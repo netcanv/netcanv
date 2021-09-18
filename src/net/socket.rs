@@ -184,7 +184,7 @@ where
 
         // Reading and writing is buffered so as not to slow down performance when big packets are sent.
 
-        let mut reader = stream.try_clone()?; // BufReader::with_capacity(64 * KILOBYTE, stream.try_clone()?);
+        let mut reader = BufReader::with_capacity(64 * KILOBYTE, stream.try_clone()?);
         let receiving_thread = thread::Builder::new()
             .name("network receiving thread".into())
             .spawn(move || loop {
