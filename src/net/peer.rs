@@ -35,7 +35,7 @@ pub struct Message {
 /// The data associated with a peer message.
 pub enum MessageKind {
     /// Another peer has joined the room.
-    Joined(String),
+    Joined(String, SocketAddr),
     /// Another peer has left the room.
     Left(String),
     /// Somebody drew something on the canvas.
@@ -276,7 +276,7 @@ impl Peer {
                 self.send_to_client(Some(author), cl::Packet::HiThere(self.nickname.clone()))?;
                 self.send_to_client(Some(author), cl::Packet::Version(cl::PROTOCOL_VERSION))?;
                 self.add_mate(author, nickname.clone());
-                self.send_message(MessageKind::Joined(nickname));
+                self.send_message(MessageKind::Joined(nickname, author));
             },
             cl::Packet::HiThere(nickname) => {
                 eprintln!("{} ({}) is in the room", nickname, author);

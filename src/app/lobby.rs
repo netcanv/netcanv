@@ -69,7 +69,7 @@ pub struct State {
 
 impl State {
     /// Creates and initializes the lobby state.
-    pub fn new(assets: Assets, config: UserConfig, error: Option<&str>) -> Self {
+    pub fn new(assets: Assets, config: UserConfig) -> Self {
         let nickname_field = TextField::new(Some(&config.lobby.nickname));
         let matchmaker_field = TextField::new(Some(&config.lobby.matchmaker));
         Self {
@@ -86,10 +86,7 @@ impl State {
             join_expand: Expand::new(true),
             host_expand: Expand::new(false),
 
-            status: match error {
-                Some(err) => Status::Error(err.into()),
-                None => Status::None,
-            },
+            status: Status::None,
             peer: None,
             connected: false,
             image_file: None,

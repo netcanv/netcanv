@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut renderer = RendererBuilder::new().build(&window, window_size)?;
 
     let assets = Assets::new(color_scheme);
-    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config, None)) as _);
+    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config)) as _);
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {

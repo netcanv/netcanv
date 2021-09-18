@@ -96,7 +96,7 @@ macro_rules! catch {
         catch!($exp, as crate::common::Error, return $or)
     };
 
-    ($exp:expr, as $T:ty $(,)?) => {
+    ($exp:expr, as $T:expr $(,)?) => {
         catch!($exp, as $T, return ())
     };
 
