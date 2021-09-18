@@ -231,15 +231,13 @@ impl State {
 
             macro_rules! host_room {
                 () => {
+                    self.status = Status::Info("Connecting…".into());
                     match Self::host_room(
                         &self.matchmaker_socksys,
                         self.nickname_field.text(),
                         self.matchmaker_field.text(),
                     ) {
-                        Ok(peer) => {
-                            self.peer = Some(peer);
-                            self.status = Status::None;
-                        },
+                        Ok(peer) => self.peer = Some(peer),
                         Err(status) => self.status = status,
                     }
                 };
