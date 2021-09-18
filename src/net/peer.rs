@@ -1,101 +1,96 @@
 use std::collections::HashMap;
+use std::mem;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Instant;
 
 use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
+use nysa::global as bus;
 use skulpin::skia_safe::{Color, Color4f, Point};
 
-use crate::net::socket::Remote;
+use super::socket::ConnectionToken;
+use super::socket::SocketSystem;
+use super::socket::{self, Socket};
+use crate::common;
+use crate::common::Fatal;
 use crate::paint_canvas::{Brush, StrokePoint};
-use crate::util;
+use crate::token::Token;
 
-/// A message sent between the peer and the current app state.
-#[derive(Debug)]
-pub enum Message {
-    //
-    // General
-    // -------
-    /// Return to the lobby with an error message.
-    Error(String),
+/// A unique token identifying a peer connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PeerToken(usize);
 
-    //
-    // Connection
-    // ----------
-    /// The connection to the matchmaker was successfully established.
-    Connected,
+/// A message that a peer connection has been successfully established.
+pub struct Connected {
+    pub peer: PeerToken,
+}
 
-    //
-    // Painting
-    // --------
-    /// Someone has joined the room, and needs chunk positions.
-    Joined(String, Option<SocketAddr>),
+/// A bus message from a peer connection.
+pub struct Message {
+    pub token: PeerToken,
+    pub kind: MessageKind,
+}
 
-    /// Someone left the room.
+/// The data associated with a peer message.
+pub enum MessageKind {
+    /// Another peer has joined the room.
+    Joined(String, SocketAddr),
+    /// Another peer has left the room.
     Left(String),
-
-    /// Someone sent a stroke packet.
+    /// Somebody drew something on the canvas.
     Stroke(Vec<StrokePoint>),
-
-    /// The host sent the chunk positions packet.
+    /// The host sent us the chunk positions for the room.
     ChunkPositions(Vec<(i32, i32)>),
-
-    /// The host received a GetChunks packet.
+    /// Somebody requested chunk positions from the host.
     GetChunks(SocketAddr, Vec<(i32, i32)>),
-
-    /// The client received a Chunks packet.
+    /// Somebody sent us chunk image data.
     Chunks(Vec<((i32, i32), Vec<u8>)>),
 }
 
-/// Another person in the same room.
-pub struct Mate {
-    pub cursor: Point,
-    pub cursor_prev: Point,
-    pub last_cursor: Instant,
-    pub nickname: String,
-    pub brush_size: f32,
+/// The state of a Peer connection.
+#[derive(Debug)]
+enum State {
+    // No connection has been established yet. We're waiting on the socket subsystem to give us a socket.
+    WaitingForMatchmaker { token: ConnectionToken },
+    // We're connected to the matchmaker, but haven't obtained the other person's connection
+    // details yet.
+    ConnectedToMatchmaker,
+    // We're waiting for the matchmaker to respond on relaying our packets.
+    WaitingForRelay,
+    // We're hosting a room.
+    HostingRoomRelayed,
+    // We're connected to a host.
+    InRoomRelayed,
 }
 
 /// A connection to the matchmaker.
 pub struct Peer {
-    matchmaker: Option<Remote<mm::Packet>>,
-    is_self: bool,
+    token: PeerToken,
+    state: State,
+    matchmaker_socket: Option<Socket<mm::Packet>>,
+
     is_host: bool,
-    is_relayed: bool,
+
     nickname: String,
     room_id: Option<u32>,
-    mates: HashMap<SocketAddr, Mate>,
     host: Option<SocketAddr>,
+    mates: HashMap<SocketAddr, Mate>,
 }
 
-/// An iterator over a peer's messages.
-pub struct Messages<'a> {
-    peer: &'a mut Peer,
-}
-
-macro_rules! try_or_message {
-    ($exp:expr, $fmt:literal) => {
-        match $exp {
-            Ok(x) => x,
-            Err(e) => return Some(Message::Error(format!($fmt, e))),
-        }
-    };
-    ($exp:expr) => {
-        try_or_message!($exp, "{}")
-    };
-}
+static PEER_TOKEN: Token = Token::new();
 
 impl Peer {
     /// Host a new room on the given matchmaker.
-    pub fn host(nickname: &str, matchmaker_addr: &str) -> anyhow::Result<Self> {
-        let mm = Remote::new(matchmaker_addr)?;
-        mm.send(mm::Packet::Host)?;
-
+    pub fn host(socksys: &Arc<SocketSystem<mm::Packet>>, nickname: &str, matchmaker_addr: &str) -> anyhow::Result<Self> {
+        let connection_token = socksys.connect(matchmaker_addr.to_owned())?;
         Ok(Self {
-            matchmaker: Some(mm),
-            is_self: true,
+            token: PeerToken(PEER_TOKEN.next()),
+            state: State::WaitingForMatchmaker {
+                token: connection_token,
+            },
+            matchmaker_socket: None,
             is_host: true,
-            is_relayed: false,
             nickname: nickname.into(),
             room_id: None,
             mates: HashMap::new(),
@@ -104,88 +99,197 @@ impl Peer {
     }
 
     /// Join an existing room on the given matchmaker.
-    pub fn join(nickname: &str, matchmaker_addr: &str, room_id: u32) -> anyhow::Result<Self> {
-        let mm = Remote::new(matchmaker_addr)?;
-        mm.send(mm::Packet::GetHost(room_id))?;
-
+    pub fn join(
+        socksys: &Arc<SocketSystem<mm::Packet>>,
+        nickname: &str,
+        matchmaker_addr: &str,
+        room_id: u32,
+    ) -> anyhow::Result<Self> {
+        let connection_token = socksys.connect(matchmaker_addr.to_owned())?;
         Ok(Self {
-            matchmaker: Some(mm),
-            is_self: true,
+            token: PeerToken(PEER_TOKEN.next()),
+            state: State::WaitingForMatchmaker {
+                token: connection_token,
+            },
+            matchmaker_socket: None,
             is_host: false,
-            is_relayed: false,
             nickname: nickname.into(),
-            room_id: None,
+            room_id: Some(room_id),
             mates: HashMap::new(),
             host: None,
         })
     }
 
-    // `is_relayed` is an output variable to appease the borrow checker. We can't borrow &mut self
-    // because of the literal first borrow in `next_packet`.
-    fn connect_to_host(mm: &Remote<mm::Packet>, host_addr: SocketAddr, is_relayed: &mut bool) -> anyhow::Result<()> {
-        // For now we'll always relay packets, because I don't think it's possible to do hole punching with
-        // Rust's standard library TcpStream.
-        mm.send(mm::Packet::RequestRelay(Some(host_addr)))?;
-        *is_relayed = true;
+    /// Returns the connection token of the matchmaker socket.
+    fn matchmaker_token(&self) -> Option<ConnectionToken> {
+        self.matchmaker_socket.as_ref().map(|socket| socket.token())
+    }
+
+    /// Sends a matchmaker packet to the currently connected matchmaker, or fails if there's no
+    /// matchmaker connection.
+    fn send_to_matchmaker(&self, packet: mm::Packet) -> anyhow::Result<()> {
+        match &self.state {
+            State::ConnectedToMatchmaker | State::WaitingForRelay | State::HostingRoomRelayed | State::InRoomRelayed =>
+                self.matchmaker_socket.as_ref().unwrap().send(packet),
+            _ => anyhow::bail!("cannot send packet: not connected to the matchmaker"),
+        }
         Ok(())
     }
 
     /// Sends a client packet to the peer with the given address, or if no address is provided, to
     /// everyone.
-    fn send(&self, to: Option<SocketAddr>, packet: cl::Packet) -> anyhow::Result<()> {
-        // TODO: no matchmaker relay
-        self.matchmaker
-            .as_ref()
-            .unwrap()
-            .send(mm::Packet::Relay(to, bincode::serialize(&packet)?))?;
+    fn send_to_client(&self, to: Option<SocketAddr>, packet: cl::Packet) -> anyhow::Result<()> {
+        // TODO: p2p communication without the relay
+        match &self.state {
+            State::HostingRoomRelayed | State::InRoomRelayed => {
+                self.send_to_matchmaker(mm::Packet::Relay(to, bincode::serialize(&packet)?))?;
+            },
+            _ => anyhow::bail!("cannot send packet: not connected to the host"),
+        }
         Ok(())
     }
 
-    /// Adds another peer into the list of registered peers.
-    fn add_mate(&mut self, addr: SocketAddr, nickname: String) {
-        self.mates.insert(addr, Mate {
-            cursor: Point::new(0.0, 0.0),
-            cursor_prev: Point::new(0.0, 0.0),
-            last_cursor: Instant::now(),
-            nickname,
-            brush_size: 4.0,
-        });
+    /// Sends a message onto the global bus.
+    fn send_message(&self, message: MessageKind) {
+        bus::push(Message {
+            token: self.token,
+            kind: message,
+        })
+    }
+
+    /// Checks the message bus for any established connections.
+    fn poll_for_new_connections(&mut self) -> anyhow::Result<()> {
+        for message in &bus::retrieve_all::<socket::Connected<mm::Packet>>() {
+            match self.state {
+                // If a new connection was established and we're trying to connect to a matchmaker, check if the
+                // connection is ours.
+                State::WaitingForMatchmaker { token } if message.token == token => {
+                    let socket = message.consume().socket;
+                    self.connected_to_matchmaker(socket)?;
+                },
+                _ => (),
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles the state transition from connecting to the matchmaker to being connected to the
+    /// matchmaker.
+    ///
+    /// In the process, sends the appropriate packet to the matchmaker - whether to host or join a
+    /// room.
+    fn connected_to_matchmaker(&mut self, socket: Socket<mm::Packet>) -> anyhow::Result<()> {
+        let state = mem::replace(&mut self.state, State::ConnectedToMatchmaker);
+        self.matchmaker_socket = Some(socket);
+        match state {
+            State::WaitingForMatchmaker { .. } => self.send_to_matchmaker(if self.is_host {
+                mm::Packet::Host
+            } else {
+                mm::Packet::GetHost(self.room_id.unwrap())
+            }),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Polls for any incoming packets.
+    fn poll_for_incoming_packets(&mut self) -> anyhow::Result<()> {
+        for message in &bus::retrieve_all::<socket::IncomingPacket<mm::Packet>>() {
+            match &self.state {
+                // Ignore incoming packets if no socket connection is open yet.
+                // These packets may be coming in, but they're not for us.
+                State::WaitingForMatchmaker { .. } => (),
+                State::ConnectedToMatchmaker |
+                State::WaitingForRelay |
+                State::HostingRoomRelayed |
+                State::InRoomRelayed
+                    if Some(message.token) == self.matchmaker_token() =>
+                {
+                    let packet = message.consume().data;
+                    self.matchmaker_packet(packet)?;
+                }
+                _ => (),
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles a matchmaker packet.
+    fn matchmaker_packet(&mut self, packet: mm::Packet) -> anyhow::Result<()> {
+        match packet {
+            mm::Packet::RoomId(room_id) => {
+                eprintln!("got free room ID: {}", room_id);
+                self.room_id = Some(room_id);
+                self.setup_relay()?;
+            },
+            mm::Packet::HostAddress(address) => {
+                eprintln!("got host address: {}", address);
+                self.host = Some(address);
+                self.setup_relay()?;
+            },
+            mm::Packet::ClientAddress(_address) => (),
+            mm::Packet::Relayed(_, payload) if payload.len() == 0 => {
+                eprintln!("got successful packet relay connection");
+                self.state = if self.is_host {
+                    State::HostingRoomRelayed
+                } else {
+                    State::InRoomRelayed
+                };
+                self.say_hello()?;
+                bus::push(Connected { peer: self.token });
+            },
+            mm::Packet::Relayed(author, payload) => {
+                let client_packet: cl::Packet = bincode::deserialize(&payload)?;
+                self.client_packet(author, client_packet)?;
+            },
+            mm::Packet::Disconnected(address) =>
+                if let Some(mate) = self.mates.remove(&address) {
+                    self.send_message(MessageKind::Left(mate.nickname));
+                },
+            mm::Packet::Error(message) => anyhow::bail!(message),
+            other => anyhow::bail!("unexpected matchmaker packet: {:?}", other),
+        }
+        Ok(())
+    }
+
+    /// Sets up the packet relay.
+    fn setup_relay(&mut self) -> anyhow::Result<()> {
+        let relay_target = (!self.is_host).then(|| self.host.unwrap());
+        eprintln!("requesting relay to host {:?}", relay_target);
+        self.send_to_matchmaker(mm::Packet::RequestRelay(relay_target))?;
+        self.state = State::WaitingForRelay;
+        Ok(())
+    }
+
+    /// Says hello to other peers in the room.
+    fn say_hello(&self) -> anyhow::Result<()> {
+        self.send_to_client(None, cl::Packet::Hello(self.nickname.clone()))
     }
 
     /// Decodes a client packet.
-    fn decode_payload(&mut self, sender_addr: SocketAddr, payload: &[u8]) -> Option<Message> {
-        let packet = match bincode::deserialize::<cl::Packet>(payload) {
-            Err(_) if self.is_host() => return None,
-            Err(error) =>
-                return Some(Message::Error(format!(
-                    "Unknown packet ({}). Check if your client is up to date",
-                    error
-                ))),
-            Ok(packet) => packet,
-        };
-
+    fn client_packet(&mut self, author: SocketAddr, packet: cl::Packet) -> anyhow::Result<()> {
         match packet {
             //
             // 0.1.0
+            // -----
             cl::Packet::Hello(nickname) => {
-                eprintln!("{} ({}) joined", nickname, sender_addr);
-                try_or_message!(self.send(Some(sender_addr), cl::Packet::HiThere(self.nickname.clone())));
-                try_or_message!(self.send(Some(sender_addr), cl::Packet::Version(cl::PROTOCOL_VERSION)));
-                self.add_mate(sender_addr, nickname.clone());
-                return Some(Message::Joined(nickname, self.is_host.then(|| sender_addr)))
+                eprintln!("{} ({}) joined", nickname, author);
+                self.send_to_client(Some(author), cl::Packet::HiThere(self.nickname.clone()))?;
+                self.send_to_client(Some(author), cl::Packet::Version(cl::PROTOCOL_VERSION))?;
+                self.add_mate(author, nickname.clone());
+                self.send_message(MessageKind::Joined(nickname, author));
             },
             cl::Packet::HiThere(nickname) => {
-                eprintln!("{} ({}) is in the room", nickname, sender_addr);
-                self.add_mate(sender_addr, nickname);
+                eprintln!("{} ({}) is in the room", nickname, author);
+                self.add_mate(author, nickname);
             },
             cl::Packet::Cursor(x, y, brush_size) =>
-                if let Some(mate) = self.mates.get_mut(&sender_addr) {
+                if let Some(mate) = self.mates.get_mut(&author) {
                     mate.cursor_prev = mate.cursor;
                     mate.cursor = Point::new(cl::from_fixed29p3(x), cl::from_fixed29p3(y));
                     mate.last_cursor = Instant::now();
                     mate.brush_size = cl::from_fixed15p1(brush_size);
                 } else {
-                    eprintln!("{} sus", sender_addr);
+                    eprintln!("{} sus", author);
                 },
             cl::Packet::Stroke(points) => {
                 let points: Vec<StrokePoint> = points
@@ -205,92 +309,51 @@ impl Peer {
                     })
                     .collect();
                 if points.len() > 0 {
-                    if let Some(mate) = self.mates.get_mut(&sender_addr) {
+                    if let Some(mate) = self.mates.get_mut(&author) {
                         mate.cursor_prev = points[0].point;
                         mate.cursor = points.last().unwrap().point;
                         mate.last_cursor = Instant::now();
                     }
                 }
-                return Some(Message::Stroke(points))
+                self.send_message(MessageKind::Stroke(points));
             },
             cl::Packet::Reserved => (),
+            //
             // 0.2.0
-            cl::Packet::Version(version) if !cl::compatible_with(version) =>
-                return Some(Message::Error("Client is too old.".into())),
-            cl::Packet::Version(_) => (),
-            cl::Packet::ChunkPositions(positions) => return Some(Message::ChunkPositions(positions)),
-            cl::Packet::GetChunks(positions) => return Some(Message::GetChunks(sender_addr, positions)),
-            cl::Packet::Chunks(chunks) => return Some(Message::Chunks(chunks)),
-        }
-
-        None
-    }
-
-    /// Processes the next packet received from the matchmaker, and maybe returns a message
-    /// converted from to that packet.
-    fn next_packet(&mut self) -> Option<Message> {
-        enum Then {
-            Continue,
-            ReadRelayed(SocketAddr, Vec<u8>),
-            SayHello,
-        }
-        let mut then = Then::Continue;
-        let mut message: Option<Message> = None;
-
-        if let Some(mm) = &self.matchmaker {
-            // give me back my if-let-chaining
-            if let Some(packet) = &mm.try_recv() {
-                match packet {
-                    mm::Packet::RoomId(id) => {
-                        self.room_id = Some(*id);
-                        try_or_message!(mm.send(mm::Packet::RequestRelay(None)));
-                        then = Then::SayHello;
-                        message = Some(Message::Connected);
-                    },
-                    mm::Packet::HostAddress(addr) => {
-                        self.host = Some(*addr);
-                        then = Then::SayHello;
-                        message = Some(
-                            Self::connect_to_host(mm, *addr, &mut self.is_relayed)
-                                .err()
-                                .map_or(Message::Connected, |e| Message::Error(format!("{}", e))),
-                        );
-                    },
-                    mm::Packet::ClientAddress(_addr) => (),
-                    mm::Packet::Relayed(_, payload) if payload.len() == 0 => then = Then::SayHello,
-                    mm::Packet::Relayed(from, payload) => then = Then::ReadRelayed(*from, payload.to_vec()),
-                    mm::Packet::Disconnected(addr) =>
-                        if let Some(mate) = self.mates.remove(&addr) {
-                            return Some(Message::Left(mate.nickname))
-                        },
-                    mm::Packet::Error(message) => return Some(Message::Error(message.into())),
-                    _ => return None,
-                }
-            }
-        }
-
-        match then {
-            Then::Continue => (),
-            Then::ReadRelayed(sender, payload) => return self.decode_payload(sender, &payload),
-            Then::SayHello => {
-                try_or_message!(self.send(None, cl::Packet::Hello(self.nickname.clone())))
+            // -----
+            cl::Packet::Version(version) if !cl::compatible_with(version) => {
+                bus::push(Fatal(anyhow::anyhow!("Client is too old.")));
             },
+            cl::Packet::Version(_) => (),
+            cl::Packet::ChunkPositions(positions) => self.send_message(MessageKind::ChunkPositions(positions)),
+            cl::Packet::GetChunks(positions) => self.send_message(MessageKind::GetChunks(author, positions)),
+            cl::Packet::Chunks(chunks) => self.send_message(MessageKind::Chunks(chunks)),
         }
 
-        message
+        Ok(())
     }
 
-    /// Ticks the peer, and returns an iterator over all of its messages.
-    pub fn tick<'a>(&'a mut self) -> anyhow::Result<Messages<'a>> {
-        if let Some(mm) = &self.matchmaker {
-            let _ = mm.tick()?;
-        }
-        Ok(Messages { peer: self })
+    /// Ticks the peer's network connection.
+    pub fn communicate(&mut self) -> anyhow::Result<()> {
+        self.poll_for_new_connections()?;
+        self.poll_for_incoming_packets()?;
+        Ok(())
+    }
+
+    /// Adds another peer into the list of registered peers.
+    fn add_mate(&mut self, addr: SocketAddr, nickname: String) {
+        self.mates.insert(addr, Mate {
+            cursor: Point::new(0.0, 0.0),
+            cursor_prev: Point::new(0.0, 0.0),
+            last_cursor: Instant::now(),
+            nickname,
+            brush_size: 4.0,
+        });
     }
 
     /// Sends a cursor packet.
     pub fn send_cursor(&self, cursor: Point, brush_size: f32) -> anyhow::Result<()> {
-        self.send(
+        self.send_to_client(
             None,
             cl::Packet::Cursor(
                 cl::to_fixed29p3(cursor.x),
@@ -302,7 +365,7 @@ impl Peer {
 
     /// Sends a brush stroke packet.
     pub fn send_stroke(&self, iterator: impl Iterator<Item = StrokePoint>) -> anyhow::Result<()> {
-        self.send(
+        self.send_to_client(
             None,
             cl::Packet::Stroke(
                 iterator
@@ -330,19 +393,24 @@ impl Peer {
 
     /// Sends a chunk positions packet.
     pub fn send_chunk_positions(&self, to: SocketAddr, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
-        self.send(Some(to), cl::Packet::ChunkPositions(positions))
+        self.send_to_client(Some(to), cl::Packet::ChunkPositions(positions))
     }
 
     /// Requests chunk data from the host.
     pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
         assert!(self.host.is_some(), "only non-hosts can download chunks");
         eprintln!("downloading {} chunks from the host", positions.len());
-        self.send(self.host, cl::Packet::GetChunks(positions))
+        self.send_to_client(self.host, cl::Packet::GetChunks(positions))
     }
 
     /// Sends chunks to the given peer.
     pub fn send_chunks(&self, to: SocketAddr, chunks: Vec<((i32, i32), Vec<u8>)>) -> anyhow::Result<()> {
-        self.send(Some(to), cl::Packet::Chunks(chunks))
+        self.send_to_client(Some(to), cl::Packet::Chunks(chunks))
+    }
+
+    /// Returns the peer's unique token.
+    pub fn token(&self) -> PeerToken {
+        self.token
     }
 
     /// Returns whether this peer is the host.
@@ -361,12 +429,13 @@ impl Peer {
     }
 }
 
-impl Iterator for Messages<'_> {
-    type Item = Message;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.peer.next_packet()
-    }
+/// Another person in the same room.
+pub struct Mate {
+    pub cursor: Point,
+    pub cursor_prev: Point,
+    pub last_cursor: Instant,
+    pub nickname: String,
+    pub brush_size: f32,
 }
 
 impl Mate {
@@ -375,6 +444,6 @@ impl Mate {
         use crate::app::paint::State;
         let elapsed_ms = self.last_cursor.elapsed().as_millis() as f32;
         let t = (elapsed_ms / State::TIME_PER_UPDATE.as_millis() as f32).min(1.0);
-        util::lerp_point(self.cursor_prev, self.cursor, t)
+        common::lerp_point(self.cursor_prev, self.cursor, t)
     }
 }

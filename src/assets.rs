@@ -2,8 +2,8 @@
 
 use skulpin::skia_safe::*;
 
+use crate::common::{new_rc_font, RcFont};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
-use crate::util::{new_rc_font, RcFont};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");

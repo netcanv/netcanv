@@ -37,13 +37,15 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::unix::*;
 use winit::window::{Window, WindowBuilder};
 
+#[macro_use]
+mod common;
 mod app;
 mod assets;
 mod config;
 mod net;
 mod paint_canvas;
+mod token;
 mod ui;
-mod util;
 mod viewport;
 
 use app::*;
@@ -76,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut renderer = RendererBuilder::new().build(&window, window_size)?;
 
     let assets = Assets::new(color_scheme);
-    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config, None)) as _);
+    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config)) as _);
     let mut input = Input::new();
 
     event_loop.run(move |event, _, control_flow| {
@@ -95,7 +97,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let scale_factor = window.scale_factor();
                 match renderer.draw(window_size, scale_factor, |canvas, csh| {
                     // `unwrap()` always succeeds here as app is never None.
-                    // I'm not a fan of this method chaining, though, but I guess it's typical for Rust.
+                    // I'm not a fan of this method chaining, though, but I guess it's typical
+                    // for Rust.
                     app.as_mut().unwrap().process(StateArgs {
                         canvas,
                         coordinate_system_helper: &csh,
@@ -110,8 +113,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             },
 
             Event::LoopDestroyed => {
-                // Fix for SIGSEGV inside of skia-[un]safe due to a Surface not being dropped properly (?).
-                // Not sure what that's all about, but this little snippet fixes the bug so eh, why not.
+                // Fix for SIGSEGV inside of skia-[un]safe due to a Surface not being dropped
+                // properly (?). Not sure what that's all about, but this little snippet
+                // fixes the bug so eh, why not.
                 drop(app.take().unwrap());
             },
 
