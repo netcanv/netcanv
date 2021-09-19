@@ -24,7 +24,9 @@ pub struct Input {
 
     // keyboard input
     char_buffer: Vec<char>,
+
     key_just_typed: [bool; KEY_CODE_COUNT],
+    key_is_down: [bool; KEY_CODE_COUNT],
 
     // time
     time_origin: Instant,
@@ -37,12 +39,16 @@ impl Input {
             mouse_position: Point::new(0.0, 0.0),
             previous_mouse_position: Point::new(0.0, 0.0),
             mouse_scroll: Vector::new(0.0, 0.0),
+
             mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
             mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
             mouse_buttons_locked: false,
+
             char_buffer: Vec::new(),
             key_just_typed: [false; KEY_CODE_COUNT],
+            key_is_down: [false; KEY_CODE_COUNT],
+
             time_origin: Instant::now(),
         }
     }
@@ -119,6 +125,15 @@ impl Input {
     pub fn key_just_typed(&self, key: VirtualKeyCode) -> bool {
         if let Some(i) = Self::key_index(key) {
             self.key_just_typed[i]
+        } else {
+            false
+        }
+    }
+
+    /// Returns wheter the provided key is down
+    pub fn key_is_down(&self, key: VirtualKeyCode) -> bool {
+        if let Some(i) = Self::key_index(key) {
+            self.key_is_down[i]
         } else {
             false
         }
@@ -230,6 +245,11 @@ impl Input {
         if let Some(i) = Self::key_index(key) {
             if state == ElementState::Pressed {
                 self.key_just_typed[i] = true;
+                self.key_is_down[i] = true;
+            }
+
+            if state == ElementState::Released {
+                self.key_is_down[i] = false;
             }
         }
     }

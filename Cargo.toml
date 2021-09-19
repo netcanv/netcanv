@@ -34,6 +34,9 @@ nysa = "0.2.1"
 directories = "3.0.2"
 toml = "0.5.8"
 
+# Clipboard
+copypasta = "0.7.1"
+
 # Workspace
 netcanv-protocol = { path = "netcanv-protocol" }
 

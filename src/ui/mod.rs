@@ -444,19 +444,37 @@ pub trait Focus {
 /// Creates a _focus chain_, that is, a list of elements that can be `Tab`bed between.
 pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
     if input.key_just_typed(VirtualKeyCode::Tab) {
-        let mut had_focus = false;
-        for element in fields.iter_mut() {
-            if had_focus {
-                element.set_focus(true);
-                return
-            }
-            if element.focused() {
-                element.set_focus(false);
-                had_focus = true;
+        macro_rules! process_focus_change {
+            ($had_focus: expr, $element: expr) => {
+                if $had_focus {
+                    $element.set_focus(true);
+                    return
+                }
+                if $element.focused() {
+                    $element.set_focus(false);
+                    $had_focus = true;
+                }
             }
         }
-        if !fields.is_empty() {
-            fields[0].set_focus(true);
+
+        let mut had_focus = false;
+
+        if input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift) {
+            for element in fields.iter_mut().rev() {
+                process_focus_change!(had_focus, element);
+            }
+
+            if !fields.is_empty() {
+                fields[fields.len() - 1].set_focus(true);
+            }
+        } else {
+            for element in fields.iter_mut() {
+                process_focus_change!(had_focus, element);
+            }
+
+            if !fields.is_empty() {
+                fields[0].set_focus(true);
+            }
         }
     }
 }
