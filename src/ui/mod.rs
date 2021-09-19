@@ -463,14 +463,18 @@ pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
             for element in fields.iter_mut().rev() {
                 process_focus_change!(had_focus, element);
             }
+
+            if !fields.is_empty() {
+                fields[fields.len() - 1].set_focus(true);
+            }
         } else {
             for element in fields.iter_mut() {
                 process_focus_change!(had_focus, element);
             }
-        }
 
-        if !fields.is_empty() {
-            fields[0].set_focus(true);
+            if !fields.is_empty() {
+                fields[0].set_focus(true);
+            }
         }
     }
 }
