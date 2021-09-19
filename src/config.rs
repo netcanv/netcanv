@@ -84,7 +84,7 @@ impl Default for UserConfig {
         Self {
             lobby: LobbyConfig {
                 nickname: "Anon".to_owned(),
-                matchmaker: "localhost:62137".to_owned(),
+                matchmaker: "localhost".to_owned(),
             },
             ui: UiConfig {
                 color_scheme: ColorScheme::Light,
