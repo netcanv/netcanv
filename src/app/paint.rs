@@ -76,9 +76,17 @@ pub struct State {
 }
 
 /// The palette of colors at the bottom of the screen.
+#[rustfmt::skip]
 const COLOR_PALETTE: &'static [u32] = &[
-   0x100820ff, 0xff003eff, 0xff7b00ff, 0xffff00ff, 0x2dd70eff, 0x03cbfbff, 0x0868ebff, 0xa315d7ff,
-   0xffffffff,
+   0x100820ff, // black
+   0xff003eff, // red
+   0xff7b00ff, // orange
+   0xffff00ff, // yellow
+   0x2dd70eff, // green
+   0x03cbfbff, // aqua
+   0x0868ebff, // blue
+   0xa315d7ff, // purple
+   0xffffffff, // white
 ];
 
 macro_rules! log {
