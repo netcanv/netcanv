@@ -56,6 +56,11 @@ impl Selection {
     }
 }
 
+enum ArrowKey {
+    Left,
+    Right,
+}
+
 /// A text field's state.
 pub struct TextField {
     text: Vec<char>,
@@ -291,23 +296,15 @@ impl TextField {
         input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)
     }
 
-    fn process_word_skipping_and_selection(
-        &mut self,
-        input: &Input,
-        not_found_ws_value: usize,
-        range: Range<usize>,
-        right: bool,
-        is_shift_down: bool,
-    ) {
+    fn process_word_skipping_and_selection(&mut self, range: Range<usize>, arrow_key: ArrowKey, is_shift_down: bool) {
         let mut found_whitespace = false;
-        let mut ix: usize = if right { 0 } else { 0 };
+        let mut ix: usize = 0;
 
         let text_in_range = &self.text[range];
 
-        let text_for_range: Vec<&char> = if right {
-            text_in_range.iter().collect()
-        } else {
-            text_in_range.iter().rev().collect()
+        let text_for_range: Vec<&char> = match arrow_key {
+            ArrowKey::Right => text_in_range.iter().collect(),
+            ArrowKey::Left => text_in_range.iter().rev().collect(),
         };
 
         let mut iter = text_for_range.iter().enumerate().peekable();
@@ -332,19 +329,19 @@ impl TextField {
         }
 
         if found_whitespace {
-            println!("{}", ix);
-
-            if right {
-                self.selection.cursor += ix + 1;
-            } else {
-                self.selection.cursor -= ix + 1;
-            }
+            match arrow_key {
+                ArrowKey::Right => self.selection.cursor += ix + 1,
+                ArrowKey::Left => self.selection.cursor -= ix + 1,
+            };
 
             if !is_shift_down {
                 self.selection.anchor = self.selection.cursor;
             }
         } else {
-            self.selection.cursor = not_found_ws_value;
+            self.selection.cursor = match arrow_key {
+                ArrowKey::Right => self.text.len(),
+                ArrowKey::Left => 0,
+            };
 
             if !is_shift_down {
                 self.selection.anchor = self.selection.cursor;
@@ -370,10 +367,8 @@ impl TextField {
 
                 if self.key_ctrl_down(input) {
                     self.process_word_skipping_and_selection(
-                        input,
-                        0,
                         0..self.selection.cursor,
-                        false,
+                        ArrowKey::Left,
                         self.key_shift_down(input),
                     );
                 } else {
@@ -386,10 +381,8 @@ impl TextField {
 
                 if self.key_ctrl_down(input) {
                     self.process_word_skipping_and_selection(
-                        input,
-                        self.text.len(),
                         self.selection.cursor..self.text.len(),
-                        true,
+                        ArrowKey::Right,
                         self.key_shift_down(input),
                     );
                 } else if self.selection.cursor < self.text.len() {
@@ -446,15 +439,13 @@ impl TextField {
                 }
 
                 if input.key_just_typed(VirtualKeyCode::Back) {
-                    self.process_word_skipping_and_selection(input, 0, 0..self.selection.cursor, false, true);
+                    self.process_word_skipping_and_selection(0..self.selection.cursor, ArrowKey::Left, true);
                 }
 
                 if input.key_just_typed(VirtualKeyCode::Delete) {
                     self.process_word_skipping_and_selection(
-                        input,
-                        self.text.len(),
                         self.selection.cursor..self.text.len(),
-                        true,
+                        ArrowKey::Right,
                         true,
                     );
 
