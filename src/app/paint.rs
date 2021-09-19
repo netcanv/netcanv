@@ -142,9 +142,9 @@ impl State {
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
          log!(
-                this.log,
-                "To invite friends, send them the room ID shown in the bottom right corner of your screen."
-            );
+            this.log,
+            "To invite friends, send them the room ID shown in the bottom right corner of your screen."
+         );
       }
       this
    }
