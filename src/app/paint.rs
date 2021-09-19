@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -43,6 +43,17 @@ struct Tip {
    visible_duration: Duration,
 }
 
+/// The state of a chunk download.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChunkDownload {
+   NotDownloaded,
+   Requested,
+   Downloaded,
+}
+
+/// A bus message requesting a chunk download.
+struct RequestChunkDownload((i32, i32));
+
 /// The paint app state.
 pub struct State {
    assets: Assets,
@@ -58,10 +69,7 @@ pub struct State {
    brush_size_slider: Slider,
    stroke_buffer: Vec<StrokePoint>,
 
-   server_side_chunks: HashSet<(i32, i32)>,
-   requested_chunks: HashSet<(i32, i32)>,
-   downloaded_chunks: HashSet<(i32, i32)>,
-   needed_chunks: HashSet<(i32, i32)>,
+   chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
 
    load_from_file: Option<PathBuf>,
    save_to_file: Option<PathBuf>,
@@ -119,10 +127,7 @@ impl State {
          brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
          stroke_buffer: Vec::new(),
 
-         server_side_chunks: HashSet::new(),
-         requested_chunks: HashSet::new(),
-         downloaded_chunks: HashSet::new(),
-         needed_chunks: HashSet::new(),
+         chunk_downloads: HashMap::new(),
 
          load_from_file: image_path,
          save_to_file: None,
@@ -147,6 +152,11 @@ impl State {
          );
       }
       this
+   }
+
+   /// Requests a chunk download from the host.
+   fn queue_chunk_download(chunk_position: (i32, i32)) {
+      bus::push(RequestChunkDownload(chunk_position));
    }
 
    /// Shows a tip in the upper left corner.
@@ -342,26 +352,21 @@ impl State {
          }
          // Chunk downloading
          if self.save_to_file.is_some() {
-            eprintln!(
-               "downloaded {} / {} chunks",
-               self.downloaded_chunks.len(),
-               self.server_side_chunks.len()
-            );
-            if self.downloaded_chunks.len() < self.server_side_chunks.len() {
-               self
-                  .needed_chunks
-                  .extend(self.server_side_chunks.difference(&self.requested_chunks));
-            } else {
-               catch!(self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap())));
-               self.last_autosave = Instant::now();
-               self.save_to_file = None;
-            }
+            // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
+            // downloaded.
+            // There's some internal debate I've been having on the topic od downloading all chunks
+            // when the user requests a save. The main issue I see is that on large canvases
+            // downloading all chunks may stall the host for too long, lagging everything to death.
+            // If a client wants to download all the chunks, they should probably just explore
+            // enough of the canvas such that all the chunks get loaded.
+            catch!(self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap())));
+            self.last_autosave = Instant::now();
+            self.save_to_file = None;
          } else {
             for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-               if self.server_side_chunks.contains(&chunk_position)
-                  && !self.requested_chunks.contains(&chunk_position)
+               if let Some(ChunkDownload::NotDownloaded) = self.chunk_downloads.get(&chunk_position)
                {
-                  self.needed_chunks.insert(chunk_position);
+                  Self::queue_chunk_download(chunk_position);
                }
             }
          }
@@ -527,14 +532,16 @@ impl State {
          MessageKind::Stroke(points) => {
             self.fellow_stroke(canvas, &points);
          }
-         MessageKind::ChunkPositions(mut positions) => {
+         MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
-            self.server_side_chunks = positions.drain(..).collect();
+            for chunk_position in positions {
+               self.chunk_downloads.insert(chunk_position, ChunkDownload::NotDownloaded);
+            }
          }
          MessageKind::Chunks(chunks) => {
             for (chunk_position, image_data) in chunks {
                self.canvas_data(canvas, chunk_position, &image_data);
-               self.downloaded_chunks.insert(chunk_position);
+               self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
             }
          }
          MessageKind::GetChunks(requester, positions) => {
@@ -604,11 +611,15 @@ impl AppState for State {
          }
       }
 
-      if self.needed_chunks.len() > 0 {
-         for chunk in &self.needed_chunks {
-            self.requested_chunks.insert(*chunk);
+      let needed_chunks: Vec<_> = bus::retrieve_all::<RequestChunkDownload>()
+         .into_iter()
+         .map(|message| message.consume().0)
+         .collect();
+      if needed_chunks.len() > 0 {
+         for &chunk_position in &needed_chunks {
+            self.chunk_downloads.insert(chunk_position, ChunkDownload::Requested);
          }
-         catch!(self.peer.download_chunks(self.needed_chunks.drain().collect()));
+         catch!(self.peer.download_chunks(needed_chunks));
       }
 
       // Error checking
