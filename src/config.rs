@@ -8,87 +8,88 @@ use serde::{Deserialize, Serialize};
 /// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
 pub struct LobbyConfig {
-    pub nickname: String,
-    pub matchmaker: String,
+   pub nickname: String,
+   pub matchmaker: String,
 }
 
 /// The color scheme variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ColorScheme {
-    Light,
-    Dark,
+   Light,
+   Dark,
 }
 
 /// UI-related configuration options.
 #[derive(Deserialize, Serialize)]
 pub struct UiConfig {
-    pub color_scheme: ColorScheme,
+   pub color_scheme: ColorScheme,
 }
 
 /// A user `config.toml` file.
 #[derive(Deserialize, Serialize)]
 pub struct UserConfig {
-    pub lobby: LobbyConfig,
-    pub ui: UiConfig,
+   pub lobby: LobbyConfig,
+   pub ui: UiConfig,
 }
 
 impl UserConfig {
-    /// Returns the platform-specific configuration directory.
-    pub fn config_dir() -> PathBuf {
-        let project_dirs = ProjectDirs::from("", "", "NetCanv").expect("cannot determine config directories");
-        project_dirs.config_dir().to_owned()
-    }
+   /// Returns the platform-specific configuration directory.
+   pub fn config_dir() -> PathBuf {
+      let project_dirs =
+         ProjectDirs::from("", "", "NetCanv").expect("cannot determine config directories");
+      project_dirs.config_dir().to_owned()
+   }
 
-    /// Returns the path to the `config.toml` file.
-    pub fn path() -> PathBuf {
-        Self::config_dir().join("config.toml")
-    }
+   /// Returns the path to the `config.toml` file.
+   pub fn path() -> PathBuf {
+      Self::config_dir().join("config.toml")
+   }
 
-    /// Loads the `config.toml` file.
-    ///
-    /// If the `config.toml` doesn't exist, it's created with values inherited from
-    /// `UserConfig::default`.
-    pub fn load_or_create() -> anyhow::Result<Self> {
-        let config_dir = Self::config_dir();
-        let config_file = Self::path();
-        std::fs::create_dir_all(config_dir)?;
-        if !config_file.is_file() {
-            let config = Self::default();
-            config.save()?;
-            Ok(config)
-        } else {
-            let file = std::fs::read_to_string(&config_file)?;
-            let config = match toml::from_str(&file) {
-                Ok(config) => config,
-                Err(error) => {
-                    eprintln!("error while deserializing config file: {}", error);
-                    eprintln!("falling back to default config");
-                    Self::default()
-                },
-            };
-            Ok(config)
-        }
-    }
+   /// Loads the `config.toml` file.
+   ///
+   /// If the `config.toml` doesn't exist, it's created with values inherited from
+   /// `UserConfig::default`.
+   pub fn load_or_create() -> anyhow::Result<Self> {
+      let config_dir = Self::config_dir();
+      let config_file = Self::path();
+      std::fs::create_dir_all(config_dir)?;
+      if !config_file.is_file() {
+         let config = Self::default();
+         config.save()?;
+         Ok(config)
+      } else {
+         let file = std::fs::read_to_string(&config_file)?;
+         let config = match toml::from_str(&file) {
+            Ok(config) => config,
+            Err(error) => {
+               eprintln!("error while deserializing config file: {}", error);
+               eprintln!("falling back to default config");
+               Self::default()
+            }
+         };
+         Ok(config)
+      }
+   }
 
-    /// Saves the user configuration to the `config.toml` file.
-    pub fn save(&self) -> anyhow::Result<()> {
-        // Assumes that `config_dir` was already created in `load_or_create`.
-        let config_file = Self::path();
-        std::fs::write(&config_file, toml::to_string(self)?)?;
-        Ok(())
-    }
+   /// Saves the user configuration to the `config.toml` file.
+   pub fn save(&self) -> anyhow::Result<()> {
+      // Assumes that `config_dir` was already created in `load_or_create`.
+      let config_file = Self::path();
+      std::fs::write(&config_file, toml::to_string(self)?)?;
+      Ok(())
+   }
 }
 
 impl Default for UserConfig {
-    fn default() -> Self {
-        Self {
-            lobby: LobbyConfig {
-                nickname: "Anon".to_owned(),
-                matchmaker: "localhost".to_owned(),
-            },
-            ui: UiConfig {
-                color_scheme: ColorScheme::Light,
-            },
-        }
-    }
+   fn default() -> Self {
+      Self {
+         lobby: LobbyConfig {
+            nickname: "Anon".to_owned(),
+            matchmaker: "localhost".to_owned(),
+         },
+         ui: UiConfig {
+            color_scheme: ColorScheme::Light,
+         },
+      }
+   }
 }
