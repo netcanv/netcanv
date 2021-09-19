@@ -1,9 +1,10 @@
 //! An abstraction for sockets, communicating over the global bus.
 
+use std::default;
 use std::fmt::Debug;
 use std::io::{BufReader, BufWriter, Write};
 use std::marker::PhantomData;
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
@@ -120,10 +121,15 @@ where
         })
     }
 
-    pub fn connect<Address>(self: &Arc<Self>, address: Address) -> anyhow::Result<ConnectionToken>
-    where
-        Address: 'static + Send + ToSocketAddrs,
-    {
+    fn resolve_address_with_default_port(address: &str, default_port: u16) -> anyhow::Result<Vec<SocketAddr>> {
+        Ok(if let Ok(addresses) = address.to_socket_addrs() {
+            addresses.collect()
+        } else {
+            (address, default_port).to_socket_addrs()?.collect()
+        })
+    }
+
+    pub fn connect(self: &Arc<Self>, address: String, default_port: u16) -> anyhow::Result<ConnectionToken> {
         let token = ConnectionToken(CONNECTION_TOKEN.next());
 
         let this = Arc::clone(self);
@@ -132,7 +138,8 @@ where
             .spawn(move || {
                 let thread_slot = {
                     let mut inner = this.inner.lock().unwrap();
-                    catch!(inner.connect(token, address))
+                    let addresses = catch!(Self::resolve_address_with_default_port(&address, default_port));
+                    catch!(inner.connect(token, &addresses[..]))
                 };
                 let socket = Socket {
                     token,

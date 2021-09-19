@@ -4,6 +4,9 @@ use std::net::SocketAddr;
 
 use serde::{Deserialize, Serialize};
 
+/// The default matchmaker port.
+pub const DEFAULT_PORT: u16 = 62137;
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
     //

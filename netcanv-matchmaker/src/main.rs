@@ -329,7 +329,7 @@ impl Matchmaker {
 }
 
 fn main() -> Result<(), Box<dyn error::Error>> {
-    let mut port: u16 = 62137;
+    let mut port: u16 = DEFAULT_PORT;
     let mut args = std::env::args();
     args.next();
     if let Some(port_str) = args.next() {

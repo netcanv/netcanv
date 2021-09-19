@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::mem;
 use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -82,8 +83,12 @@ static PEER_TOKEN: Token = Token::new();
 
 impl Peer {
     /// Host a new room on the given matchmaker.
-    pub fn host(socksys: &Arc<SocketSystem<mm::Packet>>, nickname: &str, matchmaker_addr: &str) -> anyhow::Result<Self> {
-        let connection_token = socksys.connect(matchmaker_addr.to_owned())?;
+    pub fn host(
+        socksys: &Arc<SocketSystem<mm::Packet>>,
+        nickname: &str,
+        matchmaker_address: &str,
+    ) -> anyhow::Result<Self> {
+        let connection_token = socksys.connect(matchmaker_address.to_owned(), mm::DEFAULT_PORT)?;
         Ok(Self {
             token: PeerToken(PEER_TOKEN.next()),
             state: State::WaitingForMatchmaker {
@@ -102,10 +107,10 @@ impl Peer {
     pub fn join(
         socksys: &Arc<SocketSystem<mm::Packet>>,
         nickname: &str,
-        matchmaker_addr: &str,
+        matchmaker_address: &str,
         room_id: u32,
     ) -> anyhow::Result<Self> {
-        let connection_token = socksys.connect(matchmaker_addr.to_owned())?;
+        let connection_token = socksys.connect(matchmaker_address.to_owned(), mm::DEFAULT_PORT)?;
         Ok(Self {
             token: PeerToken(PEER_TOKEN.next()),
             state: State::WaitingForMatchmaker {
