@@ -27,7 +27,6 @@ serde = { version = "1.0.123", features = ["derive"] }
 bincode = "1.3.2"
 
 # Multithreading
-crossbeam-channel = "0.4.4"
 nysa = "0.2.2"
 
 # Utilities

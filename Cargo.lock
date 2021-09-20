@@ -1174,7 +1174,6 @@ dependencies = [
  "anyhow",
  "bincode",
  "copypasta",
- "crossbeam-channel 0.4.4",
  "directories",
  "image",
  "native-dialog",
