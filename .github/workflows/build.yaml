@@ -21,8 +21,8 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev flatpak
-        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-        flatpak install flathub org.flatpak.Builder -y
+        flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        flatpak install --user flathub org.flatpak.Builder -y
 
     - name: Compile application
       run: cargo build --release
