@@ -21,9 +21,6 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev flatpak
-        flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-        flatpak install --user flathub org.flatpak.Builder -y
-        flatpak install --user flathub org.freedesktop.Platform//21.08 org.freedesktop.Sdk//21.08 -y
 
     - name: Compile application
       run: cargo build --release
@@ -36,6 +33,9 @@ jobs:
 
     - name: Build Flatpak bundle
       run: |
+        flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        flatpak install --user flathub org.flatpak.Builder -y
+        flatpak install --user flathub org.freedesktop.Platform//21.08 org.freedesktop.Sdk//21.08 -y
         flatpak run org.flatpak.Builder --repo=flatpak/repo --force-clean --user --install flatpak/build build/io.github.liquidev.NetCanv.yml
         flatpak build-bundle flatpak/repo flatpak/NetCanv.flatpak io.github.liquidev.NetCanv
 
