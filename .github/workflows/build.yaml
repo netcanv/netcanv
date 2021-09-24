@@ -12,14 +12,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-appimage:
+  build-appimage-and-flatpak:
     runs-on: ubuntu-18.04
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
-      run: sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+      run: sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev flatpak-builder
 
     - name: Compile application
       run: cargo build --release
@@ -30,11 +30,18 @@ jobs:
     - name: Build AppImages
       run: bash build/appimages.sh
 
+    - name: Build Flatpak bundle
+      run: |
+        flatpak-builder --repo=flatpak/repo --force-clean --user --install flatpak/build build/io.github.liquidev.NetCanv.yml
+        flatpak build-bundle flatpak/repo flatpak/NetCanv.flatpak io.github.liquidev.NetCanv
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v2.2.2
       with:
         name: netcanv-nightly-linux
-        path: appimages
+        path: |
+          appimages
+          flatpak/NetCanv.flatpak
 
   build-exe:
     runs-on: windows-latest

@@ -2,7 +2,7 @@
 Type=Application
 Encoding=UTF-8
 Name=NetCanv Matchmaker
-Comment=Matchmaker for NetCanv
+Comment=Matchmaker and packet relay server for NetCanv
 Exec=netcanv-matchmaker
 Icon=netcanv
 Categories=Graphics;Network
