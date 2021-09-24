@@ -19,7 +19,9 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
-      run: sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev flatpak-builder
+      run: |
+        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev flatpak
+        flatpak install flathub org.flatpak.Builder -y
 
     - name: Compile application
       run: cargo build --release
@@ -32,7 +34,7 @@ jobs:
 
     - name: Build Flatpak bundle
       run: |
-        flatpak-builder --repo=flatpak/repo --force-clean --user --install flatpak/build build/io.github.liquidev.NetCanv.yml
+        flatpak run org.flatpak.Builder --repo=flatpak/repo --force-clean --user --install flatpak/build build/io.github.liquidev.NetCanv.yml
         flatpak build-bundle flatpak/repo flatpak/NetCanv.flatpak io.github.liquidev.NetCanv
 
     - name: Upload artifacts
