@@ -33,9 +33,9 @@ jobs:
 
     - name: Build Flatpak bundle
       run: |
-        flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-        flatpak install --user flathub org.flatpak.Builder -y
-        flatpak install --user flathub org.freedesktop.Platform//21.08 org.freedesktop.Sdk//21.08 -y
+        sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        sudo flatpak install flathub org.flatpak.Builder -y
+        sudo flatpak install flathub org.freedesktop.Platform//21.08 org.freedesktop.Sdk//21.08 -y
         flatpak run org.flatpak.Builder --repo=flatpak/repo --force-clean --user --install flatpak/build build/io.github.liquidev.NetCanv.yml
         flatpak build-bundle flatpak/repo flatpak/NetCanv.flatpak io.github.liquidev.NetCanv
 
