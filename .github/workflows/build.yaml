@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-appimage-and-flatpak:
+  build-appimage:
     runs-on: ubuntu-18.04
 
     steps:
