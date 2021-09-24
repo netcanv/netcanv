@@ -6,3 +6,6 @@
 
 appimage/out
 appimage/linuxdeploy-*
+
+.flatpak-builder
+flatpak

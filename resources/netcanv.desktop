@@ -2,7 +2,7 @@
 Type=Application
 Encoding=UTF-8
 Name=NetCanv
-Comment=Multiplayer Paint
+Comment=Online collaborative painting
 Exec=netcanv
 Icon=netcanv
 Categories=Graphics;Network

@@ -2,7 +2,7 @@
 Type=Application
 Encoding=UTF-8
 Name=NetCanv Matchmaker
-Comment=Server for Multiplayer Paint
+Comment=Matchmaker for NetCanv
 Exec=netcanv-matchmaker
 Icon=netcanv
 Categories=Graphics;Network

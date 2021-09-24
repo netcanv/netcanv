@@ -1,0 +1,53 @@
+app-id: io.github.liquidev.NetCanv
+runtime: org.freedesktop.Platform
+runtime-version: "21.08"
+sdk: org.freedesktop.Sdk
+command: netcanv
+
+finish-args:
+  # X11 + XShm access
+  - --share=ipc
+  - --socket=fallback-x11
+  # Wayland access
+  - --socket=wayland
+  # GPU access
+  - --device=dri
+  # Needs to talk to the network:
+  - --share=network
+  # Needs to save files locally
+  - --filesystem=home
+
+add-extensions:
+  org.freedesktop.Platform.GL32:
+    directory: lib/i386-linux-gnu/GL
+    version: "1.4"
+    versions: 21.08;1.4
+    subdirectories: true
+    no-autodownload: true
+    autodelete: false
+    add-ld-path: lib
+    merge-dirs: vulkan/icd.d;glvnd/egl_vendor.d;OpenCL/vendors;lib/dri;lib/d3d;vulkan/explicit_layer.d
+    download-if: active-gl-driver
+    enable-if: active-gl-driver
+
+rename-icon: netcanv
+
+modules:
+  - name: netcanv
+    buildsystem: simple
+    build-commands:
+      - install -D netcanv /app/bin/netcanv
+      - install -D netcanv.desktop /app/share/applications/io.github.liquidev.NetCanv.desktop
+      - install -D netcanv-matchmaker.desktop /app/share/applications/io.github.liquidev.NetCanv.Matchmaker.desktop
+      - install -D netcanv.png /app/share/icons/hicolor/512x512/apps/netcanv.png
+      - sed -i 's/netcanv/io.github.liquidev.NetCanv/g' /app/share/applications/io.github.liquidev.NetCanv.Matchmaker.desktop
+      - chmod +x /app/bin/netcanv
+    sources:
+      - type: file
+        path: ../target/release/netcanv
+      - type: file
+        path: ../resources/netcanv.desktop
+      - type: file
+        path: ../resources/netcanv-matchmaker.desktop
+      - type: file
+        path: ../resources/netcanv.png
