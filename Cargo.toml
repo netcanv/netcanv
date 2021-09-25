@@ -16,7 +16,7 @@ anyhow = "1.0.40"
 winit = "0.24.0"
 skulpin = { version = "0.14.0", features = ["skia-complete", "winit-app", "winit-24"] }
 native-dialog = "0.5.5"
-image = { version = "0.23.14", default-features = false, features = ["png", "webp"] }
+image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }
 usvg = { version = "0.14.0", default-features = false }
 resvg = { version = "0.14.0", default-features = false }

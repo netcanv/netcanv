@@ -295,8 +295,7 @@ impl State {
                .add_filter(
                   "Supported image files",
                   &[
-                     "png", "jpg", "jpeg", "jfif", "gif", "bmp", "tif", "tiff", "webp", "avif",
-                     "pnm", "tga",
+                     "png", "jpg", "jpeg", "jfif"
                   ],
                )
                .add_filter("NetCanv canvas", &["toml"])
