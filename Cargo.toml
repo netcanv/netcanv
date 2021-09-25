@@ -16,11 +16,11 @@ anyhow = "1.0.40"
 winit = "0.24.0"
 skulpin = { version = "0.14.0", features = ["skia-complete", "winit-app", "winit-24"] }
 native-dialog = "0.5.5"
-image = "0.23.14"
+image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }
-usvg = "0.14.0"
-resvg = "0.14.0"
-tiny-skia = "0.5.0"
+usvg = { version = "0.14.0", default-features = false }
+resvg = { version = "0.14.0", default-features = false }
+tiny-skia = { version = "0.5.0", default-features = false, features = ["std", "simd"] }
 
 # Networking
 serde = { version = "1.0.123", features = ["derive"] }
