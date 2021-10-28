@@ -318,7 +318,7 @@ impl State {
       // });
       if self.tip.created.elapsed() < self.tip.visible_duration {
          ui.push(ui.size(), Layout::Freeform);
-         ui.pad((32.0, 32.0));
+         ui.pad((16.0, 16.0));
          ui.push((72.0, 32.0), Layout::Freeform);
          ui.fill(Color::BLACK.with_alpha(192));
          ui.text(
@@ -378,7 +378,7 @@ impl State {
 
       ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
       ui.fill(self.assets.colors.panel);
-      ui.pad((16.0, 0.0));
+      ui.pad((8.0, 0.0));
 
       // Color palette
 

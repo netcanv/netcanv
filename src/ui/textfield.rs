@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 use netcanv_renderer::Font as FontTrait;
-use paws::{AlignH, AlignV, Color, Layout};
+use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
 use crate::{backend::Font, ui::*};
 
@@ -155,27 +155,12 @@ impl TextField {
       };
       ui.fill_rounded(colors.fill, 4.0);
       ui.outline_rounded(outline_color, 4.0, 1.0);
-      // ui.draw_on_canvas(canvas, |canvas| {
-      //    let mut paint = Paint::new(Color4f::from(colors.fill), None);
-      //    paint.set_anti_alias(true);
-      //    let mut rrect =
-      //       RRect::new_rect_xy(&Rect::from_point_and_size((0.0, 0.0), ui.size()), 4.0, 4.0);
-      //    canvas.draw_rrect(rrect, &paint);
-      //    paint.set_color(if self.focused {
-      //       colors.outline_focus
-      //    } else {
-      //       colors.outline
-      //    });
-      //    paint.set_style(paint::Style::Stroke);
-      //    rrect.offset((0.5, 0.5));
-      //    canvas.draw_rrect(rrect, &paint);
-      // });
 
       // Rendering: text TODO(renderer)
       ui.push(ui.size(), Layout::Freeform);
-      ui.pad((16.0, 0.0));
-      // canvas.save();
-      // ui.clip();
+      ui.pad((8.0, 0.0));
+      ui.render().push();
+      ui.clip();
 
       // Rendering: hint
       if hint.is_some() && self.text.len() == 0 {
@@ -195,54 +180,39 @@ impl TextField {
          && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK
       {
          // TODO(renderer): text field caret
-         // ui.draw_on_canvas(canvas, |canvas| {
-         //    let mut paint = Paint::new(Color4f::from(colors.text), None);
-         //    paint.set_anti_alias(false);
-         //    paint.set_style(paint::Style::Stroke);
+         ui.draw(|ui| {
+            let current_text: String = self.text[..self.selection.cursor].iter().collect();
+            let current_text_width = font.text_width(&current_text);
 
-         //    let current_text: String = self.text[..self.selection.cursor].iter().collect();
-         //    let current_text_width = ui.borrow_font().measure_str(current_text, None).0;
-
-         //    let x = current_text_width + 1.0;
-         //    let y1 = Self::height(ui) * 0.2;
-         //    let y2 = Self::height(ui) * 0.8;
-         //    canvas.draw_line((x, y1), (x, y2), &paint);
-         // });
+            let x = current_text_width + 1.0;
+            let y1 = Self::height(font) * 0.2;
+            let y2 = Self::height(font) * 0.8;
+            ui.line(point(x, y1), point(x, y2), colors.text, LineCap::Butt, 1.0);
+         });
       }
 
       if self.selection.cursor != self.selection.anchor {
-         // TODO(renderer): text field selection
-         // ui.draw_on_canvas(canvas, |canvas| {
-         //    let mut paint = Paint::new(Color4f::from(colors.selection), None);
-         //    paint.set_anti_alias(true);
+         ui.draw(|ui| {
+            // Get all the text starting from the start of the textbox to the first position
+            // of the selection.
+            // From this, we can calculate where to position the selection rectangle.
+            let selection_anchor_text: String =
+               self.text[..self.selection.start()].iter().collect();
+            let selection_anchor_text_width = font.text_width(&selection_anchor_text).round();
 
-         //    // Get all text from text field start to current selection cursor position.
-         //    // This will act as base position for selection.
-         //    let selection_anchor_text: String =
-         //       self.text[..self.selection.start()].iter().collect();
-         //    let selection_anchor_text_width =
-         //       ui.borrow_font().measure_str(selection_anchor_text, None).0;
+            // Get all the selected text and its width.
+            let selection_text: String = self.text[self.selection.normalize()].iter().collect();
+            let selection_text_width = font.text_width(&selection_text).round();
 
-         //    // Get selected text.
-         //    let selection_text: String = self.text[self.selection.normalize()].iter().collect();
-         //    let selection_text_width = ui.borrow_font().measure_str(selection_text, None).0;
-
-         //    let rrect = RRect::new_rect_xy(
-         //       &Rect::from_point_and_size(
-         //          (
-         //             selection_anchor_text_width.round(),
-         //             (Self::height(ui) * 0.2).round(),
-         //          ),
-         //          (
-         //             selection_text_width.round(),
-         //             (Self::height(ui) * 0.6).round(),
-         //          ),
-         //       ),
-         //       0.0,
-         //       0.0,
-         //    );
-         //    canvas.draw_rrect(rrect, &paint);
-         // });
+            ui.render().fill(
+               Rect::new(
+                  point(selection_anchor_text_width, Self::height(font) * 0.2),
+                  vector(selection_text_width, Self::height(font) * 0.6),
+               ),
+               colors.selection,
+               0.0,
+            )
+         });
       }
 
       ui.text(
@@ -252,7 +222,7 @@ impl TextField {
          (AlignH::Left, AlignV::Middle),
       );
 
-      // canvas.restore();
+      ui.render().pop();
       ui.pop();
 
       // Process events

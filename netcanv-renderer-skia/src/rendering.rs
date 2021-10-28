@@ -1,9 +1,9 @@
 use netcanv_renderer::Font as FontTrait;
 use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use skulpin::skia_safe::{
-   self,
+   self, color_filters, image_filters,
    paint::{Cap, Style},
-   AlphaType, ClipOp, Data, ImageInfo, Paint, Typeface,
+   AlphaType, BlendMode, ClipOp, Data, IRect, ImageInfo, Paint, Typeface,
 };
 
 use crate::conversions::*;
@@ -53,7 +53,7 @@ impl netcanv_renderer::Font for Font {
 
 /// An image.
 pub struct Image {
-   image: skia_safe::Image,
+   pub(crate) image: skia_safe::Image,
 }
 
 impl netcanv_renderer::Image for Image {
@@ -65,6 +65,17 @@ impl netcanv_renderer::Image for Image {
       )
       .expect("failed to create the image");
       Self { image }
+   }
+
+   fn colorized(&self, color: Color) -> Self {
+      let image_bounds = IRect::new(0, 0, self.image.width(), self.image.height());
+      let color_filter = color_filters::blend(to_color(color), BlendMode::SrcATop).unwrap();
+      let filter = image_filters::color_filter(color_filter, None, None).unwrap();
+      let colored_image =
+         self.image.new_with_filter(None, &filter, image_bounds, image_bounds).unwrap().0;
+      Image {
+         image: colored_image,
+      }
    }
 
    fn size(&self) -> (usize, usize) {

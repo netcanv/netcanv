@@ -185,13 +185,14 @@ impl State {
          ui.offset(vector(32.0, 8.0));
 
          ui.paragraph(
-            self.assets.colors.text,
-            AlignH::Left,
-            None,
+            &self.assets.sans,
             &[
                "Ask your friend for the Room ID",
                "and enter it into the text field below.",
             ],
+            self.assets.colors.text,
+            AlignH::Left,
+            None,
          );
          ui.space(16.0);
          ui.push(
@@ -247,13 +248,14 @@ impl State {
          ui.offset(vector(32.0, 8.0));
 
          ui.paragraph(
-            self.assets.colors.text,
-            AlignH::Left,
-            None,
+            &self.assets.sans,
             &[
                "Create a blank canvas, or load an existing one from file,",
                "and share the Room ID with your friends.",
             ],
+            self.assets.colors.text,
+            AlignH::Left,
+            None,
          );
          ui.space(16.0);
 
@@ -409,7 +411,7 @@ impl AppState for State {
          catch!(peer.communicate());
       }
 
-      ui.pad((64.0, 64.0));
+      ui.pad((32.0, 32.0));
 
       ui.push((ui.width(), 384.0), Layout::Vertical);
       ui.align((AlignH::Left, AlignV::Middle));

@@ -2,7 +2,7 @@ mod conversions;
 mod rendering;
 
 use netcanv_renderer::RenderBackend;
-use paws::{Color, Ui};
+use paws::{Color, Point, Ui};
 use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };
@@ -26,7 +26,7 @@ impl SurfaceInner {
             &ImageInfo::new(
                ISize::new(width as i32, height as i32),
                ColorType::RGBA8888,
-               AlphaType::Premul,
+               AlphaType::Opaque,
                None,
             ),
             None,
@@ -63,6 +63,7 @@ impl SkiaBackend {
 }
 
 impl RenderBackend for SkiaBackend {
+   type Image = Image;
    type Framebuffer = Framebuffer;
 
    fn create_framebuffer(&self, width: usize, height: usize) -> Self::Framebuffer {
@@ -71,6 +72,10 @@ impl RenderBackend for SkiaBackend {
 
    fn clear(&mut self, color: Color) {
       self.canvas().clear(to_color(color));
+   }
+
+   fn image(&mut self, point: Point, image: &Self::Image) {
+      self.canvas().draw_image(&image.image, to_point(point), None);
    }
 }
 

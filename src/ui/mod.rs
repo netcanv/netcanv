@@ -1,6 +1,9 @@
 //! UI controls.
 
-use crate::backend::{Backend, Image};
+use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
+use paws::{vector, AlignH, AlignV, Color, Layout, Point, Vector};
+
+use crate::backend::{Backend, Font, Image};
 
 mod button;
 mod expand;
@@ -11,7 +14,6 @@ mod textfield;
 pub use button::*;
 pub use expand::*;
 pub use input::*;
-use paws::{AlignH, Color, Point, Vector};
 pub use slider::*;
 pub use textfield::*;
 
@@ -29,7 +31,6 @@ impl UiInput for Ui {
 
    fn has_mouse(&self, input: &Input) -> bool {
       let mouse = self.mouse_position(input);
-      println!("{:?}", mouse);
       let Vector {
          x: width,
          y: height,
@@ -42,26 +43,43 @@ pub trait UiElements {
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
    fn paragraph(
       &mut self,
+      font: &Font,
+      text: &[&str],
       color: Color,
       alignment: AlignH,
       line_spacing: Option<f32>,
-      text: &[&str],
    );
 }
 
 impl UiElements for Ui {
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>) {
-      // TODO
+      let size = size.unwrap_or_else(|| vector(image.width() as f32, image.height() as f32));
+      let icon = image.colorized(color);
+      let position =
+         self.position() + size / 2.0 - vector(image.width() as f32, image.height() as f32) / 2.0;
+      self.push(size, Layout::Freeform);
+      self.render().image(position, &icon);
+      self.pop();
    }
 
    fn paragraph(
       &mut self,
+      font: &Font,
+      text: &[&str],
       color: Color,
       alignment: AlignH,
       line_spacing: Option<f32>,
-      text: &[&str],
    ) {
-      // TODO
+      let line_spacing = line_spacing.unwrap_or(1.2);
+      let line_height = font.size() * line_spacing;
+      let height = (line_height * text.len() as f32).round();
+      self.push((self.width(), height), Layout::Vertical);
+      for line in text {
+         self.push((self.width(), line_height), Layout::Freeform);
+         self.text(font, line, color, (alignment, AlignV::Middle));
+         self.pop();
+      }
+      self.pop();
    }
 }
 

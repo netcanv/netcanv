@@ -1,4 +1,4 @@
-use paws::{Color, Renderer};
+use paws::{Color, Point, Renderer};
 
 /// A font.
 pub trait Font {
@@ -27,6 +27,15 @@ pub trait Image {
    /// Creates an image from RGBA pixels.
    fn from_rgba(width: usize, height: usize, pixel_data: &[u8]) -> Self;
 
+   /// _Colorizes_ an image by replacing all of its color with a single, solid color.
+   ///
+   /// The alpha channel in the resulting image is multiplied with the given color's alpha channel.
+   ///
+   /// # Implementation notes
+   ///
+   /// This operation must be cheap as it may be called multiple times per frame.
+   fn colorized(&self, color: Color) -> Self;
+
    /// Returns the size of the image.
    fn size(&self) -> (usize, usize);
 
@@ -54,6 +63,7 @@ pub trait Framebuffer {
 
 /// A render backend.
 pub trait RenderBackend: Renderer {
+   type Image: Image;
    type Framebuffer: Framebuffer;
 
    /// Creates a new framebuffer of the given size.
@@ -63,4 +73,7 @@ pub trait RenderBackend: Renderer {
 
    /// Clears the framebuffer with a solid color.
    fn clear(&mut self, color: Color);
+
+   /// Draws an image stretched to fill the given rectangle.
+   fn image(&mut self, position: Point, image: &Self::Image);
 }

@@ -149,7 +149,7 @@ impl ColorScheme {
             text: Color::argb(0xff000000),
             text_hint: Color::argb(0x7f000000),
             label: Color::argb(0xff000000),
-            selection: Color::argb(0x7f000000),
+            selection: Color::argb(0x33000000),
          },
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xffffffff),
