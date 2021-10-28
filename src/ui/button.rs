@@ -106,7 +106,11 @@ impl Button {
    ) -> ButtonProcessResult {
       Self::process(ui, input, args, Some(args.height), |ui| {
          // TODO(renderer): buttons with images
-         // ui.image(icon, args.colors.text, Some((args.height, args.height)));
+         ui.icon(
+            icon,
+            args.colors.text,
+            Some(vector(args.height, args.height)),
+         );
       })
    }
 }
