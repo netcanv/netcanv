@@ -3,9 +3,10 @@
 use std::ops::Range;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
-use skulpin::skia_safe::*;
+use netcanv_renderer::Font as FontTrait;
+use paws::{AlignH, AlignV, Color, Layout};
 
-use crate::ui::*;
+use crate::{backend::Font, ui::*};
 
 /// Text field selection.
 /// Stores two cursors: the text cursor and the selection anchor.
@@ -87,10 +88,11 @@ pub struct TextFieldColors {
 
 /// Processing arguments for a text field.
 #[derive(Clone, Copy)]
-pub struct TextFieldArgs<'a, 'b> {
+pub struct TextFieldArgs<'a, 'b, 'c> {
    pub width: f32,
    pub colors: &'a TextFieldColors,
    pub hint: Option<&'b str>,
+   pub font: &'c Font,
 }
 
 impl TextField {
@@ -127,51 +129,51 @@ impl TextField {
    }
 
    /// Returns the height of a text field.
-   pub fn height(ui: &Ui) -> f32 {
-      f32::round(16.0 / 7.0 * ui.font_size())
+   pub fn height(font: &Font) -> f32 {
+      f32::round(16.0 / 7.0 * font.height())
    }
 
    /// Processes a text field.
    pub fn process(
       &mut self,
       ui: &mut Ui,
-      canvas: &mut Canvas,
       input: &Input,
       TextFieldArgs {
+         font,
          width,
          colors,
          hint,
       }: TextFieldArgs,
    ) {
-      ui.push_group((width, Self::height(ui)), Layout::Freeform);
+      ui.push((width, Self::height(font)), Layout::Freeform);
 
-      // Rendering: box
-      ui.draw_on_canvas(canvas, |canvas| {
-         let mut paint = Paint::new(Color4f::from(colors.fill), None);
-         paint.set_anti_alias(true);
-         let mut rrect =
-            RRect::new_rect_xy(&Rect::from_point_and_size((0.0, 0.0), ui.size()), 4.0, 4.0);
-         canvas.draw_rrect(rrect, &paint);
-         paint.set_color(if self.focused {
-            colors.outline_focus
-         } else {
-            colors.outline
-         });
-         paint.set_style(paint::Style::Stroke);
-         rrect.offset((0.5, 0.5));
-         canvas.draw_rrect(rrect, &paint);
-      });
+      // Rendering: box TODO(renderer)
+      // ui.draw_on_canvas(canvas, |canvas| {
+      //    let mut paint = Paint::new(Color4f::from(colors.fill), None);
+      //    paint.set_anti_alias(true);
+      //    let mut rrect =
+      //       RRect::new_rect_xy(&Rect::from_point_and_size((0.0, 0.0), ui.size()), 4.0, 4.0);
+      //    canvas.draw_rrect(rrect, &paint);
+      //    paint.set_color(if self.focused {
+      //       colors.outline_focus
+      //    } else {
+      //       colors.outline
+      //    });
+      //    paint.set_style(paint::Style::Stroke);
+      //    rrect.offset((0.5, 0.5));
+      //    canvas.draw_rrect(rrect, &paint);
+      // });
 
-      // Rendering: text
-      ui.push_group(ui.size(), Layout::Freeform);
+      // Rendering: text TODO(renderer)
+      ui.push(ui.size(), Layout::Freeform);
       ui.pad((16.0, 0.0));
-      canvas.save();
-      ui.clip(canvas);
+      // canvas.save();
+      // ui.clip();
 
       // Rendering: hint
       if hint.is_some() && self.text.len() == 0 {
          ui.text(
-            canvas,
+            font,
             hint.unwrap(),
             colors.text_hint,
             (AlignH::Left, AlignV::Middle),
@@ -185,69 +187,71 @@ impl TextField {
       if self.focused
          && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK
       {
-         ui.draw_on_canvas(canvas, |canvas| {
-            let mut paint = Paint::new(Color4f::from(colors.text), None);
-            paint.set_anti_alias(false);
-            paint.set_style(paint::Style::Stroke);
+         // TODO(renderer): text field caret
+         // ui.draw_on_canvas(canvas, |canvas| {
+         //    let mut paint = Paint::new(Color4f::from(colors.text), None);
+         //    paint.set_anti_alias(false);
+         //    paint.set_style(paint::Style::Stroke);
 
-            let current_text: String = self.text[..self.selection.cursor].iter().collect();
-            let current_text_width = ui.borrow_font().measure_str(current_text, None).0;
+         //    let current_text: String = self.text[..self.selection.cursor].iter().collect();
+         //    let current_text_width = ui.borrow_font().measure_str(current_text, None).0;
 
-            let x = current_text_width + 1.0;
-            let y1 = Self::height(ui) * 0.2;
-            let y2 = Self::height(ui) * 0.8;
-            canvas.draw_line((x, y1), (x, y2), &paint);
-         });
+         //    let x = current_text_width + 1.0;
+         //    let y1 = Self::height(ui) * 0.2;
+         //    let y2 = Self::height(ui) * 0.8;
+         //    canvas.draw_line((x, y1), (x, y2), &paint);
+         // });
       }
 
       if self.selection.cursor != self.selection.anchor {
-         ui.draw_on_canvas(canvas, |canvas| {
-            let mut paint = Paint::new(Color4f::from(colors.selection), None);
-            paint.set_anti_alias(true);
+         // TODO(renderer): text field selection
+         // ui.draw_on_canvas(canvas, |canvas| {
+         //    let mut paint = Paint::new(Color4f::from(colors.selection), None);
+         //    paint.set_anti_alias(true);
 
-            // Get all text from text field start to current selection cursor position.
-            // This will act as base position for selection.
-            let selection_anchor_text: String =
-               self.text[..self.selection.start()].iter().collect();
-            let selection_anchor_text_width =
-               ui.borrow_font().measure_str(selection_anchor_text, None).0;
+         //    // Get all text from text field start to current selection cursor position.
+         //    // This will act as base position for selection.
+         //    let selection_anchor_text: String =
+         //       self.text[..self.selection.start()].iter().collect();
+         //    let selection_anchor_text_width =
+         //       ui.borrow_font().measure_str(selection_anchor_text, None).0;
 
-            // Get selected text.
-            let selection_text: String = self.text[self.selection.normalize()].iter().collect();
-            let selection_text_width = ui.borrow_font().measure_str(selection_text, None).0;
+         //    // Get selected text.
+         //    let selection_text: String = self.text[self.selection.normalize()].iter().collect();
+         //    let selection_text_width = ui.borrow_font().measure_str(selection_text, None).0;
 
-            let rrect = RRect::new_rect_xy(
-               &Rect::from_point_and_size(
-                  (
-                     selection_anchor_text_width.round(),
-                     (Self::height(ui) * 0.2).round(),
-                  ),
-                  (
-                     selection_text_width.round(),
-                     (Self::height(ui) * 0.6).round(),
-                  ),
-               ),
-               0.0,
-               0.0,
-            );
-            canvas.draw_rrect(rrect, &paint);
-         });
+         //    let rrect = RRect::new_rect_xy(
+         //       &Rect::from_point_and_size(
+         //          (
+         //             selection_anchor_text_width.round(),
+         //             (Self::height(ui) * 0.2).round(),
+         //          ),
+         //          (
+         //             selection_text_width.round(),
+         //             (Self::height(ui) * 0.6).round(),
+         //          ),
+         //       ),
+         //       0.0,
+         //       0.0,
+         //    );
+         //    canvas.draw_rrect(rrect, &paint);
+         // });
       }
 
       ui.text(
-         canvas,
+         font,
          &self.text_utf8,
          colors.text,
          (AlignH::Left, AlignV::Middle),
       );
 
-      canvas.restore();
-      ui.pop_group();
+      // canvas.restore();
+      ui.pop();
 
       // Process events
       self.process_events(ui, input);
 
-      ui.pop_group();
+      ui.pop();
    }
 
    // Get selection content
@@ -499,35 +503,31 @@ impl TextField {
    }
 
    /// Returns the height of a labelled text field.
-   pub fn labelled_height(ui: &Ui) -> f32 {
-      16.0 + TextField::height(ui)
+   pub fn labelled_height(font: &Font) -> f32 {
+      16.0 + TextField::height(font)
    }
 
    /// Processes a text field with an extra label above it.
-   pub fn with_label(
-      &mut self,
-      ui: &mut Ui,
-      canvas: &mut Canvas,
-      input: &Input,
-      label: &str,
-      args: TextFieldArgs,
-   ) {
-      ui.push_group((args.width, Self::labelled_height(ui)), Layout::Vertical);
+   pub fn with_label(&mut self, ui: &mut Ui, input: &Input, label: &str, args: TextFieldArgs) {
+      ui.push(
+         (args.width, Self::labelled_height(args.font)),
+         Layout::Vertical,
+      );
 
       // label
-      ui.push_group((args.width, 16.0), Layout::Freeform);
+      ui.push((args.width, 16.0), Layout::Freeform);
       ui.text(
-         canvas,
+         args.font,
          label,
          args.colors.label,
          (AlignH::Left, AlignV::Top),
       );
-      ui.pop_group();
+      ui.pop();
 
       // field
-      self.process(ui, canvas, input, args);
+      self.process(ui, input, args);
 
-      ui.pop_group();
+      ui.pop();
    }
 
    /// Returns the text in the text field.

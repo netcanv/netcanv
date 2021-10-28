@@ -1,6 +1,5 @@
 //! An automatically incrementing token.
 
-use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct Token {

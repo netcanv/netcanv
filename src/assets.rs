@@ -1,8 +1,8 @@
 //! Handling of assets such as icons, fonts, etc.
 
-use skulpin::skia_safe::*;
+use paws::Color;
 
-use crate::common::{new_rc_font, RcFont};
+use crate::backend::{Font, Image};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -61,8 +61,8 @@ pub struct Icons {
 
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
 pub struct Assets {
-   pub sans: RcFont,
-   pub sans_bold: RcFont,
+   pub sans: Font,
+   pub sans_bold: Font,
 
    pub colors: ColorScheme,
    pub icons: Icons,
@@ -82,21 +82,14 @@ impl Assets {
       let mut pixmap = tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
       resvg::render(&tree, FitTo::Original, pixmap.as_mut());
 
-      let image_info = ImageInfo::new(
-         (size.width() as i32, size.height() as i32),
-         ColorType::RGBA8888,
-         AlphaType::Premul,
-         ColorSpace::new_srgb(),
-      );
-      let stride = pixmap.width() as usize * 4;
-      Image::from_raster_data(&image_info, Data::new_copy(pixmap.data()), stride).unwrap()
+      Image::from_rgba(size.width() as usize, size.height() as usize, pixmap.data())
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(colors: ColorScheme) -> Self {
       Self {
-         sans: new_rc_font(SANS_TTF, 14.0),
-         sans_bold: new_rc_font(SANS_BOLD_TTF, 14.0),
+         sans: Font::from_memory(SANS_TTF, 14.0),
+         sans_bold: Font::from_memory(SANS_BOLD_TTF, 14.0),
          colors,
          icons: Icons {
             expand: ExpandIcons {
@@ -123,47 +116,47 @@ impl ColorScheme {
    /// Constructs and returns the light color scheme.
    pub fn light() -> Self {
       Self {
-         text: Color::new(0xff000000),
-         panel: Color::new(0xffeeeeee),
-         panel2: Color::new(0xffffffff),
-         separator: Color::new(0xff202020),
-         error: Color::new(0xff7f0000),
+         text: Color::argb(0xff000000),
+         panel: Color::argb(0xffeeeeee),
+         panel2: Color::argb(0xffffffff),
+         separator: Color::argb(0xff202020),
+         error: Color::argb(0xff7f0000),
 
          button: ButtonColors {
-            outline: Color::new(0x60000000),
-            text: Color::new(0xff000000),
-            hover: Color::new(0x40000000),
-            pressed: Color::new(0x70000000),
+            outline: Color::argb(0x60000000),
+            text: Color::argb(0xff000000),
+            hover: Color::argb(0x40000000),
+            pressed: Color::argb(0x70000000),
          },
          tool_button: ButtonColors {
-            outline: Color::new(0x00000000),
-            text: Color::new(0xff000000),
-            hover: Color::new(0x40000000),
-            pressed: Color::new(0x70000000),
+            outline: Color::argb(0x00000000),
+            text: Color::argb(0xff000000),
+            hover: Color::argb(0x40000000),
+            pressed: Color::argb(0x70000000),
          },
-         slider: Color::new(0xff000000),
+         slider: Color::argb(0xff000000),
          expand: ExpandColors {
-            icon: Color::new(0xff000000),
-            text: Color::new(0xff000000),
-            hover: Color::new(0x40000000),
-            pressed: Color::new(0x70000000),
+            icon: Color::argb(0xff000000),
+            text: Color::argb(0xff000000),
+            hover: Color::argb(0x40000000),
+            pressed: Color::argb(0x70000000),
          },
          text_field: TextFieldColors {
-            outline: Color::new(0xff808080),
-            outline_focus: Color::new(0xff303030),
-            fill: Color::new(0xffffffff),
-            text: Color::new(0xff000000),
-            text_hint: Color::new(0x7f000000),
-            label: Color::new(0xff000000),
-            selection: Color::new(0x7f000000),
+            outline: Color::argb(0xff808080),
+            outline_focus: Color::argb(0xff303030),
+            fill: Color::argb(0xffffffff),
+            text: Color::argb(0xff000000),
+            text_hint: Color::argb(0x7f000000),
+            label: Color::argb(0xff000000),
+            selection: Color::argb(0x7f000000),
          },
          titlebar: TitlebarColors {
-            titlebar: Color::new(0xffffffff),
-            separator: Color::new(0x7f000000),
-            text: Color::new(0xff000000),
+            titlebar: Color::argb(0xffffffff),
+            separator: Color::argb(0x7f000000),
+            text: Color::argb(0xff000000),
 
-            foreground_hover: Color::new(0xffeeeeee),
-            button: Color::new(0xff000000),
+            foreground_hover: Color::argb(0xffeeeeee),
+            button: Color::argb(0xff000000),
          },
       }
    }
@@ -171,47 +164,47 @@ impl ColorScheme {
    /// Constructs and returns the dark color scheme.
    pub fn dark() -> Self {
       Self {
-         text: Color::new(0xffb7b7b7),
-         panel: Color::new(0xff1f1f1f),
-         panel2: Color::new(0xffffffff),
-         separator: Color::new(0xff202020),
-         error: Color::new(0xfffc9292),
+         text: Color::argb(0xffb7b7b7),
+         panel: Color::argb(0xff1f1f1f),
+         panel2: Color::argb(0xffffffff),
+         separator: Color::argb(0xff202020),
+         error: Color::argb(0xfffc9292),
 
          button: ButtonColors {
-            outline: Color::new(0xff444444),
-            text: Color::new(0xffd2d2d2),
-            hover: Color::new(0x10ffffff),
-            pressed: Color::new(0x05ffffff),
+            outline: Color::argb(0xff444444),
+            text: Color::argb(0xffd2d2d2),
+            hover: Color::argb(0x10ffffff),
+            pressed: Color::argb(0x05ffffff),
          },
          tool_button: ButtonColors {
-            outline: Color::new(0x00000000),
-            text: Color::new(0xffb7b7b7),
-            hover: Color::new(0x10ffffff),
-            pressed: Color::new(0x05ffffff),
+            outline: Color::argb(0x00000000),
+            text: Color::argb(0xffb7b7b7),
+            hover: Color::argb(0x10ffffff),
+            pressed: Color::argb(0x05ffffff),
          },
-         slider: Color::new(0xff979797),
+         slider: Color::argb(0xff979797),
          expand: ExpandColors {
-            icon: Color::new(0xffb7b7b7),
-            text: Color::new(0xffb7b7b7),
-            hover: Color::new(0x30ffffff),
-            pressed: Color::new(0x15ffffff),
+            icon: Color::argb(0xffb7b7b7),
+            text: Color::argb(0xffb7b7b7),
+            hover: Color::argb(0x30ffffff),
+            pressed: Color::argb(0x15ffffff),
          },
          text_field: TextFieldColors {
-            outline: Color::new(0xff595959),
-            outline_focus: Color::new(0xff9a9a9a),
-            fill: Color::new(0xff383838),
-            text: Color::new(0xffd5d5d5),
-            text_hint: Color::new(0x7f939393),
-            label: Color::new(0xffd5d5d5),
-            selection: Color::new(0x7f939393),
+            outline: Color::argb(0xff595959),
+            outline_focus: Color::argb(0xff9a9a9a),
+            fill: Color::argb(0xff383838),
+            text: Color::argb(0xffd5d5d5),
+            text_hint: Color::argb(0x7f939393),
+            label: Color::argb(0xffd5d5d5),
+            selection: Color::argb(0x7f939393),
          },
          titlebar: TitlebarColors {
-            titlebar: Color::new(0xff383838),
-            separator: Color::new(0x7f939393),
-            text: Color::new(0xffd5d5d5),
+            titlebar: Color::argb(0xff383838),
+            separator: Color::argb(0x7f939393),
+            text: Color::argb(0xffd5d5d5),
 
-            foreground_hover: Color::new(0xff1f1f1f),
-            button: Color::new(0xffb7b7b7),
+            foreground_hover: Color::argb(0xff1f1f1f),
+            button: Color::argb(0xffb7b7b7),
          },
       }
    }

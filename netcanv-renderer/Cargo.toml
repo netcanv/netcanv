@@ -1,0 +1,9 @@
+[package]
+name = "netcanv-renderer"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.40"
+winit = "0.24.0"
+paws = "0.1.0"

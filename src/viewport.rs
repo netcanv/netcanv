@@ -1,6 +1,6 @@
 //! Panning and zooming.
 
-use skulpin::skia_safe::{IRect, Point, Rect, Vector};
+use paws::{point, vector, Point, Rect, Vector};
 
 /// A viewport that can be panned around and zoomed into.
 #[derive(Clone)]
@@ -9,9 +9,17 @@ pub struct Viewport {
    zoom_level: f32,
 }
 
+/// A rectangle with integer coordinates.
+pub struct IntRect {
+   right: i32,
+   bottom: i32,
+   left: i32,
+   top: i32,
+}
+
 /// An iterator over tiles visible in a viewport.
 pub struct Tiles {
-   rect: IRect,
+   rect: IntRect,
    x: i32,
    y: i32,
 }
@@ -37,7 +45,7 @@ impl Viewport {
 
    /// Pans the viewport around by the given vector.
    pub fn pan_around(&mut self, by: Vector) {
-      self.pan.offset(by * (1.0 / self.zoom()));
+      self.pan += by * (1.0 / self.zoom());
    }
 
    /// Zooms in or out of the viewport by the given delta.
@@ -55,22 +63,26 @@ impl Viewport {
       let inv_zoom = 1.0 / self.zoom();
       let half_width = window_size.0 * inv_zoom / 2.0;
       let half_height = window_size.1 * inv_zoom / 2.0;
-      Rect {
-         left: self.pan.x - half_width,
-         top: self.pan.y - half_height,
-         right: self.pan.x + half_width,
-         bottom: self.pan.y + half_height,
-      }
+      Rect::new(
+         point(self.pan.x - half_width, self.pan.y - half_height),
+         vector(half_width * 2.0, half_height * 2.0),
+      )
+      // {
+      //    position: self.pan.x - half_width,
+      //    top: self.pan.y - half_height,
+      //    right: self.pan.x + half_width,
+      //    bottom: self.pan.y + half_height,
+      // }
    }
 
    /// Returns an iterator over equally-sized square tiles seen from the viewport.
    pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: (f32, f32)) -> Tiles {
       let visible_rect = self.visible_rect(window_size);
-      let irect = IRect {
-         left: (visible_rect.left / tile_size.0 as f32).floor() as i32,
-         top: (visible_rect.top / tile_size.1 as f32).floor() as i32,
-         right: (visible_rect.right / tile_size.0 as f32).floor() as i32,
-         bottom: (visible_rect.bottom / tile_size.1 as f32).floor() as i32,
+      let irect = IntRect {
+         left: (visible_rect.left() / tile_size.0 as f32).floor() as i32,
+         top: (visible_rect.top() / tile_size.1 as f32).floor() as i32,
+         right: (visible_rect.right() / tile_size.0 as f32).floor() as i32,
+         bottom: (visible_rect.bottom() / tile_size.1 as f32).floor() as i32,
       };
       Tiles {
          rect: irect,

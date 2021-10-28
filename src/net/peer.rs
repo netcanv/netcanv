@@ -8,6 +8,7 @@ use std::time::Instant;
 use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
 use nysa::global as bus;
+use paws::Point;
 use skulpin::skia_safe::{Color, Color4f, Point};
 
 use super::socket::ConnectionToken;

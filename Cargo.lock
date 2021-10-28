@@ -1178,10 +1178,12 @@ dependencies = [
  "image",
  "native-dialog",
  "netcanv-protocol",
+ "netcanv-renderer",
+ "netcanv-renderer-skia",
  "nysa",
+ "paws",
  "resvg",
  "serde",
- "skulpin",
  "tiny-skia",
  "toml",
  "usvg",
@@ -1206,6 +1208,26 @@ name = "netcanv-protocol"
 version = "0.3.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "netcanv-renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "paws",
+ "winit",
+]
+
+[[package]]
+name = "netcanv-renderer-skia"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "netcanv-renderer",
+ "paws",
+ "skulpin",
+ "winit",
 ]
 
 [[package]]
@@ -1395,6 +1417,12 @@ dependencies = [
  "smallvec",
  "winapi 0.3.9",
 ]
+
+[[package]]
+name = "paws"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6731cd2b43942815858c905bfafbeac0b7d9ecef39b3ab93b3e4266ed9d5815"
 
 [[package]]
 name = "peeking_take_while"
