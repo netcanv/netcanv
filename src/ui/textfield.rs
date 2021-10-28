@@ -147,7 +147,7 @@ impl TextField {
    ) {
       ui.push((width, Self::height(font)), Layout::Freeform);
 
-      // Rendering: box TODO(renderer)
+      // Rendering: box
       let outline_color = if self.focused {
          colors.outline_focus
       } else {
@@ -156,7 +156,7 @@ impl TextField {
       ui.fill_rounded(colors.fill, 4.0);
       ui.outline_rounded(outline_color, 4.0, 1.0);
 
-      // Rendering: text TODO(renderer)
+      // Rendering: text
       ui.push(ui.size(), Layout::Freeform);
       ui.pad((8.0, 0.0));
       ui.render().push();
@@ -179,7 +179,6 @@ impl TextField {
       if self.focused
          && (input.time_in_seconds() - self.blink_start) % Self::BLINK_PERIOD < Self::HALF_BLINK
       {
-         // TODO(renderer): text field caret
          ui.draw(|ui| {
             let current_text: String = self.text[..self.selection.cursor].iter().collect();
             let current_text_width = font.text_width(&current_text);
