@@ -37,6 +37,10 @@ impl netcanv_renderer::Font for Font {
       Self::from_skia_font(font)
    }
 
+   fn size(&self) -> f32 {
+      self.font.size()
+   }
+
    fn height(&self) -> f32 {
       self.height_in_pixels
    }
@@ -82,8 +86,11 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
 
 impl SkiaBackend {
    /// Helper function for drawing rectangles with the given paint.
-   fn draw_rect(&mut self, rect: Rect, radius: f32, paint: &Paint) {
+   fn draw_rect(&mut self, rect: Rect, radius: f32, mut paint: Paint) {
       let rect = to_rect(rect);
+      if radius > 0.0 {
+         paint.set_anti_alias(true);
+      }
       if radius <= 0.0 {
          self.canvas().draw_rect(rect, &paint);
       } else {
@@ -108,7 +115,7 @@ impl SkiaBackend {
       };
       let y = match alignment.1 {
          AlignV::Top => rect.top() + text_height,
-         AlignV::Middle => rect.center_y() - text_height / 2.0,
+         AlignV::Middle => rect.center_y() + text_height / 2.0,
          AlignV::Bottom => rect.bottom(),
       };
       (vector(x, y), text_width)
@@ -136,14 +143,17 @@ impl Renderer for SkiaBackend {
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
       let paint = Paint::new(to_color4f(color), None);
-      self.draw_rect(rect, radius, &paint);
+      self.draw_rect(rect, radius, paint);
    }
 
-   fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
+   fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
       let mut paint = Paint::new(to_color4f(color), None);
       paint.set_style(Style::Stroke);
       paint.set_stroke_width(thickness);
-      self.draw_rect(rect, radius, &paint);
+      if thickness % 2.0 >= 0.95 {
+         rect.position += vector(0.5, 0.5);
+      }
+      self.draw_rect(rect, radius, paint);
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {

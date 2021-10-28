@@ -15,9 +15,9 @@ pub(crate) fn to_color(color: Color) -> skia_safe::Color {
 
 pub(crate) fn to_color4f(color: Color) -> skia_safe::Color4f {
    skia_safe::Color4f::new(
-      color.r as f32,
-      color.g as f32,
-      color.b as f32,
-      color.a as f32,
+      color.r as f32 / 255.0,
+      color.g as f32 / 255.0,
+      color.b as f32 / 255.0,
+      color.a as f32 / 255.0,
    )
 }

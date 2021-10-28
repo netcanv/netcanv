@@ -24,11 +24,12 @@ pub trait UiInput {
 
 impl UiInput for Ui {
    fn mouse_position(&self, input: &Input) -> Point {
-      input.mouse_position() - self.cursor()
+      input.mouse_position() - self.position()
    }
 
    fn has_mouse(&self, input: &Input) -> bool {
       let mouse = self.mouse_position(input);
+      println!("{:?}", mouse);
       let Vector {
          x: width,
          y: height,

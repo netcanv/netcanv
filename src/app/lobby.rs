@@ -98,7 +98,7 @@ impl State {
 
       ui.push((ui.width(), 56.0), Layout::Freeform);
       ui.text(
-         &self.assets.sans.with_size(32.0),
+         &self.assets.sans.with_size(48.0),
          "NetCanv",
          self.assets.colors.text,
          (AlignH::Left, AlignV::Middle),
@@ -134,7 +134,7 @@ impl State {
          hint: None,
       };
       let expand = ExpandArgs {
-         font: &self.assets.sans,
+         font: &self.assets.sans.with_size(22.0),
          label: "",
          icons: &self.assets.icons.expand,
          colors: &self.assets.colors.expand,

@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                // for Rust.
                ui.root(
                   vector(window_size.width as f32, window_size.height as f32),
-                  Layout::Freeform,
+                  Layout::Vertical,
                );
                app.as_mut().unwrap().process(StateArgs {
                   ui,

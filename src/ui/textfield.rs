@@ -130,7 +130,7 @@ impl TextField {
 
    /// Returns the height of a text field.
    pub fn height(font: &Font) -> f32 {
-      f32::round(16.0 / 7.0 * font.height())
+      f32::round(16.0 / 7.0 * font.size())
    }
 
    /// Processes a text field.
@@ -148,6 +148,13 @@ impl TextField {
       ui.push((width, Self::height(font)), Layout::Freeform);
 
       // Rendering: box TODO(renderer)
+      let outline_color = if self.focused {
+         colors.outline_focus
+      } else {
+         colors.outline
+      };
+      ui.fill_rounded(colors.fill, 4.0);
+      ui.outline_rounded(outline_color, 4.0, 1.0);
       // ui.draw_on_canvas(canvas, |canvas| {
       //    let mut paint = Paint::new(Color4f::from(colors.fill), None);
       //    paint.set_anti_alias(true);

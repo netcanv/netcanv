@@ -1,5 +1,4 @@
 use paws::{Color, Renderer};
-use winit::window::Window;
 
 /// A font.
 pub trait Font {
@@ -11,8 +10,14 @@ pub trait Font {
    /// Backends should optimize this operation to be as cheap as possible.
    fn with_size(&self, new_size: f32) -> Self;
 
-   /// Returns the height of the font.
+   /// Returns the size of the font.
+   ///
+   /// **Note:** This is not the same as the font's height! This is the size that was passed in
+   /// via the size parameter while the font was being created.
+   fn size(&self) -> f32;
+   /// Returns the height of the font, in pixels.
    fn height(&self) -> f32;
+
    /// Returns the width of the given text, when rendered with this font.
    fn text_width(&self, text: &str) -> f32;
 }

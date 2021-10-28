@@ -1,7 +1,7 @@
 //! Expand widgets group elements together and form what's called an "accordion".
 
 use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
-use paws::{AlignH, AlignV, Color, Layout};
+use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Renderer};
 
 use crate::backend::{Font, Image};
 use crate::ui::*;
@@ -75,10 +75,9 @@ impl Expand {
 
       // icon and label
       ui.push(ui.size(), Layout::Horizontal);
-      // ui.icon(icon, colors.icon, Some((height, height)));
+      ui.icon(icon, colors.icon, Some(vector(height, height)));
       ui.space(8.0);
       ui.push((ui.remaining_width(), ui.height()), Layout::Freeform);
-      // ui.set_font_size(font_size);
       ui.text(font, label, colors.text, (AlignH::Left, AlignV::Middle));
       let width = height + 8.0 + font.text_width(label);
       ui.pop();
@@ -89,20 +88,22 @@ impl Expand {
       if ui.has_mouse(input) {
          let pressed = input.mouse_button_is_down(MouseButton::Left);
          // underline
-         // TODO(renderer): expand underline
-         // ui.draw_on_canvas(canvas, |canvas| {
-         //    let underline_color: Color = if pressed {
-         //       colors.pressed
-         //    } else {
-         //       colors.hover
-         //    }
-         //    .into();
-         //    let y = height * 1.1;
-         //    let mut paint = Paint::new(underline_color, None);
-         //    paint.set_anti_alias(false);
-         //    paint.set_style(paint::Style::Stroke);
-         //    canvas.draw_line((0.0, y), (width, y), &paint);
-         // });
+         ui.draw(|ui| {
+            let underline_color: Color = if pressed {
+               colors.pressed
+            } else {
+               colors.hover
+            }
+            .into();
+            let y = height * 1.1;
+            ui.line(
+               point(0.0, y),
+               point(width, y),
+               underline_color,
+               LineCap::Butt,
+               1.0,
+            );
+         });
          // events
          if input.mouse_button_just_released(MouseButton::Left) {
             self.expanded = !self.expanded;
