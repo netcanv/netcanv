@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
+use netcanv_renderer::RenderBackend;
 use nysa::global as bus;
-use skulpin::skia_safe::paint as skpaint;
-use skulpin::skia_safe::*;
+use paws::{AlignH, AlignV, Color, Layout};
 
 use crate::app::*;
 use crate::assets::*;
@@ -59,13 +59,12 @@ pub struct State {
    assets: Assets,
    config: UserConfig,
 
-   ui: Ui,
    paint_canvas: PaintCanvas,
    peer: Peer,
    update_timer: Timer,
 
    paint_mode: PaintMode,
-   paint_color: Color4f,
+   paint_color: Color,
    brush_size_slider: Slider,
    stroke_buffer: Vec<StrokePoint>,
 
@@ -85,16 +84,16 @@ pub struct State {
 
 /// The palette of colors at the bottom of the screen.
 #[rustfmt::skip]
-const COLOR_PALETTE: &'static [u32] = &[
-   0x100820ff, // black
-   0xff003eff, // red
-   0xff7b00ff, // orange
-   0xffff00ff, // yellow
-   0x2dd70eff, // green
-   0x03cbfbff, // aqua
-   0x0868ebff, // blue
-   0xa315d7ff, // purple
-   0xffffffff, // white
+const COLOR_PALETTE: &'static [Color] = &[
+   Color::rgb(0x100820), // black
+   Color::rgb(0xff003e), // red
+   Color::rgb(0xff7b00), // orange
+   Color::rgb(0xffff00), // yellow
+   Color::rgb(0x2dd70e), // green
+   Color::rgb(0x03cbfb), // aqua
+   Color::rgb(0x0868eb), // blue
+   Color::rgb(0xa315d7), // purple
+   Color::rgb(0xffffff), // white
 ];
 
 macro_rules! log {
@@ -117,13 +116,12 @@ impl State {
          assets,
          config,
 
-         ui: Ui::new(),
          paint_canvas: PaintCanvas::new(),
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
 
          paint_mode: PaintMode::None,
-         paint_color: hex_color4f(COLOR_PALETTE[0]),
+         paint_color: COLOR_PALETTE[0],
          brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
          stroke_buffer: Vec::new(),
 
@@ -169,7 +167,7 @@ impl State {
    }
 
    /// Performs a fellow peer's stroke on the canvas.
-   fn fellow_stroke(&mut self, canvas: &mut Canvas, points: &[StrokePoint]) {
+   fn fellow_stroke(&mut self, ui: &mut Ui, points: &[StrokePoint]) {
       if points.is_empty() {
          return;
       } // failsafe
@@ -177,37 +175,35 @@ impl State {
       let mut from = points[0].point;
       let first_index = if points.len() > 1 { 1 } else { 0 };
       for point in &points[first_index..] {
-         self.paint_canvas.stroke(canvas, from, point.point, &point.brush);
+         self.paint_canvas.stroke(ui.render(), from, point.point, &point.brush);
          from = point.point;
       }
    }
 
    /// Decodes canvas data to the given chunk.
-   fn canvas_data(&mut self, canvas: &mut Canvas, chunk_position: (i32, i32), image_data: &[u8]) {
-      catch!(self.paint_canvas.decode_network_data(canvas, chunk_position, image_data));
+   fn canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: &[u8]) {
+      catch!(self.paint_canvas.decode_network_data(ui.render(), chunk_position, image_data));
    }
 
    /// Processes the message log.
-   fn process_log(&mut self, canvas: &mut Canvas) {
+   fn process_log(&mut self, ui: &mut Ui) {
       self.log.retain(|(_, time_created)| time_created.elapsed() < Duration::from_secs(5));
-      self.ui.draw_on_canvas(canvas, |canvas| {
-         let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
-         paint.set_blend_mode(BlendMode::Difference);
-         let mut y = self.ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
-         for (entry, _) in &self.log {
-            canvas.draw_str(&entry, (8.0, y), &self.assets.sans.borrow(), &paint);
-            y += 16.0;
-         }
-      });
+      // TODO(renderer): process_log
+      // self.ui.draw_on_canvas(ui, |canvas| {
+      //    let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
+      //    paint.set_blend_mode(BlendMode::Difference);
+      //    let mut y = self.ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
+      //    for (entry, _) in &self.log {
+      //       canvas.draw_str(&entry, (8.0, y), &self.assets.sans.borrow(), &paint);
+      //       y += 16.0;
+      //    }
+      // });
    }
 
    /// Processes the paint canvas.
-   fn process_canvas(&mut self, canvas: &mut Canvas, input: &Input) {
-      self.ui.push_group(
-         (self.ui.width(), self.ui.height() - Self::BAR_SIZE),
-         Layout::Freeform,
-      );
-      let canvas_size = self.ui.size();
+   fn process_canvas(&mut self, ui: &mut Ui, input: &Input) {
+      ui.push((ui.width(), ui.height() - Self::BAR_SIZE), Layout::Freeform);
+      let canvas_size = ui.size();
 
       //
       // Input
@@ -215,7 +211,7 @@ impl State {
 
       // Drawing
 
-      if self.ui.has_mouse(input) {
+      if ui.has_mouse(input) {
          if input.mouse_button_just_pressed(MouseButton::Left) {
             self.paint_mode = PaintMode::Paint;
          } else if input.mouse_button_just_pressed(MouseButton::Right) {
@@ -244,7 +240,7 @@ impl State {
                stroke_width: brush_size,
             },
          };
-         self.paint_canvas.stroke(canvas, from, to, &brush);
+         self.paint_canvas.stroke(ui.render(), from, to, &brush);
          if self.stroke_buffer.is_empty() {
             self.stroke_buffer.push(StrokePoint {
                point: from,
@@ -258,7 +254,7 @@ impl State {
 
       // Panning and zooming
 
-      if self.ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
+      if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
          self.panning = true;
       }
       if input.mouse_button_just_released(MouseButton::Middle) {
@@ -285,58 +281,59 @@ impl State {
       //
 
       let paint_canvas = &self.paint_canvas;
-      self.ui.draw_on_canvas(canvas, |canvas| {
-         canvas.save();
-         canvas.translate((self.ui.width() / 2.0, self.ui.height() / 2.0));
-         canvas.scale((self.viewport.zoom(), self.viewport.zoom()));
-         canvas.translate(-self.viewport.pan());
+      // TODO(renderer): drawing mates
+      // self.ui.draw_on_canvas(canvas, |canvas| {
+      //    canvas.save();
+      //    canvas.translate((self.ui.width() / 2.0, self.ui.height() / 2.0));
+      //    canvas.scale((self.viewport.zoom(), self.viewport.zoom()));
+      //    canvas.translate(-self.viewport.pan());
 
-         let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
-         paint.set_anti_alias(true);
-         paint.set_blend_mode(BlendMode::Difference);
+      //    let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
+      //    paint.set_anti_alias(true);
+      //    paint.set_blend_mode(BlendMode::Difference);
 
-         paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
+      //    paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
 
-         canvas.restore();
+      //    canvas.restore();
 
-         for (_, mate) in self.peer.mates() {
-            let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
-            let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
-            let text_position =
-               cursor + Point::new(brush_radius, brush_radius) + Point::new(0.0, 14.0);
-            paint.set_style(skpaint::Style::Fill);
-            canvas.draw_str(
-               &mate.nickname,
-               text_position,
-               &self.assets.sans.borrow(),
-               &paint,
-            );
-            paint.set_style(skpaint::Style::Stroke);
-            canvas.draw_circle(cursor, brush_radius, &paint);
-         }
+      //    for (_, mate) in self.peer.mates() {
+      //       let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
+      //       let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
+      //       let text_position =
+      //          cursor + Point::new(brush_radius, brush_radius) + Point::new(0.0, 14.0);
+      //       paint.set_style(skpaint::Style::Fill);
+      //       canvas.draw_str(
+      //          &mate.nickname,
+      //          text_position,
+      //          &self.assets.sans.borrow(),
+      //          &paint,
+      //       );
+      //       paint.set_style(skpaint::Style::Stroke);
+      //       canvas.draw_circle(cursor, brush_radius, &paint);
+      //    }
 
-         let zoomed_brush_size = brush_size * self.viewport.zoom();
-         paint.set_style(skpaint::Style::Stroke);
-         canvas.draw_circle(mouse_position, zoomed_brush_size * 0.5, &paint);
-      });
+      //    let zoomed_brush_size = brush_size * self.viewport.zoom();
+      //    paint.set_style(skpaint::Style::Stroke);
+      //    canvas.draw_circle(mouse_position, zoomed_brush_size * 0.5, &paint);
+      // });
       if self.tip.created.elapsed() < self.tip.visible_duration {
-         self.ui.push_group(self.ui.size(), Layout::Freeform);
-         self.ui.pad((32.0, 32.0));
-         self.ui.push_group((72.0, 32.0), Layout::Freeform);
-         self.ui.fill(canvas, Color::BLACK.with_a(192));
-         self.ui.text(
-            canvas,
+         ui.push(ui.size(), Layout::Freeform);
+         ui.pad((32.0, 32.0));
+         ui.push((72.0, 32.0), Layout::Freeform);
+         ui.fill(Color::BLACK.with_alpha(192));
+         ui.text(
+            &self.assets.sans,
             &self.tip.text,
             Color::WHITE,
             (AlignH::Center, AlignV::Middle),
          );
-         self.ui.pop_group();
-         self.ui.pop_group();
+         ui.pop();
+         ui.pop();
       }
 
-      self.process_log(canvas);
+      self.process_log(ui);
 
-      self.ui.pop_group();
+      ui.pop();
 
       //
       // Networking
@@ -374,76 +371,71 @@ impl State {
    }
 
    /// Processes the bottom bar.
-   fn process_bar(&mut self, canvas: &mut Canvas, input: &mut Input) {
+   fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
       if self.paint_mode != PaintMode::None {
          input.lock_mouse_buttons();
       }
 
-      self.ui.push_group(
-         (self.ui.width(), self.ui.remaining_height()),
-         Layout::Horizontal,
-      );
-      self.ui.fill(canvas, self.assets.colors.panel);
-      self.ui.pad((16.0, 0.0));
+      ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
+      ui.fill(self.assets.colors.panel);
+      ui.pad((16.0, 0.0));
 
       // Color palette
 
-      for hex_color in COLOR_PALETTE {
-         let color = hex_color4f(*hex_color);
-         self.ui.push_group((16.0, self.ui.height()), Layout::Freeform);
-         let y_offset = self.ui.height()
+      for &color in COLOR_PALETTE {
+         ui.push((16.0, ui.height()), Layout::Freeform);
+         let y_offset = ui.height()
             * if self.paint_color == color {
                0.5
-            } else if self.ui.has_mouse(&input) {
+            } else if ui.has_mouse(&input) {
                0.7
             } else {
                0.8
             };
-         if self.ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
+         if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.paint_color = color.clone();
          }
-         self.ui.draw_on_canvas(canvas, |canvas| {
-            let paint = Paint::new(color, None);
-            let rect = Rect::from_point_and_size((0.0, y_offset), self.ui.size());
-            canvas.draw_rect(rect, &paint);
-         });
-         self.ui.pop_group();
+         // TODO(renderer): Color palette
+         // self.ui.draw_on_canvas(canvas, |canvas| {
+         //    let paint = Paint::new(color, None);
+         //    let rect = Rect::from_point_and_size((0.0, y_offset), self.ui.size());
+         //    canvas.draw_rect(rect, &paint);
+         // });
+         ui.pop();
       }
-      self.ui.space(16.0);
+      ui.space(16.0);
 
       // Brush size
 
-      self.ui.push_group((80.0, self.ui.height()), Layout::Freeform);
-      self.ui.text(
-         canvas,
+      ui.push((80.0, ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.sans,
          "Brush size",
          self.assets.colors.text,
          (AlignH::Center, AlignV::Middle),
       );
-      self.ui.pop_group();
+      ui.pop();
 
-      self.ui.space(8.0);
+      ui.space(8.0);
       self.brush_size_slider.process(
-         &mut self.ui,
-         canvas,
+         ui,
          input,
          SliderArgs {
             width: 192.0,
             color: self.assets.colors.slider,
          },
       );
-      self.ui.space(8.0);
+      ui.space(8.0);
 
       let brush_size_string = self.brush_size_slider.value().to_string();
-      self.ui.push_group((self.ui.height(), self.ui.height()), Layout::Freeform);
-      self.ui.set_font(self.assets.sans_bold.clone());
-      self.ui.text(
-         canvas,
+      ui.push((ui.height(), ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.sans,
          &brush_size_string,
          self.assets.colors.text,
          (AlignH::Center, AlignV::Middle),
       );
-      self.ui.pop_group();
+      ui.pop();
 
       //
       // Right side
@@ -452,15 +444,12 @@ impl State {
       // Room ID display
 
       // Note that elements in HorizontalRev go from right to left rather than left to right.
-      self.ui.push_group(
-         (self.ui.remaining_width(), self.ui.height()),
-         Layout::HorizontalRev,
-      );
+      ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
       if Button::with_icon(
-         &mut self.ui,
-         canvas,
+         ui,
          input,
          ButtonArgs {
+            font: &self.assets.sans,
             height: 32.0,
             colors: &self.assets.colors.tool_button,
          },
@@ -484,38 +473,33 @@ impl State {
       if self.peer.is_host() {
          // The room ID itself
          let id_text = format!("{:04}", self.peer.room_id().unwrap());
-         self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
-         self.ui.set_font(self.assets.sans_bold.clone());
-         self.ui.text(
-            canvas,
+         ui.push((64.0, ui.height()), Layout::Freeform);
+         ui.text(
+            &self.assets.sans_bold,
             &id_text,
             self.assets.colors.text,
             (AlignH::Center, AlignV::Middle),
          );
-         self.ui.pop_group();
+         ui.pop();
 
          // "Room ID" text
-         self.ui.push_group((64.0, self.ui.height()), Layout::Freeform);
-         self.ui.text(
-            canvas,
+         ui.push((64.0, ui.height()), Layout::Freeform);
+         ui.text(
+            &self.assets.sans,
             "Room ID",
             self.assets.colors.text,
             (AlignH::Center, AlignV::Middle),
          );
-         self.ui.pop_group();
+         ui.pop();
       }
-      self.ui.pop_group();
+      ui.pop();
 
-      self.ui.pop_group();
+      ui.pop();
 
       input.unlock_mouse_buttons();
    }
 
-   fn process_peer_message(
-      &mut self,
-      canvas: &mut Canvas,
-      message: peer::Message,
-   ) -> anyhow::Result<()> {
+   fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
       use peer::MessageKind;
 
       match message.kind {
@@ -530,7 +514,7 @@ impl State {
             log!(self.log, "{} has left", nickname);
          }
          MessageKind::Stroke(points) => {
-            self.fellow_stroke(canvas, &points);
+            self.fellow_stroke(ui, &points);
          }
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
@@ -540,7 +524,7 @@ impl State {
          }
          MessageKind::Chunks(chunks) => {
             for (chunk_position, image_data) in chunks {
-               self.canvas_data(canvas, chunk_position, &image_data);
+               self.canvas_data(ui, chunk_position, &image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
             }
          }
@@ -575,20 +559,13 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(
-      &mut self,
-      StateArgs {
-         canvas,
-         coordinate_system_helper,
-         input,
-      }: StateArgs,
-   ) {
-      canvas.clear(Color::WHITE);
+   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+      ui.clear(Color::WHITE);
 
       // Loading from file
 
       if self.load_from_file.is_some() {
-         catch!(self.paint_canvas.load(canvas, &self.load_from_file.take().unwrap()))
+         catch!(self.paint_canvas.load(ui, &self.load_from_file.take().unwrap()))
       }
 
       // Autosaving
@@ -607,7 +584,7 @@ impl AppState for State {
       catch!(self.peer.communicate(), as Fatal);
       for message in &bus::retrieve_all::<peer::Message>() {
          if message.token == self.peer.token() {
-            catch!(self.process_peer_message(canvas, message.consume()));
+            catch!(self.process_peer_message(ui, message.consume()));
          }
       }
 
@@ -632,16 +609,11 @@ impl AppState for State {
          self.fatal_error = true;
       }
 
-      // UI setup
-      self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Vertical);
-      self.ui.set_font(self.assets.sans.clone());
-      self.ui.set_font_size(14.0);
-
       // Paint canvas
-      self.process_canvas(canvas, input);
+      self.process_canvas(ui, input);
 
       // Bar
-      self.process_bar(canvas, input);
+      self.process_bar(ui, input);
    }
 
    fn next_state(self: Box<Self>) -> Box<dyn AppState> {

@@ -59,13 +59,13 @@ impl Viewport {
    }
 
    /// Returns the rectangle visible from the viewport, given the provided window size.
-   pub fn visible_rect(&self, window_size: (f32, f32)) -> Rect {
+   pub fn visible_rect(&self, window_size: Vector) -> Rect {
       let inv_zoom = 1.0 / self.zoom();
-      let half_width = window_size.0 * inv_zoom / 2.0;
-      let half_height = window_size.1 * inv_zoom / 2.0;
+      let half_width = window_size.x * inv_zoom;
+      let half_height = window_size.y * inv_zoom;
       Rect::new(
-         point(self.pan.x - half_width, self.pan.y - half_height),
-         vector(half_width * 2.0, half_height * 2.0),
+         point(self.pan.x, self.pan.y),
+         vector(half_width, half_height),
       )
       // {
       //    position: self.pan.x - half_width,
@@ -76,7 +76,7 @@ impl Viewport {
    }
 
    /// Returns an iterator over equally-sized square tiles seen from the viewport.
-   pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: (f32, f32)) -> Tiles {
+   pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: Vector) -> Tiles {
       let visible_rect = self.visible_rect(window_size);
       let irect = IntRect {
          left: (visible_rect.left() / tile_size.0 as f32).floor() as i32,
@@ -84,25 +84,23 @@ impl Viewport {
          right: (visible_rect.right() / tile_size.0 as f32).floor() as i32,
          bottom: (visible_rect.bottom() / tile_size.1 as f32).floor() as i32,
       };
-      Tiles {
-         rect: irect,
-         x: irect.left,
-         y: irect.top,
-      }
+      let x = irect.left;
+      let y = irect.top;
+      Tiles { rect: irect, x, y }
    }
 
    /// Converts a point from screen space to viewport space.
    ///
    /// This can be used to pick things on the canvas, given a mouse position.
-   pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
-      (point.into() - Point::from(window_size) * 0.5) * (1.0 / self.zoom()) + self.pan
+   pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
+      (point.into() - window_size / 2.0) * (1.0 / self.zoom()) + self.pan
    }
 
    /// Converts a point from viewport space to screen space.
    ///
    /// This transformation is the inverse of [`Viewport::to_viewport_space`].
-   pub fn to_screen_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
-      (point.into() - self.pan) * self.zoom() + Point::from(window_size) * 0.5
+   pub fn to_screen_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
+      (point.into() - self.pan) * self.zoom() + window_size / 2.0
    }
 }
 

@@ -29,13 +29,14 @@ use std::error::Error;
 
 use config::UserConfig;
 use netcanv_renderer::RenderBackend;
-use netcanv_renderer_skia::SkiaBackend;
+use netcanv_renderer_skia::{SkiaBackend, UiRenderFrame};
+use paws::{vector, Layout};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use winit::platform::unix::*;
-use winit::window::{Window, WindowBuilder};
+use winit::window::WindowBuilder;
 
 #[macro_use]
 mod common;
@@ -104,12 +105,17 @@ fn main() -> Result<(), Box<dyn Error>> {
          }
 
          Event::MainEventsCleared => {
-            match ui.render().render(&window, || {
+            let window_size = window.inner_size();
+            match ui.render_frame(&window, |ui| {
                // `unwrap()` always succeeds here as app is never None.
                // I'm not a fan of this method chaining, though, but I guess it's typical
                // for Rust.
+               ui.root(
+                  vector(window_size.width as f32, window_size.height as f32),
+                  Layout::Freeform,
+               );
                app.as_mut().unwrap().process(StateArgs {
-                  ui: &mut ui,
+                  ui,
                   input: &mut input,
                });
                app = Some(app.take().unwrap().next_state());
@@ -117,9 +123,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                Err(error) => eprintln!("render error: {}", error),
                _ => (),
             }
-
-            // match renderer.draw(window_size, scale_factor, |canvas, csh| {
-            // })
             input.finish_frame();
          }
 

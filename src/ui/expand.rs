@@ -1,12 +1,10 @@
 //! Expand widgets group elements together and form what's called an "accordion".
 
-use netcanv_renderer::Font as FontTrait;
-use paws::{AlignH, AlignV, Color, Layout, SizedImage};
+use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
+use paws::{AlignH, AlignV, Color, Layout};
 
-use crate::{
-   backend::{Font, Image},
-   ui::*,
-};
+use crate::backend::{Font, Image};
+use crate::ui::*;
 
 /// An Expand's state.
 pub struct Expand {

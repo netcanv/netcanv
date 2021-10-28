@@ -1,6 +1,6 @@
 //! UI controls.
 
-use crate::backend::Backend;
+use crate::backend::{Backend, Image};
 
 mod button;
 mod expand;
@@ -11,7 +11,7 @@ mod textfield;
 pub use button::*;
 pub use expand::*;
 pub use input::*;
-use paws::{Point, Vector};
+use paws::{AlignH, Color, Point, Vector};
 pub use slider::*;
 pub use textfield::*;
 
@@ -34,6 +34,33 @@ impl UiInput for Ui {
          y: height,
       } = self.size();
       mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
+   }
+}
+
+pub trait UiElements {
+   fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
+   fn paragraph(
+      &mut self,
+      color: Color,
+      alignment: AlignH,
+      line_spacing: Option<f32>,
+      text: &[&str],
+   );
+}
+
+impl UiElements for Ui {
+   fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>) {
+      // TODO
+   }
+
+   fn paragraph(
+      &mut self,
+      color: Color,
+      alignment: AlignH,
+      line_spacing: Option<f32>,
+      text: &[&str],
+   ) {
+      // TODO
    }
 }
 

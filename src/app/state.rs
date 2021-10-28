@@ -1,6 +1,6 @@
 //! The trait all app states must implement.
 
-use crate::ui::{input::Input, Ui};
+use crate::ui::{Input, Ui};
 
 /// Arguments passed to app states.
 pub struct StateArgs<'a, 'b> {

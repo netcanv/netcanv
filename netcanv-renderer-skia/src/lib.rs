@@ -1,6 +1,8 @@
+mod conversions;
 mod rendering;
 
 use netcanv_renderer::RenderBackend;
+use paws::{Color, Ui};
 use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };
@@ -8,6 +10,7 @@ use skulpin::{rafx::api::RafxExtents2D, Renderer, RendererBuilder};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use conversions::*;
 pub use rendering::*;
 
 struct SurfaceInner {
@@ -34,7 +37,7 @@ impl SurfaceInner {
 }
 
 pub struct SkiaBackend {
-   renderer: Renderer,
+   renderer: Option<Box<Renderer>>,
    // We can't simply store a reference to the canvas we're given by skulpin, because its lifetime
    // doesn't match the lifetime of the struct itself. Thus, we have an extra layer of indirection
    // in form of this surface.
@@ -49,7 +52,7 @@ impl SkiaBackend {
       let extents = get_window_extents(window);
       let renderer = RendererBuilder::new().build(window, extents.clone())?;
       Ok(Self {
-         renderer,
+         renderer: Some(Box::new(renderer)),
          surface: SurfaceInner { inner: None },
       })
    }
@@ -60,29 +63,59 @@ impl SkiaBackend {
 }
 
 impl RenderBackend for SkiaBackend {
-   fn render(&mut self, window: &Window, callback: impl FnOnce()) -> anyhow::Result<()> {
+   type Framebuffer = Framebuffer;
+
+   fn create_framebuffer(&self, width: usize, height: usize) -> Self::Framebuffer {
+      Framebuffer {}
+   }
+
+   fn clear(&mut self, color: Color) {
+      self.canvas().clear(to_color(color));
+   }
+}
+
+pub trait UiRenderFrame {
+   fn render_frame(
+      &mut self,
+      window: &Window,
+      callback: impl FnOnce(&mut Self),
+   ) -> anyhow::Result<()>;
+}
+
+impl UiRenderFrame for Ui<SkiaBackend> {
+   fn render_frame(
+      &mut self,
+      window: &Window,
+      callback: impl FnOnce(&mut Self),
+   ) -> anyhow::Result<()> {
       let extents = get_window_extents(window);
-      let surface = &mut self.surface;
-      self.renderer.draw(
+      let mut renderer = self.renderer.take().expect("render() calls must not be nested");
+      renderer.draw(
          extents,
          window.scale_factor(),
          |canvas, _coordinate_system_helper| {
             // Initialize the surface if this is the first frame.
-            if surface.inner.is_none() {
-               surface.initialize(canvas, window);
+            if self.surface.inner.is_none() {
+               self.surface.initialize(canvas, window);
             }
             // Also reinitialize the surface if the window has been resized.
-            let surface_inner = surface.inner.as_ref().unwrap();
+            let surface_inner = self.surface.inner.as_ref().unwrap();
             let PhysicalSize { width, height } = window.inner_size();
             if surface_inner.width() != width as i32 || surface_inner.height() != height as i32 {
-               surface.initialize(canvas, window);
+               self.surface.initialize(canvas, window);
             }
             // Execute user drawing code.
-            callback();
+            callback(self);
             // Draw the surface to the screen.
-            surface.inner.as_mut().unwrap().draw(canvas, (0, 0), SamplingOptions::default(), None);
+            self.surface.inner.as_mut().unwrap().draw(
+               canvas,
+               (0, 0),
+               SamplingOptions::default(),
+               None,
+            );
          },
       )?;
+      self.renderer = Some(renderer);
       Ok(())
    }
 }
