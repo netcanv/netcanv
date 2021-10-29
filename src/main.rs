@@ -27,15 +27,20 @@
 
 use std::error::Error;
 
+use backend::Backend;
 use config::UserConfig;
 use netcanv_renderer::paws::{vector, Layout};
-use netcanv_renderer_skia::{SkiaBackend, UiRenderFrame};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use winit::platform::unix::*;
 use winit::window::WindowBuilder;
+
+#[cfg(feature = "renderer-opengl")]
+use netcanv_renderer_opengl::UiRenderFrame;
+#[cfg(feature = "renderer-skia")]
+use netcanv_renderer_skia::UiRenderFrame;
 
 #[macro_use]
 mod common;
@@ -56,7 +61,7 @@ use ui::{Input, Ui};
 fn main() -> Result<(), Box<dyn Error>> {
    // Set up the winit event loop and open the window.
    let event_loop = EventLoop::new();
-   let window = {
+   let window_builder = {
       let b = WindowBuilder::new()
          .with_inner_size(LogicalSize::new(1024, 600))
          .with_title("NetCanv")
@@ -66,8 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
       #[cfg(target_os = "linux")]
       let b = b.with_app_id("netcanv".into());
       b
-   }
-   .build(&event_loop)?;
+   };
 
    // Load the user configuration and color scheme.
    // TODO: User-definable color schemes, anyone?
@@ -77,13 +81,15 @@ fn main() -> Result<(), Box<dyn Error>> {
       config::ColorScheme::Dark => ColorScheme::dark(),
    };
 
+   // Build the render backend.
+   let renderer = Backend::new(window_builder, &event_loop)?;
+
    // On Wayland, winit draws its own set of decorations, which can be customized.
    // We customize them to fit our color scheme.
    #[cfg(target_family = "unix")]
-   window.set_wayland_theme(color_scheme.clone());
+   renderer.window().set_wayland_theme(color_scheme.clone());
 
-   // Build the render backend.
-   let renderer = SkiaBackend::new(&window)?;
+   // Build the UI.
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
@@ -104,8 +110,8 @@ fn main() -> Result<(), Box<dyn Error>> {
          }
 
          Event::MainEventsCleared => {
-            let window_size = window.inner_size();
-            match ui.render_frame(&window, |ui| {
+            let window_size = ui.window().inner_size();
+            match ui.render_frame(|ui| {
                ui.root(
                   vector(window_size.width as f32, window_size.height as f32),
                   Layout::Vertical,
@@ -115,6 +121,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                   ui,
                   input: &mut input,
                });
+               // See? Told ya.
                app = Some(app.take().unwrap().next_state());
             }) {
                Err(error) => eprintln!("render error: {}", error),

@@ -14,8 +14,9 @@ members = [
 ]
 
 [features]
-default = ["renderer-skia"]
+default = ["renderer-opengl"]
 renderer-skia = ["netcanv-renderer-skia"]
+renderer-opengl = ["netcanv-renderer-opengl"]
 
 [dependencies]
 
@@ -48,6 +49,7 @@ copypasta = "0.7.1"
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
 netcanv-renderer-skia = { path = "netcanv-renderer-skia", optional = true }
+netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]

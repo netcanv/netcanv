@@ -1,0 +1,12 @@
+[package]
+name = "netcanv-renderer-opengl"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.40"
+winit = "0.24.0"
+glutin = "0.26.0"
+glow = "0.11.0"
+
+netcanv-renderer = { path = "../netcanv-renderer" }

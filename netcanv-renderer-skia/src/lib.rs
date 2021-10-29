@@ -13,19 +13,22 @@ use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };
 use skulpin::{rafx::api::RafxExtents2D, Renderer, RendererBuilder};
+pub use winit;
 use winit::dpi::PhysicalSize;
-use winit::window::Window;
+use winit::event_loop::EventLoop;
+use winit::window::{Window, WindowBuilder};
 
 pub use rendering::*;
 
 pub(crate) struct SurfaceInner {
+   window: Window,
    pub(crate) inner: Option<Surface>,
 }
 
 impl SurfaceInner {
    /// Reinitializes the window surface.
-   fn initialize(&mut self, canvas: &mut Canvas, window: &Window) {
-      let PhysicalSize { width, height } = window.inner_size();
+   fn initialize(&mut self, canvas: &mut Canvas) {
+      let PhysicalSize { width, height } = self.window.inner_size();
       let surface = canvas
          .new_surface(
             &ImageInfo::new(
@@ -59,16 +62,24 @@ pub struct SkiaBackend {
 
 impl SkiaBackend {
    /// Sets the backend up for rendering.
-   pub fn new(window: &Window) -> anyhow::Result<Self> {
-      let extents = get_window_extents(window);
-      let renderer = RendererBuilder::new().build(window, extents.clone())?;
+   pub fn new(window_builder: WindowBuilder, event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
+      let window = window_builder.build(&event_loop)?;
+      let extents = get_window_extents(&window);
+      let renderer = RendererBuilder::new().build(&window, extents.clone())?;
       Ok(Self {
          renderer: Some(Box::new(renderer)),
-         surface: SurfaceInner { inner: None },
+         surface: SurfaceInner {
+            window,
+            inner: None,
+         },
          stack: vec![DrawParams {
             blend_mode: BlendMode::Alpha,
          }],
       })
+   }
+
+   pub fn window(&self) -> &Window {
+      &self.surface.window
    }
 
    pub(crate) fn canvas(&mut self) -> &mut Canvas {
@@ -77,34 +88,26 @@ impl SkiaBackend {
 }
 
 pub trait UiRenderFrame {
-   fn render_frame(
-      &mut self,
-      window: &Window,
-      callback: impl FnOnce(&mut Self),
-   ) -> anyhow::Result<()>;
+   fn render_frame(&mut self, callback: impl FnOnce(&mut Self)) -> anyhow::Result<()>;
 }
 
 impl UiRenderFrame for Ui<SkiaBackend> {
-   fn render_frame(
-      &mut self,
-      window: &Window,
-      callback: impl FnOnce(&mut Self),
-   ) -> anyhow::Result<()> {
-      let extents = get_window_extents(window);
-      let mut renderer = self.renderer.take().expect("render() calls must not be nested");
+   fn render_frame(&mut self, callback: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
+      let extents = get_window_extents(self.window());
+      let mut renderer = self.renderer.take().expect("render_frame() calls must not be nested");
       renderer.draw(
          extents,
-         window.scale_factor(),
+         self.window().scale_factor(),
          |canvas, _coordinate_system_helper| {
             // Initialize the surface if this is the first frame.
             if self.surface.inner.is_none() {
-               self.surface.initialize(canvas, window);
+               self.surface.initialize(canvas);
             }
             // Also reinitialize the surface if the window has been resized.
             let surface_inner = self.surface.inner.as_ref().unwrap();
-            let PhysicalSize { width, height } = window.inner_size();
+            let PhysicalSize { width, height } = self.window().inner_size();
             if surface_inner.width() != width as i32 || surface_inner.height() != height as i32 {
-               self.surface.initialize(canvas, window);
+               self.surface.initialize(canvas);
             }
             // Execute user drawing code.
             callback(self);
