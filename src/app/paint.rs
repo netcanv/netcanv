@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
+};
 use netcanv_renderer::{BlendMode, RenderBackend};
 use nysa::global as bus;
-use paws::{point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector};
 
 use crate::app::*;
 use crate::assets::*;

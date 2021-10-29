@@ -1,6 +1,6 @@
 //! Panning and zooming.
 
-use paws::{point, vector, Point, Rect, Vector};
+use netcanv_renderer::paws::{point, vector, Point, Rect, Vector};
 
 /// A viewport that can be panned around and zoomed into.
 #[derive(Clone)]

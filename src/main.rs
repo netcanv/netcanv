@@ -28,8 +28,8 @@
 use std::error::Error;
 
 use config::UserConfig;
+use netcanv_renderer::paws::{vector, Layout};
 use netcanv_renderer_skia::{SkiaBackend, UiRenderFrame};
-use paws::{vector, Layout};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};

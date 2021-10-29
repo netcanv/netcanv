@@ -1,3 +1,4 @@
+pub use paws;
 use paws::{vector, Color, Point, Rect, Renderer, Vector};
 
 /// A font.

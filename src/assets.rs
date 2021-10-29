@@ -1,7 +1,7 @@
 //! Handling of assets such as icons, fonts, etc.
 
+use netcanv_renderer::paws::Color;
 use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
-use paws::Color;
 
 use crate::backend::{Font, Image};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};

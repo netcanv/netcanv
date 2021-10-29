@@ -1,6 +1,6 @@
 //! Various assorted utilities.
 
-use paws::Point;
+use netcanv_renderer::paws::Point;
 
 //
 // Math

@@ -7,8 +7,8 @@
 mod conversions;
 mod rendering;
 
+use netcanv_renderer::paws::Ui;
 use netcanv_renderer::BlendMode;
-use paws::Ui;
 use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };

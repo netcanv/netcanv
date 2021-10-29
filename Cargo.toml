@@ -7,6 +7,7 @@ edition = "2018"
 [workspace]
 members = [
    "netcanv-renderer",
+   "netcanv-renderer-opengl",
    "netcanv-renderer-skia",
    "netcanv-matchmaker",
    "netcanv-protocol",
@@ -23,7 +24,6 @@ anyhow = "1.0.40"
 
 # Windowing and graphics
 winit = "0.24.0"
-paws = "0.2.0"
 native-dialog = "0.5.5"
 image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }

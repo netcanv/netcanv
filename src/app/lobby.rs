@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use native_dialog::FileDialog;
 use netcanv_protocol::matchmaker;
+use netcanv_renderer::paws::{vector, AlignH, AlignV, Layout};
 use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
-use paws::{vector, AlignH, AlignV, Layout};
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
@@ -267,12 +267,7 @@ impl State {
          if Button::with_text(ui, input, button, "from File").clicked() {
             match FileDialog::new()
                .set_filename("canvas.png")
-               .add_filter(
-                  "Supported image files",
-                  &[
-                     "png", "jpg", "jpeg", "jfif"
-                  ],
-               )
+               .add_filter("Supported image files", &["png", "jpg", "jpeg", "jfif"])
                .add_filter("NetCanv canvas", &["toml"])
                .show_open_single_file()
             {

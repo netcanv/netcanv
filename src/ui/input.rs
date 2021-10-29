@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use paws::{vector, Point, Vector};
+use netcanv_renderer::paws::{vector, Point, Vector};
 use winit::dpi::PhysicalPosition;
 pub use winit::event::{ElementState, MouseButton, VirtualKeyCode};
 use winit::event::{KeyboardInput, WindowEvent};

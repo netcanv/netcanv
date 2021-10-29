@@ -1,7 +1,7 @@
 //! UI controls.
 
+use netcanv_renderer::paws::{self, vector, AlignH, AlignV, Color, Layout, Point, Vector};
 use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
-use paws::{vector, AlignH, AlignV, Color, Layout, Point, Vector};
 
 use crate::backend::{Backend, Font, Image};
 

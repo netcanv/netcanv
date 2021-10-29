@@ -1,7 +1,9 @@
 use std::cell::Cell;
 
+use netcanv_renderer::paws::{
+   vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+};
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
-use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use skulpin::skia_safe::{
    self, color_filters, image_filters,
    paint::{Cap, Style},

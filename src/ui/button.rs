@@ -1,7 +1,7 @@
 //! Pressable buttons.
 
+use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout};
 use netcanv_renderer::Font as FontTrait;
-use paws::{AlignH, AlignV, Color, Layout};
 
 use crate::{
    backend::{Font, Image},

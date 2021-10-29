@@ -1121,7 +1121,6 @@ dependencies = [
  "netcanv-renderer",
  "netcanv-renderer-skia",
  "nysa",
- "paws",
  "resvg",
  "serde",
  "tiny-skia",
@@ -1160,12 +1159,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "netcanv-renderer-opengl"
+version = "0.1.0"
+
+[[package]]
 name = "netcanv-renderer-skia"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "netcanv-renderer",
- "paws",
  "skulpin",
  "winit",
 ]
