@@ -11,7 +11,7 @@ use ::image::{
    RgbaImage,
 };
 use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
-use paws::{vector, Color, LineCap, Point, Rect, Renderer, Vector};
+use paws::{Color, LineCap, Point, Renderer, Vector};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, Framebuffer};

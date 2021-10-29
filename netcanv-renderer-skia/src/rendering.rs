@@ -5,8 +5,7 @@ use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Rende
 use skulpin::skia_safe::{
    self, color_filters, image_filters,
    paint::{Cap, Style},
-   AlphaType, ClipOp, ColorType, Data, IPoint, IRect, ISize, ImageInfo, Paint, Pixmap,
-   SamplingOptions, Surface, Typeface,
+   ClipOp, Data, IPoint, IRect, Paint, Pixmap, SamplingOptions, Surface, Typeface,
 };
 
 use crate::conversions::*;

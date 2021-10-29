@@ -3,13 +3,12 @@
 
 use std::collections::HashMap;
 use std::error;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Write};
 use std::net::{AddrParseError, SocketAddr, TcpListener, TcpStream};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
 
 use netcanv_protocol::matchmaker::*;
-use serde::Serialize;
 use thiserror::Error;
 
 /// Maximum possible room ID. This can be raised, if IDs ever run out.

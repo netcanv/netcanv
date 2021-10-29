@@ -26,18 +26,6 @@ enum Status {
    Error(String),
 }
 
-impl Status {
-   /// Catches an error condition into the status.
-   fn catch<T, E: Display>(&mut self, result: Result<T, E>) {
-      match result {
-         Ok(..) => (),
-         Err(error) => {
-            let _ = std::mem::replace(self, error.into());
-         }
-      }
-   }
-}
-
 impl<T: Display> From<T> for Status {
    fn from(error: T) -> Self {
       Self::Error(format!("{}", error))
@@ -63,7 +51,6 @@ pub struct State {
    // net
    status: Status,
    peer: Option<Peer>,
-   connected: bool, // when this is true, the state is transitioned to paint::State
    image_file: Option<PathBuf>, // when this is Some, the canvas is loaded from a file
 }
 
@@ -87,7 +74,6 @@ impl State {
 
          status: Status::None,
          peer: None,
-         connected: false,
          image_file: None,
       }
    }
