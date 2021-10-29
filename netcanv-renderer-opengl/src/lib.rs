@@ -6,7 +6,7 @@ mod rendering;
 
 use std::rc::Rc;
 
-use glow::HasContext;
+use glutin::dpi::PhysicalSize;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, WindowedContext};
 use netcanv_renderer::paws::{point, Ui};
 use winit::event_loop::EventLoop;
@@ -17,6 +17,7 @@ use rendering::RenderState;
 
 pub struct OpenGlBackend {
    context: WindowedContext<PossiblyCurrent>,
+   context_size: PhysicalSize<u32>,
    pub(crate) gl: Rc<glow::Context>,
    state: RenderState,
 }
@@ -36,6 +37,7 @@ impl OpenGlBackend {
       };
       let gl = Rc::new(gl);
       Ok(Self {
+         context_size: context.window().inner_size(),
          context,
          state: RenderState::new(Rc::clone(&gl)),
          gl,
@@ -55,12 +57,17 @@ pub trait UiRenderFrame {
 
 impl UiRenderFrame for Ui<OpenGlBackend> {
    fn render_frame(&mut self, callback: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
+      let window_size = self.window().inner_size();
+      if self.context_size != window_size {
+         self.context.resize(window_size);
+      }
+      self.state.viewport(window_size.width, window_size.height);
       callback(self);
       self.state.draw(
          &[
-            point(0.0, 0.5).into(),
-            point(-0.5, -0.5).into(),
-            point(0.5, -0.5).into(),
+            point(32.0, 32.0).into(),
+            point(64.0, 32.0).into(),
+            point(64.0, 64.0).into(),
          ],
          &[0, 1, 2],
       );

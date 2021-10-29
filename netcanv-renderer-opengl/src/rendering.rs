@@ -6,7 +6,10 @@
 use std::mem::size_of;
 use std::rc::Rc;
 
-use glow::{HasContext, NativeBuffer, NativeProgram, NativeTexture, NativeVertexArray};
+use glow::{
+   HasContext, NativeBuffer, NativeProgram, NativeShader, NativeTexture, NativeUniformLocation,
+   NativeVertexArray,
+};
 use memoffset::offset_of;
 use netcanv_renderer::paws::{point, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::RenderBackend;
@@ -34,6 +37,10 @@ impl From<Point> for Vertex {
    }
 }
 
+struct Uniforms {
+   projection: NativeUniformLocation,
+}
+
 pub(crate) struct RenderState {
    gl: Rc<glow::Context>,
    vao: NativeVertexArray,
@@ -42,6 +49,7 @@ pub(crate) struct RenderState {
    ebo: NativeBuffer,
    ebo_size: usize,
    program: NativeProgram,
+   uniforms: Uniforms,
 }
 
 impl RenderState {
@@ -93,7 +101,20 @@ impl RenderState {
       }
    }
 
-   fn create_program(gl: &glow::Context) -> NativeProgram {
+   fn compile_shader(gl: &glow::Context, kind: u32, source: &str) -> Result<NativeShader, String> {
+      unsafe {
+         let shader = gl.create_shader(kind)?;
+         gl.shader_source(shader, source);
+         gl.compile_shader(shader);
+         if !gl.get_shader_compile_status(shader) {
+            Err(gl.get_shader_info_log(shader))
+         } else {
+            Ok(shader)
+         }
+      }
+   }
+
+   fn create_program(gl: &glow::Context) -> (NativeProgram, Uniforms) {
       const VERTEX_SHADER: &str = r#"
          #version 300 es
 
@@ -103,14 +124,15 @@ impl RenderState {
          layout (location = 1) in vec2 uv;
          layout (location = 2) in vec4 color;
 
-         uniform mat4 projection;
+         uniform mat3 projection;
 
          out vec2 vertex_uv;
          out vec4 vertex_color;
 
          void main(void)
          {
-            gl_Position = vec4(position, 0.0, 1.0);
+            vec3 transformed_position = vec3(position, 1.0) * projection;
+            gl_Position = vec4(transformed_position, 1.0);
             vertex_uv = uv;
             vertex_color = color;
          }
@@ -131,8 +153,9 @@ impl RenderState {
          }
       "#;
       unsafe {
-         let vertex_shader = gl.create_shader(glow::VERTEX_SHADER).unwrap();
-         let fragment_shader = gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
+         let vertex_shader = Self::compile_shader(gl, glow::VERTEX_SHADER, VERTEX_SHADER).unwrap();
+         let fragment_shader =
+            Self::compile_shader(gl, glow::FRAGMENT_SHADER, FRAGMENT_SHADER).unwrap();
 
          gl.shader_source(vertex_shader, VERTEX_SHADER);
          gl.compile_shader(vertex_shader);
@@ -149,14 +172,18 @@ impl RenderState {
 
          gl.use_program(Some(program));
 
-         program
+         let uniforms = Uniforms {
+            projection: gl.get_uniform_location(program, "projection").unwrap(),
+         };
+
+         (program, uniforms)
       }
    }
 
    pub(crate) fn new(gl: Rc<glow::Context>) -> Self {
       let (vbo, ebo) = Self::create_vbo_and_ebo(&gl);
       let vao = Self::create_vao(&gl, vbo, ebo);
-      let program = Self::create_program(&gl);
+      let (program, uniforms) = Self::create_program(&gl);
       Self {
          gl,
          vao,
@@ -165,6 +192,7 @@ impl RenderState {
          ebo,
          ebo_size: 0,
          program,
+         uniforms,
       }
    }
 
@@ -198,6 +226,21 @@ impl RenderState {
          self.gl.buffer_sub_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, 0, index_data);
          // Draw triangles
          self.gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
+      }
+   }
+
+   pub(crate) fn viewport(&mut self, width: u32, height: u32) {
+      let (fwidth, fheight) = (width as f32, height as f32);
+      #[rustfmt::skip]
+      let matrix: [f32; 3 * 3] = [
+         2.0 / fwidth, 0.0,            -1.0,
+         0.0,          2.0 / -fheight, 1.0,
+         0.0,          0.0,            1.0,
+      ];
+      unsafe {
+         self.gl.viewport(0, 0, width as i32, height as i32);
+         self.gl.scissor(0, 0, width as i32, height as i32);
+         self.gl.uniform_matrix_3_f32_slice(Some(&self.uniforms.projection), false, &matrix);
       }
    }
 }
