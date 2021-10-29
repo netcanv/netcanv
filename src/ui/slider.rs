@@ -1,6 +1,6 @@
 //! A slider control.
 
-use paws::{point, Color, Layout, LineCap, Rect, Renderer};
+use paws::{point, Color, Layout, Rect, Renderer};
 
 use crate::common::quantize;
 use crate::ui::*;
@@ -93,7 +93,7 @@ impl Slider {
             x = quantize(x, step_width);
          }
 
-         ui.render().circle(point(x, y), 5.0, color);
+         ui.render().fill_circle(point(x, y), 5.0, color);
       });
 
       ui.pop();

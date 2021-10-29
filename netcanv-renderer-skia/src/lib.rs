@@ -1,8 +1,8 @@
 mod conversions;
 mod rendering;
 
-use netcanv_renderer::RenderBackend;
-use paws::{Color, Point, Ui};
+use netcanv_renderer::{BlendMode, RenderBackend};
+use paws::{Color, Point, Ui, Vector};
 use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };
@@ -13,8 +13,8 @@ use winit::window::Window;
 use conversions::*;
 pub use rendering::*;
 
-struct SurfaceInner {
-   inner: Option<Surface>,
+pub(crate) struct SurfaceInner {
+   pub(crate) inner: Option<Surface>,
 }
 
 impl SurfaceInner {
@@ -36,6 +36,11 @@ impl SurfaceInner {
    }
 }
 
+#[derive(Clone)]
+pub(crate) struct DrawParams {
+   pub(crate) blend_mode: BlendMode,
+}
+
 pub struct SkiaBackend {
    renderer: Option<Box<Renderer>>,
    // We can't simply store a reference to the canvas we're given by skulpin, because its lifetime
@@ -43,7 +48,8 @@ pub struct SkiaBackend {
    // in form of this surface.
    // We also need to dance around the fact that we can only create hardware-accelerated surfaces
    // only if we already have a canvas, so we initially keep this uninitialized.
-   surface: SurfaceInner,
+   pub(crate) surface: SurfaceInner,
+   pub(crate) stack: Vec<DrawParams>,
 }
 
 impl SkiaBackend {
@@ -54,28 +60,14 @@ impl SkiaBackend {
       Ok(Self {
          renderer: Some(Box::new(renderer)),
          surface: SurfaceInner { inner: None },
+         stack: vec![DrawParams {
+            blend_mode: BlendMode::Alpha,
+         }],
       })
    }
 
    pub(crate) fn canvas(&mut self) -> &mut Canvas {
       self.surface.inner.as_mut().expect("use of uninitialized surface").canvas()
-   }
-}
-
-impl RenderBackend for SkiaBackend {
-   type Image = Image;
-   type Framebuffer = Framebuffer;
-
-   fn create_framebuffer(&self, width: usize, height: usize) -> Self::Framebuffer {
-      Framebuffer {}
-   }
-
-   fn clear(&mut self, color: Color) {
-      self.canvas().clear(to_color(color));
-   }
-
-   fn image(&mut self, point: Point, image: &Self::Image) {
-      self.canvas().draw_image(&image.image, to_point(point), None);
    }
 }
 

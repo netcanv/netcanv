@@ -28,7 +28,6 @@
 use std::error::Error;
 
 use config::UserConfig;
-use netcanv_renderer::RenderBackend;
 use netcanv_renderer_skia::{SkiaBackend, UiRenderFrame};
 use paws::{vector, Layout};
 use winit::dpi::LogicalSize;
@@ -84,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
    window.set_wayland_theme(color_scheme.clone());
 
    // Build the render backend.
-   let mut renderer = SkiaBackend::new(&window)?;
+   let renderer = SkiaBackend::new(&window)?;
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.

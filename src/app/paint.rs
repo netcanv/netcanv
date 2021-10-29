@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
-use netcanv_renderer::RenderBackend;
+use netcanv_renderer::{BlendMode, RenderBackend};
 use nysa::global as bus;
-use paws::{point, AlignH, AlignV, Color, Layout, Rect, Renderer};
+use paws::{point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector};
 
 use crate::app::*;
 use crate::assets::*;
@@ -188,16 +188,23 @@ impl State {
    /// Processes the message log.
    fn process_log(&mut self, ui: &mut Ui) {
       self.log.retain(|(_, time_created)| time_created.elapsed() < Duration::from_secs(5));
-      // TODO(renderer): process_log
-      // self.ui.draw_on_canvas(ui, |canvas| {
-      //    let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
-      //    paint.set_blend_mode(BlendMode::Difference);
-      //    let mut y = self.ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
-      //    for (entry, _) in &self.log {
-      //       canvas.draw_str(&entry, (8.0, y), &self.assets.sans.borrow(), &paint);
-      //       y += 16.0;
-      //    }
-      // });
+      ui.draw(|ui| {
+         let mut y = ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
+         let renderer = ui.render();
+         renderer.push();
+         renderer.set_blend_mode(BlendMode::Subtract);
+         for (entry, _) in &self.log {
+            renderer.text(
+               Rect::new(point(8.0, y), vector(0.0, 0.0)),
+               &self.assets.sans,
+               &entry,
+               Color::WHITE.with_alpha(240),
+               (AlignH::Left, AlignV::Bottom),
+            );
+            y += 16.0;
+         }
+         renderer.pop();
+      });
    }
 
    /// Processes the paint canvas.
@@ -281,41 +288,41 @@ impl State {
       //
 
       let paint_canvas = &self.paint_canvas;
-      // TODO(renderer): drawing mates
-      // self.ui.draw_on_canvas(canvas, |canvas| {
-      //    canvas.save();
-      //    canvas.translate((self.ui.width() / 2.0, self.ui.height() / 2.0));
-      //    canvas.scale((self.viewport.zoom(), self.viewport.zoom()));
-      //    canvas.translate(-self.viewport.pan());
+      ui.draw(|ui| {
+         ui.render().push();
+         let Vector {
+            x: width,
+            y: height,
+         } = ui.size();
+         ui.render().translate(vector(width / 2.0, height / 2.0));
+         ui.render().scale(vector(self.viewport.zoom(), self.viewport.zoom()));
+         ui.render().translate(-self.viewport.pan());
+         paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
+         ui.render().pop();
 
-      //    let mut paint = Paint::new(Color4f::from(Color::WHITE.with_a(240)), None);
-      //    paint.set_anti_alias(true);
-      //    paint.set_blend_mode(BlendMode::Difference);
+         let color = Color::WHITE.with_alpha(240);
 
-      //    paint_canvas.draw_to(canvas, &self.viewport, canvas_size);
+         ui.render().push();
+         ui.render().set_blend_mode(BlendMode::Subtract);
 
-      //    canvas.restore();
+         for (_, mate) in self.peer.mates() {
+            let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
+            let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
+            let text_position = cursor + point(brush_radius, brush_radius);
+            ui.render().text(
+               Rect::new(text_position, vector(0.0, 0.0)),
+               &self.assets.sans,
+               &mate.nickname,
+               color,
+               (AlignH::Left, AlignV::Top),
+            );
+            ui.render().outline_circle(cursor, brush_radius, color, 1.0);
+         }
 
-      //    for (_, mate) in self.peer.mates() {
-      //       let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
-      //       let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
-      //       let text_position =
-      //          cursor + Point::new(brush_radius, brush_radius) + Point::new(0.0, 14.0);
-      //       paint.set_style(skpaint::Style::Fill);
-      //       canvas.draw_str(
-      //          &mate.nickname,
-      //          text_position,
-      //          &self.assets.sans.borrow(),
-      //          &paint,
-      //       );
-      //       paint.set_style(skpaint::Style::Stroke);
-      //       canvas.draw_circle(cursor, brush_radius, &paint);
-      //    }
-
-      //    let zoomed_brush_size = brush_size * self.viewport.zoom();
-      //    paint.set_style(skpaint::Style::Stroke);
-      //    canvas.draw_circle(mouse_position, zoomed_brush_size * 0.5, &paint);
-      // });
+         let zoomed_brush_size = brush_size * self.viewport.zoom();
+         ui.render().outline_circle(mouse_position, zoomed_brush_size * 0.5, color, 1.0);
+         ui.render().pop();
+      });
       if self.tip.created.elapsed() < self.tip.visible_duration {
          ui.push(ui.size(), Layout::Freeform);
          ui.pad((16.0, 16.0));

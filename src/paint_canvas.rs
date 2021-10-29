@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::io::Cursor;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use ::image::codecs::png::{PngDecoder, PngEncoder};
@@ -11,8 +10,8 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
-use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
-use paws::{Color, Point, Vector};
+use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
+use paws::{vector, Color, LineCap, Point, Rect, Renderer, Vector};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, Framebuffer};
@@ -71,7 +70,7 @@ impl Chunk {
    const WEBP_QUALITY: f32 = 80.0;
 
    /// Creates a new chunk, using the given canvas as a Skia surface allocator.
-   fn new(renderer: &Backend) -> Self {
+   fn new(renderer: &mut Backend) -> Self {
       Self {
          framebuffer: renderer
             .create_framebuffer(Self::SURFACE_SIZE.0 as usize, Self::SURFACE_SIZE.1 as usize),
@@ -104,7 +103,7 @@ impl Chunk {
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
    fn upload_image(&mut self, image: RgbaImage, offset: (u32, u32)) {
-      self.framebuffer.upload_rgba(&image);
+      self.framebuffer.upload_rgba(offset, Self::SIZE, &image);
    }
 
    /// Converts a network chunk position into a master chunk position.
@@ -354,7 +353,13 @@ impl PaintCanvas {
       let b = to.into();
       let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
       // let stroke_width = paint.stroke_width();
-      let stroke_width = 1.0;
+      let (color, stroke_width) = match brush {
+         Brush::Draw {
+            color,
+            stroke_width,
+         } => (*color, *stroke_width),
+         Brush::Erase { stroke_width } => (Color::BLACK, *stroke_width),
+      };
       let half_stroke_width = stroke_width / 2.0;
 
       let mut delta = b - a;
@@ -384,12 +389,20 @@ impl PaintCanvas {
                   self.ensure_chunk_exists(renderer, master);
                   let chunk = self.chunks.get_mut(&master).unwrap();
                   let screen_position = Chunk::screen_position(master);
-                  // TOOD(renderer): drawing on the canvas
-                  // chunk.framebuffer.borrow_mut().canvas().draw_line(
-                  //    a - screen_position,
-                  //    b - screen_position,
-                  //    &paint,
-                  // );
+                  renderer.draw_to(&chunk.framebuffer, |renderer| {
+                     renderer.push();
+                     if matches!(brush, Brush::Erase { .. }) {
+                        renderer.set_blend_mode(BlendMode::Clear);
+                     }
+                     renderer.line(
+                        a - screen_position,
+                        b - screen_position,
+                        color,
+                        LineCap::Round,
+                        stroke_width,
+                     );
+                     renderer.pop();
+                  });
                   chunk.mark_dirty(sub);
                }
                self.stroked_chunks.insert(master);
@@ -407,7 +420,7 @@ impl PaintCanvas {
       for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
          if let Some(chunk) = self.chunks.get(&chunk_position) {
             let screen_position = Chunk::screen_position(chunk_position);
-            // TODO: render this to the screen
+            renderer.framebuffer(screen_position, &chunk.framebuffer);
          }
       }
    }

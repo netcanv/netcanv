@@ -45,11 +45,7 @@ impl Button {
    pub fn process(
       ui: &mut Ui,
       input: &Input,
-      ButtonArgs {
-         font,
-         height,
-         colors,
-      }: ButtonArgs,
+      ButtonArgs { height, colors, .. }: ButtonArgs,
       width_hint: Option<f32>,
       extra: impl FnOnce(&mut Ui),
    ) -> ButtonProcessResult {

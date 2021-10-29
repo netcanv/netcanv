@@ -1,4 +1,4 @@
-use paws::{vector, Color, Point, Rect, Renderer};
+use paws::{vector, Color, Point, Rect, Renderer, Vector};
 
 /// A font.
 pub trait Font {
@@ -55,10 +55,23 @@ pub trait Framebuffer {
    /// Uploads RGBA pixels to the framebuffer.
    ///
    /// `pixels`'s length must be equal to `width * height * 4`.
-   fn upload_rgba(&mut self, pixels: &[u8]);
+   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]);
 
    /// Downloads RGBA pixels from the framebuffer into a buffer.
    fn download_rgba(&self, dest: &mut [u8]);
+}
+
+/// Blending modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendMode {
+   /// Clears colors to transparency.
+   Clear,
+   /// Blends colors using the alpha channel of the destination.
+   Alpha,
+   /// Adds colors together.
+   Add,
+   /// Subtracts colors from one another.
+   Subtract,
 }
 
 /// A render backend.
@@ -69,16 +82,33 @@ pub trait RenderBackend: Renderer {
    /// Creates a new framebuffer of the given size.
    ///
    /// The framebuffer should be cleared with transparent pixels.
-   fn create_framebuffer(&self, width: usize, height: usize) -> Self::Framebuffer;
+   fn create_framebuffer(&mut self, width: usize, height: usize) -> Self::Framebuffer;
+
+   /// Draws to the provided framebuffer for the duration of `f`.
+   fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self));
 
    /// Clears the framebuffer with a solid color.
    fn clear(&mut self, color: Color);
 
-   /// Draws an image stretched to fill the given rectangle.
+   /// Draws an image at the given position (top left corner).
    fn image(&mut self, position: Point, image: &Self::Image);
 
-   /// Draws a circle, with the given center point, radius, and color.
-   fn circle(&mut self, center: Point, radius: f32, color: Color) {
+   /// Draws a framebuffer at the given position (top left corner).
+   ///
+   /// Drawing the framebuffer that is currently being rendered to is undefined behavior.
+   fn framebuffer(&mut self, position: Point, framebuffer: &Self::Framebuffer);
+
+   /// Scales the transform matrix by the given factor.
+   fn scale(&mut self, scale: Vector);
+
+   /// Sets the current blend mode. Returns the old blend mode.
+   ///
+   /// Blend modes are part of the transformation stack. If used inside `push()` and `pop()`,
+   /// the change is completely transparent to outside code.
+   fn set_blend_mode(&mut self, new_blend_mode: BlendMode);
+
+   /// Draws a filled circle, with the given center point, radius, and color.
+   fn fill_circle(&mut self, center: Point, radius: f32, color: Color) {
       self.fill(
          Rect::new(
             center - vector(radius, radius),
@@ -86,6 +116,19 @@ pub trait RenderBackend: Renderer {
          ),
          color,
          radius,
+      );
+   }
+
+   /// Draws an outlined circle, with the given center point, radius, and color.
+   fn outline_circle(&mut self, center: Point, radius: f32, color: Color, thickness: f32) {
+      self.outline(
+         Rect::new(
+            center - vector(radius, radius),
+            vector(radius, radius) * 2.0,
+         ),
+         color,
+         radius,
+         thickness,
       );
    }
 }

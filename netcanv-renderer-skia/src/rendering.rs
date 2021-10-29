@@ -1,9 +1,12 @@
-use netcanv_renderer::Font as FontTrait;
+use std::cell::Cell;
+
+use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
 use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use skulpin::skia_safe::{
    self, color_filters, image_filters,
    paint::{Cap, Style},
-   AlphaType, BlendMode, ClipOp, Data, IRect, ImageInfo, Paint, Typeface,
+   AlphaType, ClipOp, ColorType, Data, IRect, ISize, ImageInfo, Paint, SamplingOptions, Surface,
+   Typeface,
 };
 
 use crate::conversions::*;
@@ -69,7 +72,8 @@ impl netcanv_renderer::Image for Image {
 
    fn colorized(&self, color: Color) -> Self {
       let image_bounds = IRect::new(0, 0, self.image.width(), self.image.height());
-      let color_filter = color_filters::blend(to_color(color), BlendMode::SrcATop).unwrap();
+      let color_filter =
+         color_filters::blend(to_color(color), skia_safe::BlendMode::SrcATop).unwrap();
       let filter = image_filters::color_filter(color_filter, None, None).unwrap();
       let colored_image =
          self.image.new_with_filter(None, &filter, image_bounds, image_bounds).unwrap().0;
@@ -83,10 +87,12 @@ impl netcanv_renderer::Image for Image {
    }
 }
 
-pub struct Framebuffer {}
+pub struct Framebuffer {
+   surface: Cell<Option<Surface>>,
+}
 
 impl netcanv_renderer::Framebuffer for Framebuffer {
-   fn upload_rgba(&mut self, pixels: &[u8]) {
+   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {
       todo!()
    }
 
@@ -96,6 +102,17 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
 }
 
 impl SkiaBackend {
+   fn create_paint(&self, color: Color) -> Paint {
+      let mut paint = Paint::new(to_color4f(color), None);
+      paint.set_blend_mode(match self.stack.last().unwrap().blend_mode {
+         BlendMode::Clear => skia_safe::BlendMode::Clear,
+         BlendMode::Alpha => skia_safe::BlendMode::SrcOver,
+         BlendMode::Add => skia_safe::BlendMode::Plus,
+         BlendMode::Subtract => skia_safe::BlendMode::Difference,
+      });
+      paint
+   }
+
    /// Helper function for drawing rectangles with the given paint.
    fn draw_rect(&mut self, rect: Rect, radius: f32, mut paint: Paint) {
       let rect = to_rect(rect);
@@ -110,6 +127,7 @@ impl SkiaBackend {
       }
    }
 
+   /// Returns the origin (bottom left corner) of the text, with the given layout parameters.
    fn text_origin(
       &self,
       rect: &Rect,
@@ -137,10 +155,16 @@ impl Renderer for SkiaBackend {
    type Font = Font;
 
    fn push(&mut self) {
+      self.stack.push(self.stack.last().unwrap().clone());
       self.canvas().save();
    }
 
    fn pop(&mut self) {
+      self.stack.pop();
+      assert!(
+         self.stack.len() > 0,
+         "pop() called at the bottom of the stack"
+      );
       self.canvas().restore();
    }
 
@@ -153,12 +177,12 @@ impl Renderer for SkiaBackend {
    }
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      let paint = Paint::new(to_color4f(color), None);
+      let paint = self.create_paint(color);
       self.draw_rect(rect, radius, paint);
    }
 
    fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
-      let mut paint = Paint::new(to_color4f(color), None);
+      let mut paint = self.create_paint(color);
       paint.set_style(Style::Stroke);
       paint.set_stroke_width(thickness);
       if thickness % 2.0 >= 0.95 {
@@ -168,7 +192,7 @@ impl Renderer for SkiaBackend {
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
-      let mut paint = Paint::new(to_color4f(color), None);
+      let mut paint = self.create_paint(color);
       paint.set_style(Style::Stroke);
       paint.set_stroke_width(thickness);
       paint.set_stroke_cap(match cap {
@@ -188,9 +212,70 @@ impl Renderer for SkiaBackend {
       alignment: Alignment,
    ) -> f32 {
       let (origin, advance) = self.text_origin(&rect, font, text, alignment);
-      let mut paint = Paint::new(to_color4f(color), None);
+      let mut paint = self.create_paint(color);
       paint.set_anti_alias(true);
       self.canvas().draw_str(text, to_point(origin), &font.font, &paint);
       advance
+   }
+}
+
+impl RenderBackend for SkiaBackend {
+   type Image = Image;
+   type Framebuffer = Framebuffer;
+
+   fn create_framebuffer(&mut self, width: usize, height: usize) -> Framebuffer {
+      let image_info = ImageInfo::new(
+         ISize::new(width as i32, height as i32),
+         ColorType::RGBA8888,
+         AlphaType::Premul,
+         None,
+      );
+      let surface = self
+         .canvas()
+         .new_surface(&image_info, None)
+         .expect("failed to create framebuffer surface");
+      Framebuffer {
+         surface: Cell::new(Some(surface)),
+      }
+   }
+
+   fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {
+      let surface_outer = framebuffer.surface.take();
+      let surface = surface_outer.as_ref().unwrap();
+      let old_surface = self.surface.inner.replace(surface.clone());
+      f(self);
+      self.surface.inner.replace(old_surface.unwrap());
+      framebuffer.surface.set(surface_outer);
+   }
+
+   fn clear(&mut self, color: Color) {
+      self.canvas().clear(to_color(color));
+   }
+
+   fn image(&mut self, point: Point, image: &Image) {
+      self.canvas().draw_image(&image.image, to_point(point), None);
+   }
+
+   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {
+      // The skia_safe devs were out of their fucking mind when they pulled that one.
+      // Drawing a surface to a canvas requires the surface to be mutable.
+      // I'm speechless.
+      let mut surface_outer = framebuffer.surface.take();
+      let surface = surface_outer.as_mut().unwrap();
+      surface.draw(
+         self.canvas(),
+         to_point(position),
+         SamplingOptions::default(),
+         None,
+      );
+      framebuffer.surface.set(surface_outer);
+   }
+
+   fn scale(&mut self, scale: Vector) {
+      self.canvas().scale((scale.x, scale.y));
+   }
+
+   fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
+      self.stack.last_mut().unwrap().blend_mode = new_blend_mode;
    }
 }

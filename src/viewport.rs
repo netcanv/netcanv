@@ -61,18 +61,12 @@ impl Viewport {
    /// Returns the rectangle visible from the viewport, given the provided window size.
    pub fn visible_rect(&self, window_size: Vector) -> Rect {
       let inv_zoom = 1.0 / self.zoom();
-      let half_width = window_size.x * inv_zoom;
-      let half_height = window_size.y * inv_zoom;
+      let width = window_size.x * inv_zoom;
+      let height = window_size.y * inv_zoom;
       Rect::new(
-         point(self.pan.x, self.pan.y),
-         vector(half_width, half_height),
+         point(self.pan.x - width / 2.0, self.pan.y - height / 2.0),
+         vector(width, height),
       )
-      // {
-      //    position: self.pan.x - half_width,
-      //    top: self.pan.y - half_height,
-      //    right: self.pan.x + half_width,
-      //    bottom: self.pan.y + half_height,
-      // }
    }
 
    /// Returns an iterator over equally-sized square tiles seen from the viewport.
