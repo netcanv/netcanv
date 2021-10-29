@@ -1,0 +1,147 @@
+use paws::{vector, Color, Point, Rect, Renderer, Vector};
+
+/// A font.
+pub trait Font {
+   /// Creates a font from an in-memory file.
+   fn from_memory(memory: &[u8], default_size: f32) -> Self;
+
+   /// Creates a new font of the same typeface, but with a different size.
+   ///
+   /// Backends should optimize this operation to be as cheap as possible.
+   fn with_size(&self, new_size: f32) -> Self;
+
+   /// Returns the size of the font.
+   ///
+   /// **Note:** This is not the same as the font's height! This is the size that was passed in
+   /// via the size parameter while the font was being created.
+   fn size(&self) -> f32;
+   /// Returns the height of the font, in pixels.
+   fn height(&self) -> f32;
+
+   /// Returns the width of the given text, when rendered with this font.
+   fn text_width(&self, text: &str) -> f32;
+}
+
+/// An image.
+pub trait Image {
+   /// Creates an image from RGBA pixels.
+   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self;
+
+   /// _Colorizes_ an image by replacing all of its color with a single, solid color.
+   ///
+   /// The alpha channel in the resulting image is multiplied with the given color's alpha channel.
+   ///
+   /// # Implementation notes
+   ///
+   /// This operation must be cheap as it may be called multiple times per frame.
+   fn colorized(&self, color: Color) -> Self;
+
+   /// Returns the size of the image.
+   fn size(&self) -> (usize, usize);
+
+   /// Returns the width of the image.
+   fn width(&self) -> usize {
+      self.size().0
+   }
+
+   /// Returns the height of the image.
+   fn height(&self) -> usize {
+      self.size().1
+   }
+}
+
+/// A framebuffer that can be rendered to.
+pub trait Framebuffer {
+   /// Returns the size of the framebuffer.
+   fn size(&self) -> (u32, u32);
+
+   /// Returns the width of the framebuffer.
+   fn width(&self) -> u32 {
+      self.size().0
+   }
+
+   /// Returns the height of the framebuffer.
+   fn height(&self) -> u32 {
+      self.size().1
+   }
+
+   /// Uploads RGBA pixels to the framebuffer.
+   ///
+   /// `pixels`'s length must be equal to `width * height * 4`.
+   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]);
+
+   /// Downloads RGBA pixels from the framebuffer into a buffer.
+   fn download_rgba(&self, dest: &mut [u8]);
+}
+
+/// Blending modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendMode {
+   /// Clears colors to transparency.
+   Clear,
+   /// Blends colors using the alpha channel of the destination.
+   Alpha,
+   /// Adds colors together.
+   Add,
+   /// Subtracts colors from one another.
+   Subtract,
+}
+
+/// A render backend.
+pub trait RenderBackend: Renderer {
+   type Image: Image;
+   type Framebuffer: Framebuffer;
+
+   /// Creates a new framebuffer of the given size.
+   ///
+   /// The framebuffer should be cleared with transparent pixels.
+   fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer;
+
+   /// Draws to the provided framebuffer for the duration of `f`.
+   fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self));
+
+   /// Clears the framebuffer with a solid color.
+   fn clear(&mut self, color: Color);
+
+   /// Draws an image at the given position (top left corner).
+   fn image(&mut self, position: Point, image: &Self::Image);
+
+   /// Draws a framebuffer at the given position (top left corner).
+   ///
+   /// Drawing the framebuffer that is currently being rendered to is undefined behavior.
+   fn framebuffer(&mut self, position: Point, framebuffer: &Self::Framebuffer);
+
+   /// Scales the transform matrix by the given factor.
+   fn scale(&mut self, scale: Vector);
+
+   /// Sets the current blend mode. Returns the old blend mode.
+   ///
+   /// Blend modes are part of the transformation stack. If used inside `push()` and `pop()`,
+   /// the change is completely transparent to outside code.
+   fn set_blend_mode(&mut self, new_blend_mode: BlendMode);
+
+   /// Draws a filled circle, with the given center point, radius, and color.
+   fn fill_circle(&mut self, center: Point, radius: f32, color: Color) {
+      self.fill(
+         Rect::new(
+            center - vector(radius, radius),
+            vector(radius, radius) * 2.0,
+         ),
+         color,
+         radius,
+      );
+   }
+
+   /// Draws an outlined circle, with the given center point, radius, and color.
+   fn outline_circle(&mut self, center: Point, radius: f32, color: Color, thickness: f32) {
+      self.outline(
+         Rect::new(
+            center - vector(radius, radius),
+            vector(radius, radius) * 2.0,
+         ),
+         color,
+         radius,
+         thickness,
+      );
+   }
+}

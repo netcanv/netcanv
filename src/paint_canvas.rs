@@ -1,6 +1,5 @@
 //! NetCanv's infinite paint canvas.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::io::Cursor;
@@ -11,17 +10,18 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
+use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
+use paws::{Color, LineCap, Point, Renderer, Vector};
 use serde::{Deserialize, Serialize};
-use skulpin::skia_safe as skia;
-use skulpin::skia_safe::*;
 
+use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
 
 /// A brush used for painting strokes.
 #[derive(Clone, Debug)]
 pub enum Brush {
    /// A drawing brush, blending pixels with the given color.
-   Draw { color: Color4f, stroke_width: f32 },
+   Draw { color: Color, stroke_width: f32 },
    /// An erasing brush, setting pixels to full transparency.
    Erase { stroke_width: f32 },
 }
@@ -34,38 +34,12 @@ pub struct StrokePoint {
    pub brush: Brush,
 }
 
-impl Brush {
-   /// Converts a brush to a Skia paint.
-   pub fn as_paint(&self) -> Paint {
-      let mut paint = Paint::new(Color4f::from(Color::TRANSPARENT), None);
-      paint.set_anti_alias(false);
-      paint.set_style(paint::Style::Stroke);
-      paint.set_stroke_cap(paint::Cap::Round);
-
-      match self {
-         Self::Draw {
-            color,
-            stroke_width,
-         } => {
-            paint.set_color(color.to_color());
-            paint.set_stroke_width(*stroke_width);
-         }
-         Self::Erase { stroke_width } => {
-            paint.set_blend_mode(BlendMode::Clear);
-            paint.set_stroke_width(*stroke_width);
-         }
-      }
-
-      paint
-   }
-}
-
 /// A chunk on the infinite canvas.
 pub struct Chunk {
    // Right now NetCanv's chunk handling is quite scuffed, mainly due to Skia's poor performance rendering many things
    // at once. Maybe it'll become less terrible if issue #29 ever gets implemented.
    // https://github.com/liquidev/netcanv/issues/29
-   surface: RefCell<Surface>,
+   framebuffer: Framebuffer,
    png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    webp_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    non_empty_subs: [bool; Self::SUB_COUNT],
@@ -96,13 +70,9 @@ impl Chunk {
    const WEBP_QUALITY: f32 = 80.0;
 
    /// Creates a new chunk, using the given canvas as a Skia surface allocator.
-   fn new(canvas: &mut Canvas) -> Self {
-      let surface = match canvas.new_surface(&Self::image_info(Self::SURFACE_SIZE), None) {
-         Some(surface) => surface,
-         None => panic!("failed to create a surface for storing the chunk"),
-      };
+   fn new(renderer: &mut Backend) -> Self {
       Self {
-         surface: RefCell::new(surface),
+         framebuffer: renderer.create_framebuffer(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1),
          png_data: Default::default(),
          webp_data: Default::default(),
          non_empty_subs: [false; Self::SUB_COUNT],
@@ -125,27 +95,14 @@ impl Chunk {
          Self::SURFACE_SIZE.1,
          Rgba([0, 0, 0, 0]),
       );
-      self.surface.borrow_mut().read_pixels(
-         &Self::image_info(Self::SURFACE_SIZE),
-         &mut image_buffer,
-         Self::SURFACE_SIZE.0 as usize * 4,
-         (0, 0),
-      );
+      self.framebuffer.download_rgba(&mut image_buffer);
       image_buffer
    }
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
    fn upload_image(&mut self, image: RgbaImage, offset: (u32, u32)) {
-      let pixmap = Pixmap::new(
-         &Self::image_info(image.dimensions()),
-         &image,
-         image.width() as usize * 4,
-      );
-      self
-         .surface
-         .borrow_mut()
-         .write_pixels_from_pixmap(&pixmap, (offset.0 as i32, offset.1 as i32));
+      self.framebuffer.upload_rgba(offset, Self::SIZE, &image);
    }
 
    /// Converts a network chunk position into a master chunk position.
@@ -342,16 +299,6 @@ impl Chunk {
    fn image_is_empty(image: &RgbaImage) -> bool {
       image.iter().all(|x| *x == 0)
    }
-
-   /// Returns Skia `ImageInfo` for an image with the provided size.
-   fn image_info(size: (u32, u32)) -> ImageInfo {
-      ImageInfo::new(
-         ISize::new(size.0 as i32, size.1 as i32),
-         skia::ColorType::RGBA8888,
-         AlphaType::Premul,
-         None,
-      )
-   }
 }
 
 /// A paint canvas built out of [`Chunk`]s.
@@ -385,9 +332,9 @@ impl PaintCanvas {
    }
 
    /// Creates the chunk at the given position, if it doesn't already exist.
-   fn ensure_chunk_exists(&mut self, canvas: &mut Canvas, position: (i32, i32)) {
+   fn ensure_chunk_exists(&mut self, renderer: &mut Backend, position: (i32, i32)) {
       if !self.chunks.contains_key(&position) {
-         self.chunks.insert(position, Chunk::new(canvas));
+         self.chunks.insert(position, Chunk::new(renderer));
       }
    }
 
@@ -396,7 +343,7 @@ impl PaintCanvas {
    /// `canvas` is used for allocating new chunks when they don't already exist.
    pub fn stroke(
       &mut self,
-      canvas: &mut Canvas,
+      renderer: &mut Backend,
       from: impl Into<Point>,
       to: impl Into<Point>,
       brush: &Brush,
@@ -404,8 +351,14 @@ impl PaintCanvas {
       let a = from.into();
       let b = to.into();
       let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
-      let paint = brush.as_paint();
-      let stroke_width = paint.stroke_width();
+      // let stroke_width = paint.stroke_width();
+      let (color, stroke_width) = match brush {
+         Brush::Draw {
+            color,
+            stroke_width,
+         } => (*color, *stroke_width),
+         Brush::Erase { stroke_width } => (Color::BLACK, *stroke_width),
+      };
       let half_stroke_width = stroke_width / 2.0;
 
       let mut delta = b - a;
@@ -432,18 +385,27 @@ impl PaintCanvas {
                let master = Chunk::master(chunk_position);
                let sub = Chunk::sub(chunk_position);
                if !self.stroked_chunks.contains(&master) {
-                  self.ensure_chunk_exists(canvas, master);
+                  self.ensure_chunk_exists(renderer, master);
                   let chunk = self.chunks.get_mut(&master).unwrap();
                   let screen_position = Chunk::screen_position(master);
-                  chunk.surface.borrow_mut().canvas().draw_line(
-                     a - screen_position,
-                     b - screen_position,
-                     &paint,
-                  );
+                  renderer.draw_to(&chunk.framebuffer, |renderer| {
+                     renderer.push();
+                     if matches!(brush, Brush::Erase { .. }) {
+                        renderer.set_blend_mode(BlendMode::Clear);
+                     }
+                     renderer.line(
+                        a - screen_position,
+                        b - screen_position,
+                        color,
+                        LineCap::Round,
+                        stroke_width,
+                     );
+                     renderer.pop();
+                  });
                   chunk.mark_dirty(sub);
                }
                self.stroked_chunks.insert(master);
-               p.offset(delta);
+               p += delta;
             }
          }
       }
@@ -453,17 +415,11 @@ impl PaintCanvas {
    ///
    /// The provided viewport and window size are used to only render chunks that are visible at a
    /// given moment.
-   pub fn draw_to(&self, canvas: &mut Canvas, viewport: &Viewport, window_size: (f32, f32)) {
+   pub fn draw_to(&self, renderer: &mut Backend, viewport: &Viewport, window_size: Vector) {
       for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
          if let Some(chunk) = self.chunks.get(&chunk_position) {
             let screen_position = Chunk::screen_position(chunk_position);
-            // why is the position parameter a Size? only rust-skia devs know.
-            chunk.surface.borrow_mut().draw(
-               canvas,
-               (screen_position.x, screen_position.y),
-               SamplingOptions::default(),
-               None,
-            );
+            renderer.framebuffer(screen_position, &chunk.framebuffer);
          }
       }
    }
@@ -480,11 +436,11 @@ impl PaintCanvas {
    /// Decodes image data to the chunk at the given position.
    pub fn decode_network_data(
       &mut self,
-      canvas: &mut Canvas,
+      renderer: &mut Backend,
       to_chunk: (i32, i32),
       data: &[u8],
    ) -> anyhow::Result<()> {
-      self.ensure_chunk_exists(canvas, Chunk::master(to_chunk));
+      self.ensure_chunk_exists(renderer, Chunk::master(to_chunk));
       let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
       chunk.decode_network_data(Chunk::sub(to_chunk), data)
    }
@@ -635,7 +591,7 @@ impl PaintCanvas {
    }
 
    /// Loads chunks from an image file.
-   fn load_from_image_file(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+   fn load_from_image_file(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
       use ::image::io::Reader as ImageReader;
 
       let image = ImageReader::open(path)?.decode()?.into_rgba8();
@@ -653,7 +609,7 @@ impl PaintCanvas {
             // I wish Skia wasn't so slow at rendering large amounts of surfaces.
             let master_chunk = Chunk::master(offset_chunk_position);
             let sub_chunk = Chunk::sub_position(Chunk::sub(offset_chunk_position));
-            self.ensure_chunk_exists(canvas, master_chunk);
+            self.ensure_chunk_exists(renderer, master_chunk);
             let chunk = self.chunks.get_mut(&master_chunk).unwrap();
             let pixel_position = (
                Chunk::SIZE.0 * chunk_position.0 as u32,
@@ -705,7 +661,7 @@ impl PaintCanvas {
    }
 
    /// Loads chunks from a `.netcanv` directory.
-   fn load_from_netcanv(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+   fn load_from_netcanv(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
       let path = Self::validate_netcanv_save_path(path)?;
       eprintln!("loading canvas from {:?}", path);
       // load canvas.toml
@@ -726,7 +682,7 @@ impl PaintCanvas {
                   eprintln!("chunk {:?}", chunk_position);
                   let master = Chunk::master(chunk_position);
                   let sub = Chunk::sub(chunk_position);
-                  self.ensure_chunk_exists(canvas, master);
+                  self.ensure_chunk_exists(renderer, master);
                   let chunk = self.chunks.get_mut(&master).unwrap();
                   chunk.decode_png_data(sub, &std::fs::read(path)?)?;
                   chunk.mark_saved(sub);
@@ -739,14 +695,14 @@ impl PaintCanvas {
    }
 
    /// Loads a paint canvas from the given path.
-   pub fn load(&mut self, canvas: &mut Canvas, path: &Path) -> anyhow::Result<()> {
+   pub fn load(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
       if let Some(ext) = path.extension() {
          match ext.to_str() {
-            Some("netcanv") | Some("toml") => self.load_from_netcanv(canvas, path),
-            _ => self.load_from_image_file(canvas, path),
+            Some("netcanv") | Some("toml") => self.load_from_netcanv(renderer, path),
+            _ => self.load_from_image_file(renderer, path),
          }
       } else {
-         self.load_from_image_file(canvas, path)
+         self.load_from_image_file(renderer, path)
       }
    }
 

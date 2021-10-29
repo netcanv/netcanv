@@ -6,12 +6,13 @@ use std::sync::Arc;
 
 use native_dialog::FileDialog;
 use netcanv_protocol::matchmaker;
+use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
-use skulpin::skia_safe::*;
+use paws::{vector, AlignH, AlignV, Layout};
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme};
-use crate::common::{get_window_size, Error, Fatal};
+use crate::common::{Error, Fatal};
 use crate::config::{self, UserConfig};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
@@ -25,18 +26,6 @@ enum Status {
    Error(String),
 }
 
-impl Status {
-   /// Catches an error condition into the status.
-   fn catch<T, E: Display>(&mut self, result: Result<T, E>) {
-      match result {
-         Ok(..) => (),
-         Err(error) => {
-            let _ = std::mem::replace(self, error.into());
-         }
-      }
-   }
-}
-
 impl<T: Display> From<T> for Status {
    fn from(error: T) -> Self {
       Self::Error(format!("{}", error))
@@ -47,7 +36,6 @@ impl<T: Display> From<T> for Status {
 pub struct State {
    assets: Assets,
    config: UserConfig,
-   ui: Ui,
 
    // Subsystems
    matchmaker_socksys: Arc<SocketSystem<matchmaker::Packet>>,
@@ -63,7 +51,6 @@ pub struct State {
    // net
    status: Status,
    peer: Option<Peer>,
-   connected: bool, // when this is true, the state is transitioned to paint::State
    image_file: Option<PathBuf>, // when this is Some, the canvas is loaded from a file
 }
 
@@ -75,7 +62,6 @@ impl State {
       Self {
          assets,
          config,
-         ui: Ui::new(),
 
          matchmaker_socksys: SocketSystem::new(),
 
@@ -88,72 +74,65 @@ impl State {
 
          status: Status::None,
          peer: None,
-         connected: false,
          image_file: None,
       }
    }
 
    /// Processes the header (app name and welcome message).
-   fn process_header(&mut self, canvas: &mut Canvas) {
-      self.ui.push_group((self.ui.width(), 72.0), Layout::Vertical);
+   fn process_header(&mut self, ui: &mut Ui) {
+      ui.push((ui.width(), 72.0), Layout::Vertical);
 
-      self.ui.push_group((self.ui.width(), 56.0), Layout::Freeform);
-      self.ui.set_font_size(48.0);
-      self.ui.text(
-         canvas,
+      ui.push((ui.width(), 56.0), Layout::Freeform);
+      ui.text(
+         &self.assets.sans.with_size(48.0),
          "NetCanv",
          self.assets.colors.text,
          (AlignH::Left, AlignV::Middle),
       );
-      self.ui.pop_group();
+      ui.pop();
 
-      self.ui.push_group(
-         (self.ui.width(), self.ui.remaining_height()),
-         Layout::Freeform,
-      );
-      self.ui.text(
-         canvas,
+      ui.push((ui.width(), ui.remaining_height()), Layout::Freeform);
+      ui.text(
+         &self.assets.sans,
          "Welcome! Host a room or join an existing one to start painting.",
          self.assets.colors.text,
          (AlignH::Left, AlignV::Middle),
       );
-      self.ui.pop_group();
+      ui.pop();
 
-      self.ui.pop_group();
+      ui.pop();
    }
 
    /// Processes the connection menu (nickname and matchmaker fields and two Expands with options
    /// for joining or hosting a room).
-   fn process_menu(&mut self, canvas: &mut Canvas, input: &mut Input) -> Option<Box<dyn AppState>> {
-      self.ui.push_group(
-         (self.ui.width(), self.ui.remaining_height()),
-         Layout::Vertical,
-      );
+   fn process_menu(&mut self, ui: &mut Ui, input: &mut Input) -> Option<Box<dyn AppState>> {
+      ui.push((ui.width(), ui.remaining_height()), Layout::Vertical);
 
       let button = ButtonArgs {
+         font: &self.assets.sans,
          height: 32.0,
          colors: &self.assets.colors.button.clone(),
       };
       let textfield = TextFieldArgs {
+         font: &self.assets.sans,
          width: 160.0,
          colors: &self.assets.colors.text_field,
          hint: None,
       };
       let expand = ExpandArgs {
+         font: &self.assets.sans.with_size(22.0),
          label: "",
-         font_size: 22.0,
          icons: &self.assets.icons.expand,
          colors: &self.assets.colors.expand,
       };
 
       // nickname, matchmaker
-      self.ui.push_group(
-         (self.ui.width(), TextField::labelled_height(&self.ui)),
+      ui.push(
+         (ui.width(), TextField::labelled_height(textfield.font)),
          Layout::Horizontal,
       );
       self.nickname_field.with_label(
-         &mut self.ui,
-         canvas,
+         ui,
          input,
          "Nickname",
          TextFieldArgs {
@@ -161,10 +140,9 @@ impl State {
             ..textfield
          },
       );
-      self.ui.space(16.0);
+      ui.space(16.0);
       self.matchmaker_field.with_label(
-         &mut self.ui,
-         canvas,
+         ui,
          input,
          "Matchmaker",
          TextFieldArgs {
@@ -172,15 +150,14 @@ impl State {
             ..textfield
          },
       );
-      self.ui.pop_group();
-      self.ui.space(32.0);
+      ui.pop();
+      ui.space(32.0);
 
       // join room
       if self
          .join_expand
          .process(
-            &mut self.ui,
-            canvas,
+            ui,
             input,
             ExpandArgs {
                label: "Join an existing room",
@@ -190,27 +167,26 @@ impl State {
          .mutually_exclude(&mut self.host_expand)
          .expanded()
       {
-         self.ui.push_group(self.ui.remaining_size(), Layout::Vertical);
-         self.ui.offset((32.0, 8.0));
+         ui.push(ui.remaining_size(), Layout::Vertical);
+         ui.offset(vector(32.0, 8.0));
 
-         self.ui.paragraph(
-            canvas,
-            self.assets.colors.text,
-            AlignH::Left,
-            None,
+         ui.paragraph(
+            &self.assets.sans,
             &[
                "Ask your friend for the Room ID",
                "and enter it into the text field below.",
             ],
+            self.assets.colors.text,
+            AlignH::Left,
+            None,
          );
-         self.ui.space(16.0);
-         self.ui.push_group(
-            (0.0, TextField::labelled_height(&self.ui)),
+         ui.space(16.0);
+         ui.push(
+            (0.0, TextField::labelled_height(textfield.font)),
             Layout::Horizontal,
          );
          self.room_id_field.with_label(
-            &mut self.ui,
-            canvas,
+            ui,
             input,
             "Room ID",
             TextFieldArgs {
@@ -218,8 +194,8 @@ impl State {
                ..textfield
             },
          );
-         self.ui.offset((16.0, 16.0));
-         if Button::with_text(&mut self.ui, canvas, input, button, "Join").clicked() {
+         ui.offset(vector(16.0, 16.0));
+         if Button::with_text(ui, input, button, "Join").clicked() {
             match Self::join_room(
                &self.matchmaker_socksys,
                self.nickname_field.text(),
@@ -233,19 +209,18 @@ impl State {
                Err(status) => self.status = status,
             }
          }
-         self.ui.pop_group();
+         ui.pop();
 
-         self.ui.fit();
-         self.ui.pop_group();
+         ui.fit();
+         ui.pop();
       }
-      self.ui.space(16.0);
+      ui.space(16.0);
 
       // host room
       if self
          .host_expand
          .process(
-            &mut self.ui,
-            canvas,
+            ui,
             input,
             ExpandArgs {
                label: "Host a new room",
@@ -255,20 +230,20 @@ impl State {
          .mutually_exclude(&mut self.join_expand)
          .expanded()
       {
-         self.ui.push_group(self.ui.remaining_size(), Layout::Vertical);
-         self.ui.offset((32.0, 8.0));
+         ui.push(ui.remaining_size(), Layout::Vertical);
+         ui.offset(vector(32.0, 8.0));
 
-         self.ui.paragraph(
-            canvas,
-            self.assets.colors.text,
-            AlignH::Left,
-            None,
+         ui.paragraph(
+            &self.assets.sans,
             &[
                "Create a blank canvas, or load an existing one from file,",
                "and share the Room ID with your friends.",
             ],
+            self.assets.colors.text,
+            AlignH::Left,
+            None,
          );
-         self.ui.space(16.0);
+         ui.space(16.0);
 
          macro_rules! host_room {
             () => {
@@ -284,12 +259,12 @@ impl State {
             };
          }
 
-         self.ui.push_group((self.ui.remaining_width(), 32.0), Layout::Horizontal);
-         if Button::with_text(&mut self.ui, canvas, input, button, "Host").clicked() {
+         ui.push((ui.remaining_width(), 32.0), Layout::Horizontal);
+         if Button::with_text(ui, input, button, "Host").clicked() {
             host_room!();
          }
-         self.ui.space(8.0);
-         if Button::with_text(&mut self.ui, canvas, input, button, "from File").clicked() {
+         ui.space(8.0);
+         if Button::with_text(ui, input, button, "from File").clicked() {
             match FileDialog::new()
                .set_filename("canvas.png")
                .add_filter(
@@ -309,13 +284,13 @@ impl State {
                _ => (),
             }
          }
-         self.ui.pop_group();
+         ui.pop();
 
-         self.ui.fit();
-         self.ui.pop_group();
+         ui.fit();
+         ui.pop();
       }
 
-      self.ui.pop_group();
+      ui.pop();
 
       chain_focus(
          input,
@@ -330,9 +305,9 @@ impl State {
    }
 
    /// Processes the status report box.
-   fn process_status(&mut self, canvas: &mut Canvas) {
+   fn process_status(&mut self, ui: &mut Ui) {
       if !matches!(self.status, Status::None) {
-         self.ui.push_group((self.ui.width(), 24.0), Layout::Horizontal);
+         ui.push((ui.width(), 24.0), Layout::Horizontal);
          let icon = match self.status {
             Status::None => unreachable!(),
             Status::Info(_) => &self.assets.icons.status.info,
@@ -343,24 +318,21 @@ impl State {
             Status::Info(_) => self.assets.colors.text,
             Status::Error(_) => self.assets.colors.error,
          };
-         self.ui.icon(
-            canvas,
-            icon,
-            color,
-            Some((self.ui.height(), self.ui.height())),
-         );
-         self.ui.space(8.0);
-         self.ui.push_group(
-            (self.ui.remaining_width(), self.ui.height()),
-            Layout::Freeform,
-         );
+         ui.icon(icon, color, Some(vector(ui.height(), ui.height())));
+         ui.space(8.0);
+         ui.push((ui.remaining_width(), ui.height()), Layout::Freeform);
          let text = match &self.status {
             Status::None => unreachable!(),
             Status::Info(text) | Status::Error(text) => text,
          };
-         self.ui.text(canvas, text, color, (AlignH::Left, AlignV::Middle));
-         self.ui.pop_group();
-         self.ui.pop_group();
+         ui.text(
+            &self.assets.sans,
+            text,
+            color,
+            (AlignH::Left, AlignV::Middle),
+         );
+         ui.pop();
+         ui.pop();
       }
    }
 
@@ -417,43 +389,32 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(
-      &mut self,
-      StateArgs {
-         canvas,
-         coordinate_system_helper,
-         input,
-      }: StateArgs,
-   ) {
-      canvas.clear(self.assets.colors.panel);
+   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+      ui.clear(self.assets.colors.panel);
 
       if let Some(peer) = &mut self.peer {
          catch!(peer.communicate());
       }
 
-      self.ui.begin(get_window_size(&coordinate_system_helper), Layout::Freeform);
-      self.ui.set_font(self.assets.sans.clone());
-      self.ui.set_font_size(14.0);
+      ui.pad((32.0, 32.0));
 
-      self.ui.pad((64.0, 64.0));
+      ui.push((ui.width(), 384.0), Layout::Vertical);
+      ui.align((AlignH::Left, AlignV::Middle));
+      self.process_header(ui);
+      ui.space(24.0);
+      self.process_menu(ui, input);
+      ui.space(24.0);
+      self.process_status(ui);
+      ui.pop();
 
-      self.ui.push_group((self.ui.width(), 384.0), Layout::Vertical);
-      self.ui.align((AlignH::Left, AlignV::Middle));
-      self.process_header(canvas);
-      self.ui.space(24.0);
-      self.process_menu(canvas, input);
-      self.ui.space(24.0);
-      self.process_status(canvas);
-      self.ui.pop_group();
-
-      self.ui.push_group((32.0, self.ui.height()), Layout::Vertical);
-      self.ui.align((AlignH::Right, AlignV::Top));
+      ui.push((32.0, ui.height()), Layout::Vertical);
+      ui.align((AlignH::Right, AlignV::Top));
 
       if Button::with_icon(
-         &mut self.ui,
-         canvas,
+         ui,
          input,
          ButtonArgs {
+            font: &self.assets.sans,
             height: 32.0,
             colors: &self.assets.colors.tool_button,
          },
@@ -476,7 +437,7 @@ impl AppState for State {
          }
       }
 
-      self.ui.pop_group();
+      ui.pop();
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;

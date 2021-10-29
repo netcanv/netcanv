@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use skulpin::skia_safe::*;
+use paws::{vector, Point, Vector};
 use winit::dpi::PhysicalPosition;
 pub use winit::event::{ElementState, MouseButton, VirtualKeyCode};
 use winit::event::{KeyboardInput, WindowEvent};
@@ -190,7 +190,7 @@ impl Input {
          *state = false;
       }
       self.previous_mouse_position = self.mouse_position;
-      self.mouse_scroll.set(0.0, 0.0);
+      self.mouse_scroll = vector(0.0, 0.0);
       for state in &mut self.key_just_typed {
          *state = false;
       }

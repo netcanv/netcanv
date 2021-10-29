@@ -28,19 +28,20 @@
 use std::error::Error;
 
 use config::UserConfig;
-use skulpin::rafx::api::RafxExtents2D;
-use skulpin::*;
+use netcanv_renderer_skia::{SkiaBackend, UiRenderFrame};
+use paws::{vector, Layout};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use winit::platform::unix::*;
-use winit::window::{Window, WindowBuilder};
+use winit::window::WindowBuilder;
 
 #[macro_use]
 mod common;
 mod app;
 mod assets;
+mod backend;
 mod config;
 mod net;
 mod paint_canvas;
@@ -50,33 +51,42 @@ mod viewport;
 
 use app::*;
 use assets::*;
-use ui::input::*;
+use ui::{Input, Ui};
 
 fn main() -> Result<(), Box<dyn Error>> {
+   // Set up the winit event loop and open the window.
    let event_loop = EventLoop::new();
    let window = {
       let b = WindowBuilder::new()
          .with_inner_size(LogicalSize::new(1024, 600))
          .with_title("NetCanv")
          .with_resizable(true);
+      // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
+      // our window apart from others.
       #[cfg(target_os = "linux")]
       let b = b.with_app_id("netcanv".into());
       b
    }
    .build(&event_loop)?;
 
+   // Load the user configuration and color scheme.
+   // TODO: User-definable color schemes, anyone?
    let config = UserConfig::load_or_create()?;
    let color_scheme = match config.ui.color_scheme {
       config::ColorScheme::Light => ColorScheme::light(),
       config::ColorScheme::Dark => ColorScheme::dark(),
    };
 
+   // On Wayland, winit draws its own set of decorations, which can be customized.
+   // We customize them to fit our color scheme.
    #[cfg(target_family = "unix")]
    window.set_wayland_theme(color_scheme.clone());
 
-   let window_size = get_window_extents(&window);
-   let mut renderer = RendererBuilder::new().build(&window, window_size)?;
+   // Build the render backend.
+   let renderer = SkiaBackend::new(&window)?;
+   let mut ui = Ui::new(renderer);
 
+   // Load all the assets, and start the first app state.
    let assets = Assets::new(color_scheme);
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config)) as _);
    let mut input = Input::new();
@@ -94,41 +104,26 @@ fn main() -> Result<(), Box<dyn Error>> {
          }
 
          Event::MainEventsCleared => {
-            let window_size = get_window_extents(&window);
-            let scale_factor = window.scale_factor();
-            match renderer.draw(window_size, scale_factor, |canvas, csh| {
+            let window_size = window.inner_size();
+            match ui.render_frame(&window, |ui| {
+               ui.root(
+                  vector(window_size.width as f32, window_size.height as f32),
+                  Layout::Vertical,
+               );
                // `unwrap()` always succeeds here as app is never None.
-               // I'm not a fan of this method chaining, though, but I guess it's typical
-               // for Rust.
                app.as_mut().unwrap().process(StateArgs {
-                  canvas,
-                  coordinate_system_helper: &csh,
+                  ui,
                   input: &mut input,
                });
                app = Some(app.take().unwrap().next_state());
             }) {
                Err(error) => eprintln!("render error: {}", error),
                _ => (),
-            };
+            }
             input.finish_frame();
-         }
-
-         Event::LoopDestroyed => {
-            // Fix for SIGSEGV inside of skia-[un]safe due to a Surface not being dropped
-            // properly (?). Not sure what that's all about, but this little snippet
-            // fixes the bug so eh, why not.
-            drop(app.take().unwrap());
          }
 
          _ => (),
       }
    });
-}
-
-/// Returns the rafx extents for the window.
-fn get_window_extents(window: &Window) -> RafxExtents2D {
-   RafxExtents2D {
-      width: window.inner_size().width,
-      height: window.inner_size().height,
-   }
 }

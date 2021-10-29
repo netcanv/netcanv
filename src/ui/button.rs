@@ -1,8 +1,14 @@
 //! Pressable buttons.
 
-use skulpin::skia_safe::*;
+use netcanv_renderer::Font as FontTrait;
+use paws::{AlignH, AlignV, Color, Layout};
 
-use crate::ui::*;
+use crate::{
+   backend::{Font, Image},
+   ui::*,
+};
+
+use super::input::Input;
 
 /// A button. This simply acts as a namespace for button-related functionality.
 pub struct Button;
@@ -18,9 +24,10 @@ pub struct ButtonColors {
 
 /// The layout and color scheme arguments for processing the button.
 #[derive(Clone, Copy)]
-pub struct ButtonArgs<'a> {
+pub struct ButtonArgs<'a, 'b> {
+   pub font: &'a Font,
    pub height: f32,
-   pub colors: &'a ButtonColors,
+   pub colors: &'b ButtonColors,
 }
 
 /// The result of button interaction computed after processing it.
@@ -37,31 +44,30 @@ impl Button {
    /// `extra` is used for rendering extra things on top of the button.
    pub fn process(
       ui: &mut Ui,
-      canvas: &mut Canvas,
       input: &Input,
-      ButtonArgs { height, colors }: ButtonArgs,
+      ButtonArgs { height, colors, .. }: ButtonArgs,
       width_hint: Option<f32>,
-      extra: impl FnOnce(&mut Ui, &mut Canvas),
+      extra: impl FnOnce(&mut Ui),
    ) -> ButtonProcessResult {
       // horizontal because we need to fit() later
-      ui.push_group((width_hint.unwrap_or(0.0), height), Layout::Horizontal);
+      ui.push((width_hint.unwrap_or(0.0), height), Layout::Horizontal);
 
-      extra(ui, canvas);
+      extra(ui);
       ui.fit();
 
       let mut clicked = false;
-      ui.outline(canvas, colors.outline, 1.0);
+      ui.outline(colors.outline, 1.0);
       if ui.has_mouse(input) {
          let fill_color = if input.mouse_button_is_down(MouseButton::Left) {
             colors.pressed
          } else {
             colors.hover
          };
-         ui.fill(canvas, fill_color);
+         ui.fill(fill_color);
          clicked = input.mouse_button_just_released(MouseButton::Left);
       }
 
-      ui.pop_group();
+      ui.pop();
 
       ButtonProcessResult { clicked }
    }
@@ -69,39 +75,36 @@ impl Button {
    /// Processes a button with text rendered on top.
    pub fn with_text(
       ui: &mut Ui,
-      canvas: &mut Canvas,
       input: &Input,
       args: ButtonArgs,
       text: &str,
    ) -> ButtonProcessResult {
-      Self::process(ui, canvas, input, args, None, |ui, canvas| {
-         let text_width = ui.text_size(text).0;
+      Self::process(ui, input, args, None, |ui| {
+         let text_width = args.font.text_width(text);
          let padding = args.height;
-         ui.push_group((text_width + padding, ui.height()), Layout::Freeform);
+         ui.push((text_width + padding, ui.height()), Layout::Freeform);
          ui.text(
-            canvas,
+            args.font,
             text,
             args.colors.text,
             (AlignH::Center, AlignV::Middle),
          );
-         ui.pop_group();
+         ui.pop();
       })
    }
 
    /// Processes a button with a square icon rendered on top.
    pub fn with_icon(
       ui: &mut Ui,
-      canvas: &mut Canvas,
       input: &Input,
       args: ButtonArgs,
       icon: &Image,
    ) -> ButtonProcessResult {
-      Self::process(ui, canvas, input, args, Some(args.height), |ui, canvas| {
+      Self::process(ui, input, args, Some(args.height), |ui| {
          ui.icon(
-            canvas,
             icon,
             args.colors.text,
-            Some((args.height, args.height)),
+            Some(vector(args.height, args.height)),
          );
       })
    }
