@@ -1,6 +1,5 @@
 //! An abstraction for sockets, communicating over the global bus.
 
-use std::default;
 use std::fmt::Debug;
 use std::io::{BufReader, BufWriter, Write};
 use std::marker::PhantomData;

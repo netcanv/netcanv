@@ -1,15 +1,11 @@
 //! The trait all app states must implement.
 
-use skulpin::skia_safe::*;
-use skulpin::CoordinateSystemHelper;
-
-use crate::ui::*;
+use crate::ui::{Input, Ui};
 
 /// Arguments passed to app states.
-pub struct StateArgs<'a, 'b, 'c> {
-   pub canvas: &'a mut Canvas,
-   pub coordinate_system_helper: &'b CoordinateSystemHelper,
-   pub input: &'c mut Input,
+pub struct StateArgs<'a, 'b> {
+   pub ui: &'a mut Ui,
+   pub input: &'b mut Input,
 }
 
 /// Trait implemented by all app states.

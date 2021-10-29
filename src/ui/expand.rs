@@ -1,7 +1,9 @@
 //! Expand widgets group elements together and form what's called an "accordion".
 
-use skulpin::skia_safe::*;
+use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
+use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Renderer};
 
+use crate::backend::{Font, Image};
 use crate::ui::*;
 
 /// An Expand's state.
@@ -26,11 +28,11 @@ pub struct ExpandColors {
 
 /// Processing arguments for an Expand.
 #[derive(Clone, Copy)]
-pub struct ExpandArgs<'a, 'b, 'c> {
+pub struct ExpandArgs<'a, 'b, 'c, 'd> {
    pub label: &'a str,
-   pub font_size: f32,
    pub icons: &'b ExpandIcons,
    pub colors: &'c ExpandColors,
+   pub font: &'d Font,
 }
 
 /// The result result of processing an `Expand`.
@@ -50,11 +52,10 @@ impl Expand {
    pub fn process(
       &mut self,
       ui: &mut Ui,
-      canvas: &mut Canvas,
       input: &Input,
       ExpandArgs {
          label,
-         font_size,
+         font,
          icons,
          colors,
       }: ExpandArgs,
@@ -70,36 +71,38 @@ impl Expand {
       };
       let height = icon.height() as f32;
 
-      ui.push_group((ui.width(), height), Layout::Freeform);
+      ui.push((ui.width(), height), Layout::Freeform);
 
       // icon and label
-      ui.push_group(ui.size(), Layout::Horizontal);
-      ui.icon(canvas, icon, colors.icon, Some((height, height)));
+      ui.push(ui.size(), Layout::Horizontal);
+      ui.icon(icon, colors.icon, Some(vector(height, height)));
       ui.space(8.0);
-      ui.push_group((ui.remaining_width(), ui.height()), Layout::Freeform);
-      ui.set_font_size(font_size);
-      ui.text(canvas, label, colors.text, (AlignH::Left, AlignV::Middle));
-      let width = height + 8.0 + ui.text_size(label).0;
-      ui.pop_group();
-      ui.pop_group();
+      ui.push((ui.remaining_width(), ui.height()), Layout::Freeform);
+      ui.text(font, label, colors.text, (AlignH::Left, AlignV::Middle));
+      let width = height + 8.0 + font.text_width(label);
+      ui.pop();
+      ui.pop();
 
       // visible area
-      ui.push_group((width, ui.height()), Layout::Freeform);
+      ui.push((width, ui.height()), Layout::Freeform);
       if ui.has_mouse(input) {
          let pressed = input.mouse_button_is_down(MouseButton::Left);
          // underline
-         ui.draw_on_canvas(canvas, |canvas| {
-            let underline_color: Color4f = if pressed {
+         ui.draw(|ui| {
+            let underline_color: Color = if pressed {
                colors.pressed
             } else {
                colors.hover
             }
             .into();
             let y = height * 1.1;
-            let mut paint = Paint::new(underline_color, None);
-            paint.set_anti_alias(false);
-            paint.set_style(paint::Style::Stroke);
-            canvas.draw_line((0.0, y), (width, y), &paint);
+            ui.line(
+               point(0.0, y),
+               point(width, y),
+               underline_color,
+               LineCap::Butt,
+               1.0,
+            );
          });
          // events
          if input.mouse_button_just_released(MouseButton::Left) {
@@ -107,9 +110,9 @@ impl Expand {
             result.just_clicked = true;
          }
       }
-      ui.pop_group();
+      ui.pop();
 
-      ui.pop_group();
+      ui.pop();
 
       result.expanded = self.expanded;
       result

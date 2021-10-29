@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::mem;
 use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Instant;
 
 use netcanv_protocol::client as cl;
 use netcanv_protocol::matchmaker as mm;
 use nysa::global as bus;
-use skulpin::skia_safe::{Color, Color4f, Point};
+use paws::Color;
+use paws::Point;
 
 use super::socket::ConnectionToken;
 use super::socket::SocketSystem;
@@ -311,7 +311,7 @@ impl Peer {
                      }
                   } else {
                      Brush::Draw {
-                        color: Color4f::from(Color::new(p.color)),
+                        color: Color::argb(p.color),
                         stroke_width: cl::from_fixed15p1(p.brush_size),
                      }
                   },
@@ -390,11 +390,10 @@ impl Peer {
                   y: cl::to_fixed29p3(p.point.y),
                   color: match p.brush {
                      Brush::Draw { ref color, .. } => {
-                        let color = color.to_color();
-                        ((color.a() as u32) << 24)
-                           | ((color.r() as u32) << 16)
-                           | ((color.g() as u32) << 8)
-                           | color.b() as u32
+                        ((color.a as u32) << 24)
+                           | ((color.r as u32) << 16)
+                           | ((color.g as u32) << 8)
+                           | color.b as u32
                      }
                      Brush::Erase { .. } => 0,
                   },

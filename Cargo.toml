@@ -5,7 +5,12 @@ authors = ["lqdev <liquidekgaming@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["netcanv-matchmaker", "netcanv-protocol"]
+members = [
+   "netcanv-renderer",
+   "netcanv-renderer-skia",
+   "netcanv-matchmaker",
+   "netcanv-protocol",
+]
 
 [dependencies]
 
@@ -14,7 +19,7 @@ anyhow = "1.0.40"
 
 # Windowing and graphics
 winit = "0.24.0"
-skulpin = { version = "0.14.0", features = ["skia-complete", "winit-app", "winit-24"] }
+paws = "0.2.0"
 native-dialog = "0.5.5"
 image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }
@@ -37,6 +42,8 @@ toml = "0.5.8"
 copypasta = "0.7.1"
 
 # Workspace
+netcanv-renderer = { path = "netcanv-renderer" }
+netcanv-renderer-skia = { path = "netcanv-renderer-skia" }
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]

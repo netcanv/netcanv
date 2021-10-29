@@ -1,0 +1,12 @@
+[package]
+name = "netcanv-renderer-skia"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.40"
+winit = "0.24.0"
+skulpin = { version = "0.14.0", features = ["skia-complete", "winit-app", "winit-24"] }
+paws = "0.2.0"
+
+netcanv-renderer = { path = "../netcanv-renderer" }

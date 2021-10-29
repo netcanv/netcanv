@@ -1,6 +1,6 @@
 //! Panning and zooming.
 
-use skulpin::skia_safe::{IRect, Point, Rect, Vector};
+use paws::{point, vector, Point, Rect, Vector};
 
 /// A viewport that can be panned around and zoomed into.
 #[derive(Clone)]
@@ -9,9 +9,17 @@ pub struct Viewport {
    zoom_level: f32,
 }
 
+/// A rectangle with integer coordinates.
+pub struct IntRect {
+   right: i32,
+   bottom: i32,
+   left: i32,
+   top: i32,
+}
+
 /// An iterator over tiles visible in a viewport.
 pub struct Tiles {
-   rect: IRect,
+   rect: IntRect,
    x: i32,
    y: i32,
 }
@@ -37,7 +45,7 @@ impl Viewport {
 
    /// Pans the viewport around by the given vector.
    pub fn pan_around(&mut self, by: Vector) {
-      self.pan.offset(by * (1.0 / self.zoom()));
+      self.pan += by * (1.0 / self.zoom());
    }
 
    /// Zooms in or out of the viewport by the given delta.
@@ -51,46 +59,42 @@ impl Viewport {
    }
 
    /// Returns the rectangle visible from the viewport, given the provided window size.
-   pub fn visible_rect(&self, window_size: (f32, f32)) -> Rect {
+   pub fn visible_rect(&self, window_size: Vector) -> Rect {
       let inv_zoom = 1.0 / self.zoom();
-      let half_width = window_size.0 * inv_zoom / 2.0;
-      let half_height = window_size.1 * inv_zoom / 2.0;
-      Rect {
-         left: self.pan.x - half_width,
-         top: self.pan.y - half_height,
-         right: self.pan.x + half_width,
-         bottom: self.pan.y + half_height,
-      }
+      let width = window_size.x * inv_zoom;
+      let height = window_size.y * inv_zoom;
+      Rect::new(
+         point(self.pan.x - width / 2.0, self.pan.y - height / 2.0),
+         vector(width, height),
+      )
    }
 
    /// Returns an iterator over equally-sized square tiles seen from the viewport.
-   pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: (f32, f32)) -> Tiles {
+   pub fn visible_tiles(&self, tile_size: (u32, u32), window_size: Vector) -> Tiles {
       let visible_rect = self.visible_rect(window_size);
-      let irect = IRect {
-         left: (visible_rect.left / tile_size.0 as f32).floor() as i32,
-         top: (visible_rect.top / tile_size.1 as f32).floor() as i32,
-         right: (visible_rect.right / tile_size.0 as f32).floor() as i32,
-         bottom: (visible_rect.bottom / tile_size.1 as f32).floor() as i32,
+      let irect = IntRect {
+         left: (visible_rect.left() / tile_size.0 as f32).floor() as i32,
+         top: (visible_rect.top() / tile_size.1 as f32).floor() as i32,
+         right: (visible_rect.right() / tile_size.0 as f32).floor() as i32,
+         bottom: (visible_rect.bottom() / tile_size.1 as f32).floor() as i32,
       };
-      Tiles {
-         rect: irect,
-         x: irect.left,
-         y: irect.top,
-      }
+      let x = irect.left;
+      let y = irect.top;
+      Tiles { rect: irect, x, y }
    }
 
    /// Converts a point from screen space to viewport space.
    ///
    /// This can be used to pick things on the canvas, given a mouse position.
-   pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
-      (point.into() - Point::from(window_size) * 0.5) * (1.0 / self.zoom()) + self.pan
+   pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
+      (point.into() - window_size / 2.0) * (1.0 / self.zoom()) + self.pan
    }
 
    /// Converts a point from viewport space to screen space.
    ///
    /// This transformation is the inverse of [`Viewport::to_viewport_space`].
-   pub fn to_screen_space(&self, point: impl Into<Point>, window_size: (f32, f32)) -> Point {
-      (point.into() - self.pan) * self.zoom() + Point::from(window_size) * 0.5
+   pub fn to_screen_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
+      (point.into() - self.pan) * self.zoom() + window_size / 2.0
    }
 }
 
