@@ -106,13 +106,11 @@ fn main() -> Result<(), Box<dyn Error>> {
          Event::MainEventsCleared => {
             let window_size = window.inner_size();
             match ui.render_frame(&window, |ui| {
-               // `unwrap()` always succeeds here as app is never None.
-               // I'm not a fan of this method chaining, though, but I guess it's typical
-               // for Rust.
                ui.root(
                   vector(window_size.width as f32, window_size.height as f32),
                   Layout::Vertical,
                );
+               // `unwrap()` always succeeds here as app is never None.
                app.as_mut().unwrap().process(StateArgs {
                   ui,
                   input: &mut input,
@@ -123,13 +121,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                _ => (),
             }
             input.finish_frame();
-         }
-
-         Event::LoopDestroyed => {
-            // Fix for SIGSEGV inside of skia-[un]safe due to a Surface not being dropped
-            // properly (?). Not sure what that's all about, but this little snippet
-            // fixes the bug so eh, why not.
-            drop(app.take().unwrap());
          }
 
          _ => (),
