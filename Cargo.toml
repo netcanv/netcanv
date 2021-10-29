@@ -1,6 +1,6 @@
 [package]
 name = "netcanv"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["lqdev <liquidekgaming@gmail.com>"]
 edition = "2018"
 
