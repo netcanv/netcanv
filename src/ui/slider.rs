@@ -1,6 +1,6 @@
 //! A slider control.
 
-use paws::{Color, Layout};
+use paws::{point, Color, Layout, LineCap, Rect, Renderer};
 
 use crate::common::quantize;
 use crate::ui::*;
@@ -67,35 +67,34 @@ impl Slider {
       }
 
       // TODO(renderer): slider rendering
-      // ui.draw_on_canvas(canvas, |canvas| {
-      //    let transparent = Color4f::from(color.with_a(128));
-      //    let mut paint = Paint::new(transparent, None);
-      //    let mut x = self.value * ui.width();
-      //    let y = ui.height() / 2.0;
+      ui.draw(|ui| {
+         let transparent = color.with_alpha(128);
+         let mut x = self.value * ui.width();
+         let y = ui.height() / 2.0;
+         let width = ui.width();
 
-      //    paint.set_anti_alias(true);
-      //    paint.set_style(paint::Style::Stroke);
-      //    paint.set_stroke_width(2.0);
-      //    canvas.draw_line((0.0, y), (ui.width(), y), &paint);
+         ui.render().fill(
+            Rect::new(point(0.0, y - 1.0), vector(width, 2.0)),
+            transparent,
+            1.0,
+         );
 
-      //    paint.set_color(paint.color().with_a(255));
-      //    if let SliderStep::Discrete(_) = self.step {
-      //       let step_count = self.step_count();
-      //       let norm_step = 1.0 / step_count as f32;
-      //       let step_width = norm_step * ui.width();
-      //       if step_width > 4.0 {
-      //          for i in 0..=step_count {
-      //             let t = i as f32 * norm_step;
-      //             let px = t * ui.width();
-      //             canvas.draw_point((px, y), &paint);
-      //          }
-      //       }
-      //       x = quantize(x, step_width);
-      //    }
+         if let SliderStep::Discrete(_) = self.step {
+            let step_count = self.step_count();
+            let norm_step = 1.0 / step_count as f32;
+            let step_width = norm_step * ui.width();
+            if step_width > 4.0 {
+               for i in 0..=step_count {
+                  let t = i as f32 * norm_step;
+                  let px = t * ui.width();
+                  ui.render().fill(Rect::new(point(px, y - 1.0), vector(2.0, 2.0)), color, 0.0);
+               }
+            }
+            x = quantize(x, step_width);
+         }
 
-      //    paint.set_style(paint::Style::Fill);
-      //    canvas.draw_circle((x, y), 5.0, &paint);
-      // });
+         ui.render().circle(point(x, y), 5.0, color);
+      });
 
       ui.pop();
    }

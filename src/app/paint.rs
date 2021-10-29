@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use native_dialog::FileDialog;
 use netcanv_renderer::RenderBackend;
 use nysa::global as bus;
-use paws::{AlignH, AlignV, Color, Layout};
+use paws::{point, AlignH, AlignV, Color, Layout, Rect, Renderer};
 
 use crate::app::*;
 use crate::assets::*;
@@ -392,15 +392,15 @@ impl State {
             } else {
                0.8
             };
+         let y_offset = y_offset.round();
          if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.paint_color = color.clone();
          }
          // TODO(renderer): Color palette
-         // self.ui.draw_on_canvas(canvas, |canvas| {
-         //    let paint = Paint::new(color, None);
-         //    let rect = Rect::from_point_and_size((0.0, y_offset), self.ui.size());
-         //    canvas.draw_rect(rect, &paint);
-         // });
+         ui.draw(|ui| {
+            let rect = Rect::new(point(0.0, y_offset), ui.size());
+            ui.render().fill(rect, color, 4.0);
+         });
          ui.pop();
       }
       ui.space(16.0);

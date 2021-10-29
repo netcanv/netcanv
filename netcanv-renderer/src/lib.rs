@@ -1,4 +1,4 @@
-use paws::{Color, Point, Renderer};
+use paws::{vector, Color, Point, Rect, Renderer};
 
 /// A font.
 pub trait Font {
@@ -76,4 +76,16 @@ pub trait RenderBackend: Renderer {
 
    /// Draws an image stretched to fill the given rectangle.
    fn image(&mut self, position: Point, image: &Self::Image);
+
+   /// Draws a circle, with the given center point, radius, and color.
+   fn circle(&mut self, center: Point, radius: f32, color: Color) {
+      self.fill(
+         Rect::new(
+            center - vector(radius, radius),
+            vector(radius, radius) * 2.0,
+         ),
+         color,
+         radius,
+      );
+   }
 }
