@@ -25,7 +25,7 @@ pub trait Font {
 /// An image.
 pub trait Image {
    /// Creates an image from RGBA pixels.
-   fn from_rgba(width: usize, height: usize, pixel_data: &[u8]) -> Self;
+   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self;
 
    /// _Colorizes_ an image by replacing all of its color with a single, solid color.
    ///
@@ -52,6 +52,19 @@ pub trait Image {
 
 /// A framebuffer that can be rendered to.
 pub trait Framebuffer {
+   /// Returns the size of the framebuffer.
+   fn size(&self) -> (u32, u32);
+
+   /// Returns the width of the framebuffer.
+   fn width(&self) -> u32 {
+      self.size().0
+   }
+
+   /// Returns the height of the framebuffer.
+   fn height(&self) -> u32 {
+      self.size().1
+   }
+
    /// Uploads RGBA pixels to the framebuffer.
    ///
    /// `pixels`'s length must be equal to `width * height * 4`.
@@ -82,7 +95,7 @@ pub trait RenderBackend: Renderer {
    /// Creates a new framebuffer of the given size.
    ///
    /// The framebuffer should be cleared with transparent pixels.
-   fn create_framebuffer(&mut self, width: usize, height: usize) -> Self::Framebuffer;
+   fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer;
 
    /// Draws to the provided framebuffer for the duration of `f`.
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self));

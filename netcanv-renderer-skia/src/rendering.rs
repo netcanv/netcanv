@@ -5,8 +5,8 @@ use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Rende
 use skulpin::skia_safe::{
    self, color_filters, image_filters,
    paint::{Cap, Style},
-   AlphaType, ClipOp, ColorType, Data, IRect, ISize, ImageInfo, Paint, SamplingOptions, Surface,
-   Typeface,
+   AlphaType, ClipOp, ColorType, Data, IPoint, IRect, ISize, ImageInfo, Paint, Pixmap,
+   SamplingOptions, Surface, Typeface,
 };
 
 use crate::conversions::*;
@@ -60,11 +60,11 @@ pub struct Image {
 }
 
 impl netcanv_renderer::Image for Image {
-   fn from_rgba(width: usize, height: usize, pixel_data: &[u8]) -> Self {
+   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self {
       let image = skia_safe::Image::from_raster_data(
-         &ImageInfo::new_s32((width as i32, height as i32), AlphaType::Premul),
+         &rgba_image_info(width, height),
          Data::new_copy(pixel_data),
-         width * 4,
+         width as usize * 4,
       )
       .expect("failed to create the image");
       Self { image }
@@ -88,16 +88,48 @@ impl netcanv_renderer::Image for Image {
 }
 
 pub struct Framebuffer {
+   width: u32,
+   height: u32,
    surface: Cell<Option<Surface>>,
 }
 
 impl netcanv_renderer::Framebuffer for Framebuffer {
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {
-      todo!()
+   fn size(&self) -> (u32, u32) {
+      (self.width, self.height)
    }
 
-   fn download_rgba(&self, dest: &mut [u8]) {
-      todo!()
+   fn upload_rgba(&mut self, (x, y): (u32, u32), (width, height): (u32, u32), pixels: &[u8]) {
+      assert!(
+         pixels.len() == width as usize * height as usize * 4,
+         "input pixel data size does not match the provided dimensions"
+      );
+      let pixmap = Pixmap::new(
+         &rgba_image_info(width, height),
+         pixels,
+         (width * 4) as usize,
+      );
+      self
+         .surface
+         .get_mut()
+         .as_mut()
+         .unwrap()
+         .write_pixels_from_pixmap(&pixmap, IPoint::new(x as i32, y as i32));
+   }
+
+   fn download_rgba(&self, pixels: &mut [u8]) {
+      assert!(
+         pixels.len() == self.width as usize * self.height as usize * 4,
+         "output pixel data size does not match the framebuffer's dimensions"
+      );
+      let mut surface_outer = self.surface.take();
+      let surface = surface_outer.as_mut().unwrap();
+      surface.read_pixels(
+         &rgba_image_info(self.width, self.height),
+         pixels,
+         self.width as usize * 4,
+         IPoint::new(0, 0),
+      );
+      self.surface.set(surface_outer);
    }
 }
 
@@ -223,18 +255,15 @@ impl RenderBackend for SkiaBackend {
    type Image = Image;
    type Framebuffer = Framebuffer;
 
-   fn create_framebuffer(&mut self, width: usize, height: usize) -> Framebuffer {
-      let image_info = ImageInfo::new(
-         ISize::new(width as i32, height as i32),
-         ColorType::RGBA8888,
-         AlphaType::Premul,
-         None,
-      );
+   fn create_framebuffer(&mut self, width: u32, height: u32) -> Framebuffer {
+      let image_info = rgba_image_info(width, height);
       let surface = self
          .canvas()
          .new_surface(&image_info, None)
          .expect("failed to create framebuffer surface");
       Framebuffer {
+         width,
+         height,
          surface: Cell::new(Some(surface)),
       }
    }

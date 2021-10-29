@@ -1,8 +1,14 @@
+//! The Skia backend.
+//!
+//! Please note that this code is filled with numerous weirdnesses whose main purpose is simply
+//! to fit the API as dictated by `netcanv-renderer`. skia-safe is not a very well-designed API
+//! and this crate showcases that very well.
+
 mod conversions;
 mod rendering;
 
-use netcanv_renderer::{BlendMode, RenderBackend};
-use paws::{Color, Point, Ui, Vector};
+use netcanv_renderer::BlendMode;
+use paws::Ui;
 use skulpin::skia_safe::{
    AlphaType, Canvas, ColorType, ISize, ImageInfo, SamplingOptions, Surface,
 };
@@ -10,7 +16,6 @@ use skulpin::{rafx::api::RafxExtents2D, Renderer, RendererBuilder};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use conversions::*;
 pub use rendering::*;
 
 pub(crate) struct SurfaceInner {

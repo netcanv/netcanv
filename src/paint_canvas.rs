@@ -72,8 +72,7 @@ impl Chunk {
    /// Creates a new chunk, using the given canvas as a Skia surface allocator.
    fn new(renderer: &mut Backend) -> Self {
       Self {
-         framebuffer: renderer
-            .create_framebuffer(Self::SURFACE_SIZE.0 as usize, Self::SURFACE_SIZE.1 as usize),
+         framebuffer: renderer.create_framebuffer(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1),
          png_data: Default::default(),
          webp_data: Default::default(),
          non_empty_subs: [false; Self::SUB_COUNT],

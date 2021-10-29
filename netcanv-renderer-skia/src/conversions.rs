@@ -21,3 +21,13 @@ pub(crate) fn to_color4f(color: Color) -> skia_safe::Color4f {
       color.a as f32 / 255.0,
    )
 }
+
+pub(crate) fn rgba_image_info(width: u32, height: u32) -> skia_safe::ImageInfo {
+   use skia_safe::{AlphaType, ColorType};
+   skia_safe::ImageInfo::new(
+      (width as i32, height as i32),
+      ColorType::RGBA8888,
+      AlphaType::Premul,
+      None,
+   )
+}

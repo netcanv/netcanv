@@ -83,7 +83,7 @@ impl Assets {
       let mut pixmap = tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
       resvg::render(&tree, FitTo::Original, pixmap.as_mut());
 
-      Image::from_rgba(size.width() as usize, size.height() as usize, pixmap.data())
+      Image::from_rgba(size.width() as u32, size.height() as u32, pixmap.data())
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
