@@ -1,10 +1,217 @@
-use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
+// Honestly, I don't like this code a lot…
+// There's tons of side effects, which stem from OpenGL's statefullness.
+// Most things are abstracted away such that only a few specific functions need to be called to
+// draw things, so it shouldn't be _that_ horrible.
+
+use std::mem::size_of;
+use std::rc::Rc;
+
+use glow::{HasContext, NativeBuffer, NativeProgram, NativeTexture, NativeVertexArray};
+use memoffset::offset_of;
+use netcanv_renderer::paws::{point, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::RenderBackend;
 
+use crate::common::normalized_color;
 use crate::font::Font;
 use crate::framebuffer::Framebuffer;
 use crate::image::Image;
 use crate::OpenGlBackend;
+
+#[repr(packed)]
+pub(crate) struct Vertex {
+   position: Point,
+   uv: Point,
+   color: (f32, f32, f32, f32),
+}
+
+impl From<Point> for Vertex {
+   fn from(position: Point) -> Self {
+      Self {
+         position,
+         uv: point(0.0, 0.0),
+         color: (1.0, 1.0, 1.0, 1.0),
+      }
+   }
+}
+
+pub(crate) struct RenderState {
+   gl: Rc<glow::Context>,
+   vao: NativeVertexArray,
+   vbo: NativeBuffer,
+   vbo_size: usize,
+   ebo: NativeBuffer,
+   ebo_size: usize,
+   program: NativeProgram,
+}
+
+impl RenderState {
+   fn create_vao(gl: &glow::Context, vbo: NativeBuffer, ebo: NativeBuffer) -> NativeVertexArray {
+      unsafe {
+         let vao = gl.create_vertex_array().unwrap();
+         gl.bind_vertex_array(Some(vao));
+         gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
+         let stride = size_of::<Vertex>() as i32;
+         gl.vertex_attrib_pointer_f32(
+            0,                                   // index
+            2,                                   // size
+            glow::FLOAT,                         // type
+            false,                               // normalize
+            stride,                              // stride
+            offset_of!(Vertex, position) as i32, // offset
+         );
+         gl.vertex_attrib_pointer_f32(
+            1,                             // index
+            2,                             // size
+            glow::FLOAT,                   // type
+            false,                         // normalize
+            stride,                        // stride
+            offset_of!(Vertex, uv) as i32, // offset
+         );
+         gl.vertex_attrib_pointer_f32(
+            2,                                // index
+            4,                                // size
+            glow::FLOAT,                      // type
+            false,                            // normalize
+            stride,                           // stride
+            offset_of!(Vertex, color) as i32, // offset
+         );
+         gl.enable_vertex_attrib_array(0);
+         gl.enable_vertex_attrib_array(1);
+         gl.enable_vertex_attrib_array(2);
+         vao
+      }
+   }
+
+   fn create_vbo_and_ebo(gl: &glow::Context) -> (NativeBuffer, NativeBuffer) {
+      unsafe {
+         let vbo = gl.create_buffer().unwrap();
+         let ebo = gl.create_buffer().unwrap();
+         gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
+         (vbo, ebo)
+      }
+   }
+
+   fn create_program(gl: &glow::Context) -> NativeProgram {
+      const VERTEX_SHADER: &str = r#"
+         #version 300 es
+
+         precision mediump float;
+
+         layout (location = 0) in vec2 position;
+         layout (location = 1) in vec2 uv;
+         layout (location = 2) in vec4 color;
+
+         uniform mat4 projection;
+
+         out vec2 vertex_uv;
+         out vec4 vertex_color;
+
+         void main(void)
+         {
+            gl_Position = vec4(position, 0.0, 1.0);
+            vertex_uv = uv;
+            vertex_color = color;
+         }
+      "#;
+      const FRAGMENT_SHADER: &str = r#"
+         #version 300 es
+
+         precision mediump float;
+
+         in vec2 vertex_uv;
+         in vec4 vertex_color;
+
+         out vec4 fragment_color;
+
+         void main(void)
+         {
+            fragment_color = vec4(1.0, 1.0, 1.0, 1.0);
+         }
+      "#;
+      unsafe {
+         let vertex_shader = gl.create_shader(glow::VERTEX_SHADER).unwrap();
+         let fragment_shader = gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
+
+         gl.shader_source(vertex_shader, VERTEX_SHADER);
+         gl.compile_shader(vertex_shader);
+         gl.shader_source(fragment_shader, FRAGMENT_SHADER);
+         gl.compile_shader(fragment_shader);
+
+         let program = gl.create_program().unwrap();
+         gl.attach_shader(program, vertex_shader);
+         gl.attach_shader(program, fragment_shader);
+         gl.link_program(program);
+
+         gl.delete_shader(vertex_shader);
+         gl.delete_shader(fragment_shader);
+
+         gl.use_program(Some(program));
+
+         program
+      }
+   }
+
+   pub(crate) fn new(gl: Rc<glow::Context>) -> Self {
+      let (vbo, ebo) = Self::create_vbo_and_ebo(&gl);
+      let vao = Self::create_vao(&gl, vbo, ebo);
+      let program = Self::create_program(&gl);
+      Self {
+         gl,
+         vao,
+         vbo,
+         vbo_size: 0,
+         ebo,
+         ebo_size: 0,
+         program,
+      }
+   }
+
+   unsafe fn to_u8_slice<T>(slice: &[T]) -> &[u8] {
+      let ptr = slice.as_ptr() as *const u8;
+      std::slice::from_raw_parts(ptr, size_of::<T>() * slice.len())
+   }
+
+   pub(crate) fn draw(&mut self, vertices: &[Vertex], indices: &[u32]) {
+      unsafe {
+         // Update buffers
+         let vertex_data = Self::to_u8_slice(vertices);
+         let index_data = Self::to_u8_slice(indices);
+         if vertex_data.len() > self.vbo_size {
+            self.gl.buffer_data_size(
+               glow::ARRAY_BUFFER,
+               vertex_data.len() as i32,
+               glow::STREAM_DRAW,
+            );
+            self.vbo_size = vertex_data.len();
+         }
+         if index_data.len() > self.ebo_size {
+            self.gl.buffer_data_size(
+               glow::ELEMENT_ARRAY_BUFFER,
+               index_data.len() as i32,
+               glow::STREAM_DRAW,
+            );
+            self.ebo_size = index_data.len();
+         }
+         self.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, vertex_data);
+         self.gl.buffer_sub_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, 0, index_data);
+         // Draw triangles
+         self.gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
+      }
+   }
+}
+
+impl Drop for RenderState {
+   fn drop(&mut self) {
+      unsafe {
+         self.gl.delete_buffer(self.vbo);
+         self.gl.delete_buffer(self.ebo);
+         self.gl.delete_vertex_array(self.vao);
+         self.gl.delete_program(self.program);
+      }
+   }
+}
 
 impl Renderer for OpenGlBackend {
    type Font = Font;
@@ -46,7 +253,13 @@ impl RenderBackend for OpenGlBackend {
 
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
 
-   fn clear(&mut self, color: Color) {}
+   fn clear(&mut self, color: Color) {
+      let (r, g, b, a) = normalized_color(color);
+      unsafe {
+         self.gl.clear_color(r, g, b, a);
+         self.gl.clear(glow::COLOR_BUFFER_BIT);
+      }
+   }
 
    fn image(&mut self, position: Point, image: &Self::Image) {}
 
