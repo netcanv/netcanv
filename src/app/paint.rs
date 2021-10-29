@@ -403,7 +403,6 @@ impl State {
          if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.paint_color = color.clone();
          }
-         // TODO(renderer): Color palette
          ui.draw(|ui| {
             let rect = Rect::new(point(0.0, y_offset), ui.size());
             ui.render().fill(rect, color, 4.0);

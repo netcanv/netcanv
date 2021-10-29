@@ -66,7 +66,6 @@ impl Slider {
          self.value = self.value.clamp(0.0, 1.0);
       }
 
-      // TODO(renderer): slider rendering
       ui.draw(|ui| {
          let transparent = color.with_alpha(128);
          let mut x = self.value * ui.width();
