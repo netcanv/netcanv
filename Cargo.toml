@@ -19,7 +19,7 @@ anyhow = "1.0.40"
 
 # Windowing and graphics
 winit = "0.24.0"
-paws = "0.1.0"
+paws = "0.2.0"
 native-dialog = "0.5.5"
 image = "0.23.14"
 webp = { version = "0.2.0", features = ["img"] }

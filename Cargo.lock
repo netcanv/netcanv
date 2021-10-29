@@ -1181,7 +1181,7 @@ dependencies = [
  "netcanv-renderer",
  "netcanv-renderer-skia",
  "nysa",
- "paws",
+ "paws 0.2.0",
  "resvg",
  "serde",
  "tiny-skia",
@@ -1215,7 +1215,7 @@ name = "netcanv-renderer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "paws",
+ "paws 0.1.0",
  "winit",
 ]
 
@@ -1225,7 +1225,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "netcanv-renderer",
- "paws",
+ "paws 0.1.0",
  "skulpin",
  "winit",
 ]
@@ -1423,6 +1423,12 @@ name = "paws"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6731cd2b43942815858c905bfafbeac0b7d9ecef39b3ab93b3e4266ed9d5815"
+
+[[package]]
+name = "paws"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24bfa572b249c2ab45d63ee48caf75e087f3265c92b2b230b10740655260aa5f"
 
 [[package]]
 name = "peeking_take_while"
