@@ -83,8 +83,8 @@ impl netcanv_renderer::Image for Image {
       }
    }
 
-   fn size(&self) -> (usize, usize) {
-      (self.image.width() as usize, self.image.height() as usize)
+   fn size(&self) -> (u32, u32) {
+      (self.image.width() as _, self.image.height() as _)
    }
 }
 

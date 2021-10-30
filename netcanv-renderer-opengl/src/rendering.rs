@@ -11,34 +11,52 @@ use glow::{
    NativeVertexArray,
 };
 use memoffset::offset_of;
-use netcanv_renderer::paws::{point, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
-use netcanv_renderer::RenderBackend;
+use netcanv_renderer::paws::{
+   point, vector, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+};
+use netcanv_renderer::{BlendMode, Image as ImageTrait, RenderBackend};
 
-use crate::common::normalized_color;
+use crate::common::{normalized_color, VectorMath};
 use crate::font::Font;
 use crate::framebuffer::Framebuffer;
 use crate::image::Image;
 use crate::OpenGlBackend;
 
 #[repr(packed)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct Vertex {
    position: Point,
    uv: Point,
    color: (f32, f32, f32, f32),
 }
 
-impl From<Point> for Vertex {
-   fn from(position: Point) -> Self {
+impl Vertex {
+   fn colored(position: Point, color: Color) -> Self {
       Self {
          position,
          uv: point(0.0, 0.0),
-         color: (1.0, 1.0, 1.0, 1.0),
+         color: normalized_color(color),
+      }
+   }
+
+   fn textured_colored(position: Point, uv: Point, color: Color) -> Self {
+      Self {
+         position,
+         uv,
+         color: normalized_color(color),
       }
    }
 }
 
 struct Uniforms {
    projection: NativeUniformLocation,
+   the_texture: NativeUniformLocation,
+}
+
+#[derive(Clone, Copy)]
+struct Transform {
+   translation: Vector,
+   blend_mode: BlendMode,
 }
 
 pub(crate) struct RenderState {
@@ -50,6 +68,8 @@ pub(crate) struct RenderState {
    ebo_size: usize,
    program: NativeProgram,
    uniforms: Uniforms,
+   null_texture: NativeTexture,
+   stack: Vec<Transform>,
 }
 
 impl RenderState {
@@ -145,11 +165,13 @@ impl RenderState {
          in vec2 vertex_uv;
          in vec4 vertex_color;
 
+         uniform sampler2D the_texture;
+
          out vec4 fragment_color;
 
          void main(void)
          {
-            fragment_color = vec4(1.0, 1.0, 1.0, 1.0);
+            fragment_color = vertex_color * texture(the_texture, vertex_uv);
          }
       "#;
       unsafe {
@@ -174,9 +196,30 @@ impl RenderState {
 
          let uniforms = Uniforms {
             projection: gl.get_uniform_location(program, "projection").unwrap(),
+            the_texture: gl.get_uniform_location(program, "the_texture").unwrap(),
          };
+         gl.uniform_1_i32(Some(&uniforms.the_texture), 0);
 
          (program, uniforms)
+      }
+   }
+
+   fn create_null_texture(gl: &glow::Context) -> NativeTexture {
+      unsafe {
+         let texture = gl.create_texture().unwrap();
+         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            glow::RGBA as i32,
+            1,
+            1,
+            0,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            Some(&[255, 255, 255, 255]),
+         );
+         texture
       }
    }
 
@@ -184,6 +227,19 @@ impl RenderState {
       let (vbo, ebo) = Self::create_vbo_and_ebo(&gl);
       let vao = Self::create_vao(&gl, vbo, ebo);
       let (program, uniforms) = Self::create_program(&gl);
+      let null_texture = Self::create_null_texture(&gl);
+
+      unsafe {
+         gl.enable(glow::BLEND);
+         gl.blend_equation_separate(glow::FUNC_ADD, glow::FUNC_ADD);
+         gl.blend_func_separate(
+            glow::SRC_ALPHA,
+            glow::ONE_MINUS_SRC_ALPHA,
+            glow::ONE,
+            glow::ONE_MINUS_SRC_ALPHA,
+         );
+      }
+
       Self {
          gl,
          vao,
@@ -193,6 +249,11 @@ impl RenderState {
          ebo_size: 0,
          program,
          uniforms,
+         null_texture,
+         stack: vec![Transform {
+            translation: vector(0.0, 0.0),
+            blend_mode: BlendMode::Alpha,
+         }],
       }
    }
 
@@ -201,7 +262,14 @@ impl RenderState {
       std::slice::from_raw_parts(ptr, size_of::<T>() * slice.len())
    }
 
-   pub(crate) fn draw(&mut self, vertices: &[Vertex], indices: &[u32]) {
+   fn bind_null_texture(&mut self) {
+      unsafe {
+         self.gl.active_texture(glow::TEXTURE0);
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(self.null_texture));
+      }
+   }
+
+   fn draw(&mut self, vertices: &[Vertex], indices: &[u32]) {
       unsafe {
          // Update buffers
          let vertex_data = Self::to_u8_slice(vertices);
@@ -234,14 +302,22 @@ impl RenderState {
       #[rustfmt::skip]
       let matrix: [f32; 3 * 3] = [
          2.0 / fwidth, 0.0,            -1.0,
-         0.0,          2.0 / -fheight, 1.0,
-         0.0,          0.0,            1.0,
+         0.0,          2.0 / -fheight,  1.0,
+         0.0,          0.0,             1.0,
       ];
       unsafe {
          self.gl.viewport(0, 0, width as i32, height as i32);
          self.gl.scissor(0, 0, width as i32, height as i32);
          self.gl.uniform_matrix_3_f32_slice(Some(&self.uniforms.projection), false, &matrix);
       }
+   }
+
+   fn transform(&self) -> &Transform {
+      self.stack.last().unwrap()
+   }
+
+   fn transform_mut(&mut self) -> &mut Transform {
+      self.stack.last_mut().unwrap()
    }
 }
 
@@ -259,19 +335,88 @@ impl Drop for RenderState {
 impl Renderer for OpenGlBackend {
    type Font = Font;
 
-   fn push(&mut self) {}
+   fn push(&mut self) {
+      self.state.stack.push(self.state.transform().clone());
+   }
 
-   fn pop(&mut self) {}
+   fn pop(&mut self) {
+      self.state.stack.pop();
+      assert!(
+         self.state.stack.len() > 0,
+         "pop() called at the bottom of the stack"
+      );
+   }
 
-   fn translate(&mut self, vec: Vector) {}
+   fn translate(&mut self, vec: Vector) {
+      self.state.transform_mut().translation += vec;
+   }
 
    fn clip(&mut self, rect: Rect) {}
 
-   fn fill(&mut self, rect: Rect, color: Color, radius: f32) {}
+   fn fill(&mut self, mut rect: Rect, color: Color, radius: f32) {
+      rect.position += self.state.transform().translation;
+      let vertices = [
+         Vertex::colored(rect.top_left(), color),     // 0
+         Vertex::colored(rect.top_right(), color),    // 1
+         Vertex::colored(rect.bottom_right(), color), // 2
+         Vertex::colored(rect.bottom_left(), color),  // 3
+      ];
+      let indices = [0, 1, 2, 2, 3, 0];
+      self.state.bind_null_texture();
+      self.state.draw(&vertices, &indices);
+   }
 
-   fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {}
+   fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
+      rect.position += self.state.transform().translation;
+      if thickness % 2.0 > 0.95 {
+         rect.position += vector(0.5, 0.5);
+      }
+      let d = thickness / 2.0;
+      let vertices = [
+         Vertex::colored(rect.top_left() - vector(d, d), color), // 0
+         Vertex::colored(rect.top_left() + vector(d, d), color), // 1
+         Vertex::colored(rect.top_right() - vector(-d, d), color), // 2
+         Vertex::colored(rect.top_right() + vector(-d, d), color), // 3
+         Vertex::colored(rect.bottom_right() - vector(-d, -d), color), // 4
+         Vertex::colored(rect.bottom_right() + vector(-d, -d), color), // 5
+         Vertex::colored(rect.bottom_left() - vector(d, -d), color), // 6
+         Vertex::colored(rect.bottom_left() + vector(d, -d), color), // 7
+      ];
+      #[rustfmt::skip]
+      let indices = [
+         // top edge
+         0, 1, 2, 2, 3, 1,
+         // right edge
+         2, 3, 4, 4, 5, 3,
+         // bottom edge
+         4, 5, 6, 6, 7, 5,
+         // left edge
+         6, 7, 0, 0, 1, 7,
+      ];
+      self.state.bind_null_texture();
+      self.state.draw(&vertices, &indices);
+   }
 
-   fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {}
+   fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
+      a += self.state.transform().translation;
+      b += self.state.transform().translation;
+      if thickness % 2.0 > 0.95 {
+         a += vector(0.5, 0.5);
+         b += vector(0.5, 0.5);
+      }
+      let direction = (b - a).normalize();
+      let cw = direction.perpendicular_cw() * thickness / 2.0;
+      let ccw = direction.perpendicular_ccw() * thickness / 2.0;
+      let vertices = [
+         Vertex::colored(a + cw, color),
+         Vertex::colored(a + ccw, color),
+         Vertex::colored(b + ccw, color),
+         Vertex::colored(b + cw, color),
+      ];
+      let indices = [0, 1, 2, 2, 3, 0];
+      self.state.bind_null_texture();
+      self.state.draw(&vertices, &indices);
+   }
 
    fn text(
       &mut self,
@@ -294,7 +439,7 @@ impl RenderBackend for OpenGlBackend {
       Framebuffer {}
    }
 
-   fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
+   fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {}
 
    fn clear(&mut self, color: Color) {
       let (r, g, b, a) = normalized_color(color);
@@ -304,9 +449,40 @@ impl RenderBackend for OpenGlBackend {
       }
    }
 
-   fn image(&mut self, position: Point, image: &Self::Image) {}
+   fn image(&mut self, mut position: Point, image: &Image) {
+      position += self.state.transform().translation;
+      let (fwidth, fheight) = (image.width() as f32, image.height() as f32);
+      let color = image.color.unwrap_or(Color::WHITE);
+      let vertices = [
+         Vertex::textured_colored(position, point(0.0, 0.0), color),
+         Vertex::textured_colored(position + vector(fwidth, 0.0), point(1.0, 0.0), color),
+         Vertex::textured_colored(position + vector(fwidth, fheight), point(1.0, 1.0), color),
+         Vertex::textured_colored(position + vector(0.0, fwidth), point(0.0, 1.0), color),
+      ];
+      let indices = [0, 1, 2, 2, 3, 0];
+      let texture = image.upload(&self.gl);
+      unsafe {
+         self.gl.active_texture(glow::TEXTURE0);
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         if image.color.is_some() {
+            let swizzle_mask = [
+               glow::ONE as i32,
+               glow::ONE as i32,
+               glow::ONE as i32,
+               glow::ALPHA as i32,
+            ];
+            self.gl.tex_parameter_i32_slice(
+               glow::TEXTURE_2D,
+               glow::TEXTURE_SWIZZLE_RGBA,
+               &swizzle_mask,
+            );
+         }
+         self.state.draw(&vertices, &indices);
+         self.state.bind_null_texture();
+      }
+   }
 
-   fn framebuffer(&mut self, position: Point, framebuffer: &Self::Framebuffer) {}
+   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {}
 
    fn scale(&mut self, scale: Vector) {}
 

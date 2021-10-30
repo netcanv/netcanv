@@ -95,7 +95,7 @@ impl Expand {
                colors.hover
             }
             .into();
-            let y = height * 1.1;
+            let y = (height * 1.1).round();
             ui.line(
                point(0.0, y),
                point(width, y),

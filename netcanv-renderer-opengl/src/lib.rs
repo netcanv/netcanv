@@ -63,14 +63,6 @@ impl UiRenderFrame for Ui<OpenGlBackend> {
       }
       self.state.viewport(window_size.width, window_size.height);
       callback(self);
-      self.state.draw(
-         &[
-            point(32.0, 32.0).into(),
-            point(64.0, 32.0).into(),
-            point(64.0, 64.0).into(),
-         ],
-         &[0, 1, 2],
-      );
       self.context.swap_buffers()?;
       Ok(())
    }
