@@ -12,7 +12,10 @@ use memoffset::offset_of;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, Font as FontTrait, Image as ImageTrait, RenderBackend};
+use netcanv_renderer::{
+   BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, Image as ImageTrait,
+   RenderBackend,
+};
 
 use crate::common::{normalized_color, to_vec2, GlUtilities, VectorMath};
 use crate::font::Font;
@@ -38,7 +41,15 @@ impl Vertex {
       }
    }
 
-   pub(crate) fn textured_colored(position: Point, uv: Point, color: Color) -> Self {
+   fn textured(position: Point, uv: Point) -> Self {
+      Self {
+         position,
+         uv,
+         color: (1.0, 1.0, 1.0, 1.0),
+      }
+   }
+
+   fn textured_colored(position: Point, uv: Point, color: Color) -> Self {
       Self {
          position,
          uv,
@@ -102,6 +113,7 @@ pub(crate) struct RenderState {
    uniforms: Uniforms,
    null_texture: glow::Texture,
    stack: Vec<Transform>,
+   framebuffer: Option<glow::Framebuffer>,
 }
 
 impl RenderState {
@@ -281,6 +293,7 @@ impl RenderState {
          uniforms,
          null_texture,
          stack: vec![transform],
+         framebuffer: None,
       }
    }
 
@@ -508,10 +521,19 @@ impl RenderBackend for OpenGlBackend {
    type Framebuffer = Framebuffer;
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
-      Framebuffer {}
+      Framebuffer::new(Rc::clone(&self.gl), width, height)
    }
 
-   fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {}
+   fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {
+      unsafe {
+         let previous_framebuffer = self.state.framebuffer;
+         self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer.framebuffer()));
+         self.state.framebuffer = Some(framebuffer.framebuffer());
+         f(self);
+         self.gl.bind_framebuffer(glow::FRAMEBUFFER, previous_framebuffer);
+         self.state.framebuffer = previous_framebuffer;
+      }
+   }
 
    fn clear(&mut self, color: Color) {
       let (r, g, b, a) = normalized_color(color);
@@ -540,11 +562,27 @@ impl RenderBackend for OpenGlBackend {
          };
          self.gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
          self.state.draw(&shape);
-         self.state.bind_null_texture();
       }
    }
 
-   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {}
+   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {
+      assert!(
+         self.state.framebuffer != Some(framebuffer.framebuffer()),
+         "cannot render a framebuffer to itself"
+      );
+      let (fwidth, fheight) = (framebuffer.width() as f32, framebuffer.height() as f32);
+      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
+      shape.rect(
+         Vertex::textured(position, point(0.0, 1.0)),
+         Vertex::textured(position + vector(fwidth, fheight), point(1.0, 0.0)),
+      );
+      let texture = framebuffer.texture();
+      unsafe {
+         self.gl.active_texture(glow::TEXTURE0);
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         self.state.draw(&shape);
+      }
+   }
 
    fn scale(&mut self, scale: Vector) {
       self.state.transform_mut().matrix *= Mat3A::from_scale(to_vec2(scale));

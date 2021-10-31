@@ -145,6 +145,18 @@ impl FontFace {
    }
 }
 
+impl Drop for FontFace {
+   fn drop(&mut self) {
+      if let FaceState::Loaded(loaded) = &self.face_state {
+         for (_, size) in &self.sizes {
+            unsafe {
+               loaded.gl.delete_texture(size.texture);
+            }
+         }
+      }
+   }
+}
+
 pub struct Font {
    store: Rc<RefCell<FontFace>>,
    size: u32,
