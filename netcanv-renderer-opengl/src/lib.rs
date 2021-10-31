@@ -9,8 +9,8 @@ mod shape_buffer;
 use std::rc::Rc;
 
 use glutin::dpi::PhysicalSize;
-use glutin::{Api, ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, WindowedContext};
-use netcanv_renderer::paws::{point, Ui};
+use glutin::{ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, WindowedContext};
+use netcanv_renderer::paws::Ui;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
@@ -29,7 +29,7 @@ impl OpenGlBackend {
    /// Creates a new OpenGL renderer.
    pub fn new(window_builder: WindowBuilder, event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
       let context = ContextBuilder::new()
-         .with_gl(GlRequest::Specific(Api::OpenGlEs, (3, 0)))
+         .with_gl(GlRequest::Latest)
          .with_gl_profile(GlProfile::Core)
          .with_vsync(true)
          .with_multisampling(8)

@@ -4,23 +4,24 @@
 
 // Not the cleanest piece of code again, but oh the things you do for a clean end user API.
 
-use std::cell::{Cell, RefCell, RefMut};
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::Chars;
 
 use freetype::face::LoadFlag;
 use freetype::Face;
-use glow::{HasContext, NativeTexture, PixelUnpackData};
+use glow::{HasContext, PixelUnpackData};
 use netcanv_renderer::paws::{vector, Rect, Vector};
 
+use crate::common::GlUtilities;
 use crate::{common::RectMath, rect_packer::RectPacker};
 
 const TEXTURE_ATLAS_SIZE: u32 = 1024;
 
 struct LoadedFaceState {
    gl: Rc<glow::Context>,
-   freetype: Rc<freetype::Library>,
+   _freetype: Rc<freetype::Library>,
    face: Face,
 }
 
@@ -117,13 +118,8 @@ impl FontFace {
             glow::TEXTURE_MAG_FILTER,
             glow::NEAREST as i32,
          );
-         let swizzle_mask = [
-            glow::ONE as i32,
-            glow::ONE as i32,
-            glow::ONE as i32,
-            glow::RED as i32,
-         ];
-         gl.tex_parameter_i32_slice(glow::TEXTURE_2D, glow::TEXTURE_SWIZZLE_RGBA, &swizzle_mask);
+         let swizzle_mask = [glow::ONE, glow::ONE, glow::ONE, glow::RED];
+         gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
          texture
       };
       self.sizes.insert(
@@ -159,7 +155,7 @@ impl Font {
       &self,
       freetype: &Rc<freetype::Library>,
       gl: &Rc<glow::Context>,
-   ) -> NativeTexture {
+   ) -> glow::Texture {
       let mut store = self.store.borrow_mut();
       if let FaceState::NotLoaded(_) = &store.face_state {
          if let FaceState::NotLoaded(data) =
@@ -168,7 +164,7 @@ impl Font {
             let face = freetype.new_memory_face(data, 0).unwrap();
             store.face_state = FaceState::Loaded(LoadedFaceState {
                face,
-               freetype: Rc::clone(freetype),
+               _freetype: Rc::clone(freetype),
                gl: Rc::clone(gl),
             })
          }

@@ -6,17 +6,14 @@
 use std::mem::size_of;
 use std::rc::Rc;
 
-use glow::{
-   HasContext, NativeBuffer, NativeProgram, NativeShader, NativeTexture, NativeUniformLocation,
-   NativeVertexArray,
-};
+use glow::HasContext;
 use memoffset::offset_of;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font as FontTrait, Image as ImageTrait, RenderBackend};
 
-use crate::common::{normalized_color, VectorMath};
+use crate::common::{normalized_color, GlUtilities, VectorMath};
 use crate::font::Font;
 use crate::framebuffer::Framebuffer;
 use crate::image::Image;
@@ -55,8 +52,8 @@ pub(crate) trait Mesh {
 }
 
 struct Uniforms {
-   projection: NativeUniformLocation,
-   the_texture: NativeUniformLocation,
+   projection: glow::UniformLocation,
+   the_texture: glow::UniformLocation,
 }
 
 #[derive(Clone, Copy)]
@@ -67,19 +64,19 @@ struct Transform {
 
 pub(crate) struct RenderState {
    gl: Rc<glow::Context>,
-   vao: NativeVertexArray,
-   vbo: NativeBuffer,
+   vao: glow::VertexArray,
+   vbo: glow::Buffer,
    vbo_size: usize,
-   ebo: NativeBuffer,
+   ebo: glow::Buffer,
    ebo_size: usize,
-   program: NativeProgram,
+   program: glow::Program,
    uniforms: Uniforms,
-   null_texture: NativeTexture,
+   null_texture: glow::Texture,
    stack: Vec<Transform>,
 }
 
 impl RenderState {
-   fn create_vao(gl: &glow::Context, vbo: NativeBuffer, ebo: NativeBuffer) -> NativeVertexArray {
+   fn create_vao(gl: &glow::Context, vbo: glow::Buffer, ebo: glow::Buffer) -> glow::VertexArray {
       unsafe {
          let vao = gl.create_vertex_array().unwrap();
          gl.bind_vertex_array(Some(vao));
@@ -117,7 +114,7 @@ impl RenderState {
       }
    }
 
-   fn create_vbo_and_ebo(gl: &glow::Context) -> (NativeBuffer, NativeBuffer) {
+   fn create_vbo_and_ebo(gl: &glow::Context) -> (glow::Buffer, glow::Buffer) {
       unsafe {
          let vbo = gl.create_buffer().unwrap();
          let ebo = gl.create_buffer().unwrap();
@@ -127,7 +124,7 @@ impl RenderState {
       }
    }
 
-   fn compile_shader(gl: &glow::Context, kind: u32, source: &str) -> Result<NativeShader, String> {
+   fn compile_shader(gl: &glow::Context, kind: u32, source: &str) -> Result<glow::Shader, String> {
       unsafe {
          let shader = gl.create_shader(kind)?;
          gl.shader_source(shader, source);
@@ -140,9 +137,8 @@ impl RenderState {
       }
    }
 
-   fn create_program(gl: &glow::Context) -> (NativeProgram, Uniforms) {
-      const VERTEX_SHADER: &str = r#"
-         #version 300 es
+   fn create_program(gl: &glow::Context) -> (glow::Program, Uniforms) {
+      const VERTEX_SHADER: &str = r#"#version 300 es
 
          precision mediump float;
 
@@ -163,8 +159,7 @@ impl RenderState {
             vertex_color = color;
          }
       "#;
-      const FRAGMENT_SHADER: &str = r#"
-         #version 300 es
+      const FRAGMENT_SHADER: &str = r#"#version 300 es
 
          precision mediump float;
 
@@ -210,7 +205,7 @@ impl RenderState {
       }
    }
 
-   fn create_null_texture(gl: &glow::Context) -> NativeTexture {
+   fn create_null_texture(gl: &glow::Context) -> glow::Texture {
       unsafe {
          let texture = gl.create_texture().unwrap();
          gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -520,25 +515,11 @@ impl RenderBackend for OpenGlBackend {
          self.gl.active_texture(glow::TEXTURE0);
          self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
          let swizzle_mask = if image.color.is_some() {
-            [
-               glow::ONE as i32,
-               glow::ONE as i32,
-               glow::ONE as i32,
-               glow::ALPHA as i32,
-            ]
+            [glow::ONE, glow::ONE, glow::ONE, glow::ALPHA]
          } else {
-            [
-               glow::RED as i32,
-               glow::GREEN as i32,
-               glow::BLUE as i32,
-               glow::ALPHA as i32,
-            ]
+            [glow::RED, glow::GREEN, glow::BLUE, glow::ALPHA]
          };
-         self.gl.tex_parameter_i32_slice(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_SWIZZLE_RGBA,
-            &swizzle_mask,
-         );
+         self.gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
          self.state.draw(&shape);
          self.state.bind_null_texture();
       }
