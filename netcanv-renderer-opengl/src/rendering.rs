@@ -12,9 +12,9 @@ use glow::{
 };
 use memoffset::offset_of;
 use netcanv_renderer::paws::{
-   point, vector, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+   point, vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, Image as ImageTrait, RenderBackend};
+use netcanv_renderer::{BlendMode, Font as FontTrait, Image as ImageTrait, RenderBackend};
 
 use crate::common::{normalized_color, VectorMath};
 use crate::font::Font;
@@ -333,6 +333,20 @@ impl RenderState {
    }
 }
 
+fn text_origin(rect: &Rect, font: &Font, text: &str, alignment: Alignment) -> Point {
+   let x = match alignment.0 {
+      AlignH::Left => rect.left(),
+      AlignH::Center => rect.center_x() - font.text_width(text) / 2.0,
+      AlignH::Right => rect.right() - font.text_width(text),
+   };
+   let y = match alignment.1 {
+      AlignV::Top => rect.top() + font.height(),
+      AlignV::Middle => rect.center_y() + font.height() / 2.0,
+      AlignV::Bottom => rect.bottom(),
+   };
+   point(x.floor(), y.floor())
+}
+
 impl Drop for RenderState {
    fn drop(&mut self) {
       unsafe {
@@ -458,8 +472,9 @@ impl Renderer for OpenGlBackend {
       const VERTEX_COUNT: usize = STACK_GLYPHS * 4;
       const INDEX_COUNT: usize = STACK_GLYPHS * 6;
       let mut shape = ShapeBuffer::<VERTEX_COUNT, INDEX_COUNT>::new();
+      let origin = text_origin(&rect, font, text, alignment);
       for (mut position, uv) in font.typeset(text) {
-         position.position += rect.position;
+         position.position += origin;
          shape.rect(
             Vertex::textured_colored(position.top_left(), uv.top_left(), color),
             Vertex::textured_colored(position.bottom_right(), uv.bottom_right(), color),

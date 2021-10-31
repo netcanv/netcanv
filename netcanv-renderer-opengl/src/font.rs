@@ -91,7 +91,8 @@ impl FontFace {
       }
       let LoadedFaceState { gl, face, .. } = self.face_state.assume_loaded();
       face.set_pixel_sizes(0, size).unwrap();
-      let height = (face.ascender() - face.descender().abs()) as f32;
+      let size_metrics = face.size_metrics().unwrap();
+      let height = (size_metrics.ascender - size_metrics.descender.abs()) as f32 / 64.0;
       let texture = unsafe {
          let texture = gl.create_texture().unwrap();
          gl.bind_texture(glow::TEXTURE_2D, Some(texture));
