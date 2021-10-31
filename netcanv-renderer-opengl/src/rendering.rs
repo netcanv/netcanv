@@ -20,14 +20,15 @@ use crate::common::{normalized_color, VectorMath};
 use crate::font::Font;
 use crate::framebuffer::Framebuffer;
 use crate::image::Image;
+use crate::shape_buffer::ShapeBuffer;
 use crate::OpenGlBackend;
 
 #[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Vertex {
-   position: Point,
-   uv: Point,
-   color: (f32, f32, f32, f32),
+   pub(crate) position: Point,
+   pub(crate) uv: Point,
+   pub(crate) color: (f32, f32, f32, f32),
 }
 
 impl Vertex {
@@ -39,13 +40,18 @@ impl Vertex {
       }
    }
 
-   fn textured_colored(position: Point, uv: Point, color: Color) -> Self {
+   pub(crate) fn textured_colored(position: Point, uv: Point, color: Color) -> Self {
       Self {
          position,
          uv,
          color: normalized_color(color),
       }
    }
+}
+
+pub(crate) trait Mesh {
+   fn vertices(&self) -> &[Vertex];
+   fn indices(&self) -> &[u32];
 }
 
 struct Uniforms {
@@ -238,6 +244,7 @@ impl RenderState {
             glow::ONE,
             glow::ONE_MINUS_SRC_ALPHA,
          );
+         gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
       }
 
       Self {
@@ -269,11 +276,11 @@ impl RenderState {
       }
    }
 
-   fn draw(&mut self, vertices: &[Vertex], indices: &[u32]) {
+   fn draw(&mut self, mesh: &impl Mesh) {
       unsafe {
          // Update buffers
-         let vertex_data = Self::to_u8_slice(vertices);
-         let index_data = Self::to_u8_slice(indices);
+         let vertex_data = Self::to_u8_slice(mesh.vertices());
+         let index_data = Self::to_u8_slice(mesh.indices());
          if vertex_data.len() > self.vbo_size {
             self.gl.buffer_data_size(
                glow::ARRAY_BUFFER,
@@ -293,7 +300,12 @@ impl RenderState {
          self.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, vertex_data);
          self.gl.buffer_sub_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, 0, index_data);
          // Draw triangles
-         self.gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
+         self.gl.draw_elements(
+            glow::TRIANGLES,
+            mesh.indices().len() as i32,
+            glow::UNSIGNED_INT,
+            0,
+         );
       }
    }
 
@@ -355,15 +367,13 @@ impl Renderer for OpenGlBackend {
 
    fn fill(&mut self, mut rect: Rect, color: Color, radius: f32) {
       rect.position += self.state.transform().translation;
-      let vertices = [
-         Vertex::colored(rect.top_left(), color),     // 0
-         Vertex::colored(rect.top_right(), color),    // 1
-         Vertex::colored(rect.bottom_right(), color), // 2
-         Vertex::colored(rect.bottom_left(), color),  // 3
-      ];
-      let indices = [0, 1, 2, 2, 3, 0];
+      let mut shape = ShapeBuffer::<4, 6>::new();
+      shape.rect(
+         Vertex::colored(rect.top_left(), color),
+         Vertex::colored(rect.bottom_right(), color),
+      );
       self.state.bind_null_texture();
-      self.state.draw(&vertices, &indices);
+      self.state.draw(&shape);
    }
 
    fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
@@ -372,29 +382,37 @@ impl Renderer for OpenGlBackend {
          rect.position += vector(0.5, 0.5);
       }
       let d = thickness / 2.0;
-      let vertices = [
-         Vertex::colored(rect.top_left() - vector(d, d), color), // 0
-         Vertex::colored(rect.top_left() + vector(d, d), color), // 1
-         Vertex::colored(rect.top_right() - vector(-d, d), color), // 2
-         Vertex::colored(rect.top_right() + vector(-d, d), color), // 3
-         Vertex::colored(rect.bottom_right() - vector(-d, -d), color), // 4
-         Vertex::colored(rect.bottom_right() + vector(-d, -d), color), // 5
-         Vertex::colored(rect.bottom_left() - vector(d, -d), color), // 6
-         Vertex::colored(rect.bottom_left() + vector(d, -d), color), // 7
-      ];
-      #[rustfmt::skip]
-      let indices = [
-         // top edge
-         0, 1, 2, 2, 3, 1,
-         // right edge
-         2, 3, 4, 4, 5, 3,
-         // bottom edge
-         4, 5, 6, 6, 7, 5,
-         // left edge
-         6, 7, 0, 0, 1, 7,
-      ];
+      let mut shape = ShapeBuffer::<8, 24>::new();
+      let outer_top_left =
+         shape.push_vertex(Vertex::colored(rect.top_left() - vector(d, d), color));
+      let inner_top_left =
+         shape.push_vertex(Vertex::colored(rect.top_left() + vector(d, d), color));
+      let outer_top_right =
+         shape.push_vertex(Vertex::colored(rect.top_right() - vector(-d, d), color));
+      let inner_top_right =
+         shape.push_vertex(Vertex::colored(rect.top_right() + vector(-d, d), color));
+      let outer_bottom_right =
+         shape.push_vertex(Vertex::colored(rect.bottom_right() - vector(-d, -d), color));
+      let inner_bottom_right =
+         shape.push_vertex(Vertex::colored(rect.bottom_right() + vector(-d, -d), color));
+      let outer_bottom_left =
+         shape.push_vertex(Vertex::colored(rect.bottom_left() - vector(d, -d), color));
+      let inner_bottom_left =
+         shape.push_vertex(Vertex::colored(rect.bottom_left() + vector(d, -d), color));
+      // Top edge
+      shape.push_indices(&[outer_top_left, inner_top_left, outer_top_right]);
+      shape.push_indices(&[outer_top_right, inner_top_left, inner_top_right]);
+      // Right edge
+      shape.push_indices(&[outer_top_right, inner_top_right, outer_bottom_right]);
+      shape.push_indices(&[outer_bottom_right, inner_bottom_right, inner_top_right]);
+      // Bottom edge
+      shape.push_indices(&[outer_bottom_left, inner_bottom_left, outer_bottom_right]);
+      shape.push_indices(&[outer_bottom_right, inner_bottom_left, inner_bottom_right]);
+      // Left edge
+      shape.push_indices(&[outer_top_left, inner_top_left, outer_bottom_left]);
+      shape.push_indices(&[outer_bottom_left, inner_bottom_left, inner_top_left]);
       self.state.bind_null_texture();
-      self.state.draw(&vertices, &indices);
+      self.state.draw(&shape);
    }
 
    fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
@@ -407,25 +425,49 @@ impl Renderer for OpenGlBackend {
       let direction = (b - a).normalize();
       let cw = direction.perpendicular_cw() * thickness / 2.0;
       let ccw = direction.perpendicular_ccw() * thickness / 2.0;
-      let vertices = [
+      let mut shape = ShapeBuffer::<4, 6>::new();
+      shape.quad(
          Vertex::colored(a + cw, color),
          Vertex::colored(a + ccw, color),
          Vertex::colored(b + ccw, color),
          Vertex::colored(b + cw, color),
-      ];
-      let indices = [0, 1, 2, 2, 3, 0];
+      );
       self.state.bind_null_texture();
-      self.state.draw(&vertices, &indices);
+      self.state.draw(&shape);
    }
 
    fn text(
       &mut self,
-      rect: Rect,
-      font: &Self::Font,
+      mut rect: Rect,
+      font: &Font,
       text: &str,
       color: Color,
       alignment: Alignment,
    ) -> f32 {
+      rect.position += self.state.transform().translation;
+
+      // Set up textures.
+      unsafe {
+         let atlas = font.atlas(&self.freetype, &self.gl);
+         self.gl.active_texture(glow::TEXTURE0);
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(atlas));
+      }
+
+      // Buffer up the glyphs.
+      const STACK_GLYPHS: usize = 32;
+      const VERTEX_COUNT: usize = STACK_GLYPHS * 4;
+      const INDEX_COUNT: usize = STACK_GLYPHS * 6;
+      let mut shape = ShapeBuffer::<VERTEX_COUNT, INDEX_COUNT>::new();
+      for (mut position, uv) in font.typeset(text) {
+         position.position += rect.position;
+         shape.rect(
+            Vertex::textured_colored(position.top_left(), uv.top_left(), color),
+            Vertex::textured_colored(position.bottom_right(), uv.bottom_right(), color),
+         );
+      }
+
+      // Draw 'em.
+      self.state.draw(&shape);
       0.0
    }
 }
@@ -453,31 +495,36 @@ impl RenderBackend for OpenGlBackend {
       position += self.state.transform().translation;
       let (fwidth, fheight) = (image.width() as f32, image.height() as f32);
       let color = image.color.unwrap_or(Color::WHITE);
-      let vertices = [
+      let mut shape = ShapeBuffer::<4, 6>::new();
+      shape.rect(
          Vertex::textured_colored(position, point(0.0, 0.0), color),
-         Vertex::textured_colored(position + vector(fwidth, 0.0), point(1.0, 0.0), color),
          Vertex::textured_colored(position + vector(fwidth, fheight), point(1.0, 1.0), color),
-         Vertex::textured_colored(position + vector(0.0, fwidth), point(0.0, 1.0), color),
-      ];
-      let indices = [0, 1, 2, 2, 3, 0];
+      );
       let texture = image.upload(&self.gl);
       unsafe {
          self.gl.active_texture(glow::TEXTURE0);
          self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-         if image.color.is_some() {
-            let swizzle_mask = [
+         let swizzle_mask = if image.color.is_some() {
+            [
                glow::ONE as i32,
                glow::ONE as i32,
                glow::ONE as i32,
                glow::ALPHA as i32,
-            ];
-            self.gl.tex_parameter_i32_slice(
-               glow::TEXTURE_2D,
-               glow::TEXTURE_SWIZZLE_RGBA,
-               &swizzle_mask,
-            );
-         }
-         self.state.draw(&vertices, &indices);
+            ]
+         } else {
+            [
+               glow::RED as i32,
+               glow::GREEN as i32,
+               glow::BLUE as i32,
+               glow::ALPHA as i32,
+            ]
+         };
+         self.gl.tex_parameter_i32_slice(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_SWIZZLE_RGBA,
+            &swizzle_mask,
+         );
+         self.state.draw(&shape);
          self.state.bind_null_texture();
       }
    }

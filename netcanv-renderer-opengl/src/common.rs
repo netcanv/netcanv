@@ -1,4 +1,4 @@
-use netcanv_renderer::paws::{vector, Color, Vector};
+use netcanv_renderer::paws::{vector, Color, Rect, Vector};
 
 pub fn normalized_color(color: Color) -> (f32, f32, f32, f32) {
    (
@@ -36,5 +36,15 @@ impl VectorMath for Vector {
 
    fn perpendicular_ccw(self) -> Self {
       vector(self.y, -self.x)
+   }
+}
+
+pub trait RectMath {
+   fn uv(self, texture_size: Vector) -> Self;
+}
+
+impl RectMath for Rect {
+   fn uv(self, texture_size: Vector) -> Self {
+      Rect::new(self.position / texture_size, self.size / texture_size)
    }
 }

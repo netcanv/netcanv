@@ -9,5 +9,8 @@ winit = "0.24.0"
 glutin = "0.26.0"
 glow = "0.11.0"
 memoffset = "0.6.4"
+lazy_static = "1.4.0"
+freetype-rs = "0.28.0"
+smallvec = { version = "1.7.0", features = ["const_generics"] }
 
 netcanv-renderer = { path = "../netcanv-renderer" }

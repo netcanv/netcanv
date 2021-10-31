@@ -2,7 +2,9 @@ mod common;
 mod font;
 mod framebuffer;
 mod image;
+mod rect_packer;
 mod rendering;
+mod shape_buffer;
 
 use std::rc::Rc;
 
@@ -19,6 +21,7 @@ pub struct OpenGlBackend {
    context: WindowedContext<PossiblyCurrent>,
    context_size: PhysicalSize<u32>,
    pub(crate) gl: Rc<glow::Context>,
+   pub(crate) freetype: Rc<freetype::Library>,
    state: RenderState,
 }
 
@@ -40,6 +43,7 @@ impl OpenGlBackend {
          context_size: context.window().inner_size(),
          context,
          state: RenderState::new(Rc::clone(&gl)),
+         freetype: Rc::new(freetype::Library::init()?),
          gl,
       })
    }
