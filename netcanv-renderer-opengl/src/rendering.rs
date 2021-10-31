@@ -114,6 +114,7 @@ pub(crate) struct RenderState {
    null_texture: glow::Texture,
    stack: Vec<Transform>,
    framebuffer: Option<glow::Framebuffer>,
+   viewport: (u32, u32),
 }
 
 impl RenderState {
@@ -294,6 +295,7 @@ impl RenderState {
          null_texture,
          stack: vec![transform],
          framebuffer: None,
+         viewport: (0, 0),
       }
    }
 
@@ -355,6 +357,7 @@ impl RenderState {
          self.gl.scissor(0, 0, width as i32, height as i32);
          self.gl.uniform_matrix_3_f32_slice(Some(&self.uniforms.projection), false, &matrix);
       }
+      self.viewport = (width, height);
    }
 
    fn transform(&self) -> &Transform {
@@ -527,11 +530,15 @@ impl RenderBackend for OpenGlBackend {
    fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {
       unsafe {
          let previous_framebuffer = self.state.framebuffer;
+         let previous_viewport = self.state.viewport;
          self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer.framebuffer()));
          self.state.framebuffer = Some(framebuffer.framebuffer());
+         self.state.viewport(framebuffer.width(), framebuffer.height());
          f(self);
          self.gl.bind_framebuffer(glow::FRAMEBUFFER, previous_framebuffer);
          self.state.framebuffer = previous_framebuffer;
+         let (width, height) = previous_viewport;
+         self.state.viewport(width, height);
       }
    }
 

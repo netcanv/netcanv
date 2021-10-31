@@ -38,6 +38,16 @@ impl Framebuffer {
             glow::TEXTURE_MAG_FILTER,
             glow::NEAREST as i32,
          );
+         gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_S,
+            glow::CLAMP_TO_EDGE as i32,
+         );
+         gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_T,
+            glow::CLAMP_TO_EDGE as i32,
+         );
          framebuffer = gl.create_framebuffer().unwrap();
          gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
          gl.framebuffer_texture(glow::FRAMEBUFFER, glow::COLOR_ATTACHMENT0, Some(texture), 0);
@@ -45,7 +55,7 @@ impl Framebuffer {
             gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE,
             "could not create framebuffer (framebuffer was incomplete)"
          );
-         gl.clear_color(0.0, 0.0, 1.0, 1.0);
+         gl.clear_color(0.0, 0.0, 0.0, 0.0);
          gl.clear(glow::COLOR_BUFFER_BIT);
          gl.bind_framebuffer(glow::FRAMEBUFFER, None);
       }
