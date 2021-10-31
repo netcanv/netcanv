@@ -6,6 +6,7 @@
 use std::mem::size_of;
 use std::rc::Rc;
 
+use glam::{Affine2, Mat3, Mat3A, Vec2};
 use glow::HasContext;
 use memoffset::offset_of;
 use netcanv_renderer::paws::{
@@ -13,7 +14,7 @@ use netcanv_renderer::paws::{
 };
 use netcanv_renderer::{BlendMode, Font as FontTrait, Image as ImageTrait, RenderBackend};
 
-use crate::common::{normalized_color, GlUtilities, VectorMath};
+use crate::common::{normalized_color, to_vec2, GlUtilities, VectorMath};
 use crate::font::Font;
 use crate::framebuffer::Framebuffer;
 use crate::image::Image;
@@ -58,8 +59,36 @@ struct Uniforms {
 
 #[derive(Clone, Copy)]
 struct Transform {
-   translation: Vector,
+   matrix: Mat3A,
    blend_mode: BlendMode,
+}
+
+impl Transform {
+   fn apply(&self, gl: &glow::Context) {
+      match self.blend_mode {
+         BlendMode::Clear => unsafe {
+            gl.blend_equation(glow::FUNC_ADD);
+            gl.blend_func(glow::ZERO, glow::ZERO);
+         },
+         BlendMode::Alpha => unsafe {
+            gl.blend_equation(glow::FUNC_ADD);
+            gl.blend_func_separate(
+               glow::SRC_ALPHA,
+               glow::ONE_MINUS_SRC_ALPHA,
+               glow::ONE,
+               glow::ONE_MINUS_SRC_ALPHA,
+            );
+         },
+         BlendMode::Add => unsafe {
+            gl.blend_equation(glow::FUNC_ADD);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+         },
+         BlendMode::Subtract => unsafe {
+            gl.blend_equation_separate(glow::FUNC_REVERSE_SUBTRACT, glow::FUNC_ADD);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+         },
+      }
+   }
 }
 
 pub(crate) struct RenderState {
@@ -232,15 +261,14 @@ impl RenderState {
 
       unsafe {
          gl.enable(glow::BLEND);
-         gl.blend_equation_separate(glow::FUNC_ADD, glow::FUNC_ADD);
-         gl.blend_func_separate(
-            glow::SRC_ALPHA,
-            glow::ONE_MINUS_SRC_ALPHA,
-            glow::ONE,
-            glow::ONE_MINUS_SRC_ALPHA,
-         );
          gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
       }
+
+      let transform = Transform {
+         matrix: Mat3A::IDENTITY,
+         blend_mode: BlendMode::Alpha,
+      };
+      transform.apply(&gl);
 
       Self {
          gl,
@@ -252,10 +280,7 @@ impl RenderState {
          program,
          uniforms,
          null_texture,
-         stack: vec![Transform {
-            translation: vector(0.0, 0.0),
-            blend_mode: BlendMode::Alpha,
-         }],
+         stack: vec![transform],
       }
    }
 
@@ -366,17 +391,17 @@ impl Renderer for OpenGlBackend {
          self.state.stack.len() > 0,
          "pop() called at the bottom of the stack"
       );
+      self.state.transform().apply(&self.gl);
    }
 
    fn translate(&mut self, vec: Vector) {
-      self.state.transform_mut().translation += vec;
+      self.state.transform_mut().matrix *= Mat3A::from_translation(to_vec2(vec));
    }
 
    fn clip(&mut self, rect: Rect) {}
 
-   fn fill(&mut self, mut rect: Rect, color: Color, radius: f32) {
-      rect.position += self.state.transform().translation;
-      let mut shape = ShapeBuffer::<4, 6>::new();
+   fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
+      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
       shape.rect(
          Vertex::colored(rect.top_left(), color),
          Vertex::colored(rect.bottom_right(), color),
@@ -386,12 +411,11 @@ impl Renderer for OpenGlBackend {
    }
 
    fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
-      rect.position += self.state.transform().translation;
       if thickness % 2.0 > 0.95 {
          rect.position += vector(0.5, 0.5);
       }
       let d = thickness / 2.0;
-      let mut shape = ShapeBuffer::<8, 24>::new();
+      let mut shape = ShapeBuffer::<8, 24>::new(self.state.transform().matrix);
       let outer_top_left =
          shape.push_vertex(Vertex::colored(rect.top_left() - vector(d, d), color));
       let inner_top_left =
@@ -425,8 +449,6 @@ impl Renderer for OpenGlBackend {
    }
 
    fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
-      a += self.state.transform().translation;
-      b += self.state.transform().translation;
       if thickness % 2.0 > 0.95 {
          a += vector(0.5, 0.5);
          b += vector(0.5, 0.5);
@@ -434,7 +456,7 @@ impl Renderer for OpenGlBackend {
       let direction = (b - a).normalize();
       let cw = direction.perpendicular_cw() * thickness / 2.0;
       let ccw = direction.perpendicular_ccw() * thickness / 2.0;
-      let mut shape = ShapeBuffer::<4, 6>::new();
+      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
       shape.quad(
          Vertex::colored(a + cw, color),
          Vertex::colored(a + ccw, color),
@@ -447,14 +469,12 @@ impl Renderer for OpenGlBackend {
 
    fn text(
       &mut self,
-      mut rect: Rect,
+      rect: Rect,
       font: &Font,
       text: &str,
       color: Color,
       alignment: Alignment,
    ) -> f32 {
-      rect.position += self.state.transform().translation;
-
       // Set up textures.
       unsafe {
          let atlas = font.atlas(&self.freetype, &self.gl);
@@ -466,7 +486,7 @@ impl Renderer for OpenGlBackend {
       const STACK_GLYPHS: usize = 32;
       const VERTEX_COUNT: usize = STACK_GLYPHS * 4;
       const INDEX_COUNT: usize = STACK_GLYPHS * 6;
-      let mut shape = ShapeBuffer::<VERTEX_COUNT, INDEX_COUNT>::new();
+      let mut shape = ShapeBuffer::<VERTEX_COUNT, INDEX_COUNT>::new(self.state.transform().matrix);
       let origin = text_origin(&rect, font, text, alignment);
       for (mut position, uv) in font.typeset(text) {
          position.position += origin;
@@ -501,11 +521,10 @@ impl RenderBackend for OpenGlBackend {
       }
    }
 
-   fn image(&mut self, mut position: Point, image: &Image) {
-      position += self.state.transform().translation;
+   fn image(&mut self, position: Point, image: &Image) {
       let (fwidth, fheight) = (image.width() as f32, image.height() as f32);
       let color = image.color.unwrap_or(Color::WHITE);
-      let mut shape = ShapeBuffer::<4, 6>::new();
+      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
       shape.rect(
          Vertex::textured_colored(position, point(0.0, 0.0), color),
          Vertex::textured_colored(position + vector(fwidth, fheight), point(1.0, 1.0), color),
@@ -527,7 +546,12 @@ impl RenderBackend for OpenGlBackend {
 
    fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {}
 
-   fn scale(&mut self, scale: Vector) {}
+   fn scale(&mut self, scale: Vector) {
+      self.state.transform_mut().matrix *= Mat3A::from_scale(to_vec2(scale));
+   }
 
-   fn set_blend_mode(&mut self, new_blend_mode: netcanv_renderer::BlendMode) {}
+   fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
+      self.state.transform_mut().blend_mode = new_blend_mode;
+      self.state.transform().apply(&self.gl);
+   }
 }

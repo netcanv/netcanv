@@ -1,26 +1,32 @@
 //! A helper for constructing vertex and index arrays for shapes.
 
-use netcanv_renderer::paws::point;
+use glam::{Mat3A, Vec3};
+use netcanv_renderer::paws::{point, vector};
 use smallvec::SmallVec;
 
 use crate::rendering::{Mesh, Vertex};
 
 pub(crate) struct ShapeBuffer<const NV: usize, const NI: usize> {
+   transform: Mat3A,
    pub vertices: SmallVec<[Vertex; NV]>,
    pub indices: SmallVec<[u32; NI]>,
 }
 
 impl<const NV: usize, const NI: usize> ShapeBuffer<NV, NI> {
-   pub fn new() -> Self {
+   pub fn new(transform: Mat3A) -> Self {
       Self {
+         transform,
          vertices: SmallVec::new(),
          indices: SmallVec::new(),
       }
    }
 
    /// Pushes a vertex into the shape buffer and returns its index.
-   pub fn push_vertex(&mut self, vertex: Vertex) -> u32 {
+   pub fn push_vertex(&mut self, mut vertex: Vertex) -> u32 {
       let index = self.vertices.len() as u32;
+      let position = vertex.position;
+      let position = self.transform.mul_vec3(Vec3::new(position.x, position.y, 1.0));
+      vertex.position = vector(position.x, position.y);
       self.vertices.push(vertex);
       index
    }

@@ -1,3 +1,6 @@
+use std::ops::{Deref, DerefMut, Index, IndexMut, Mul};
+
+use glam::Vec2;
 use glow::HasContext;
 use netcanv_renderer::paws::{vector, Color, Rect, Vector};
 
@@ -61,4 +64,8 @@ impl GlUtilities for glow::Context {
       self.tex_parameter_i32(target, glow::TEXTURE_SWIZZLE_B, mask[2] as i32);
       self.tex_parameter_i32(target, glow::TEXTURE_SWIZZLE_A, mask[3] as i32);
    }
+}
+
+pub fn to_vec2(vec: Vector) -> Vec2 {
+   Vec2::new(vec.x, vec.y)
 }
