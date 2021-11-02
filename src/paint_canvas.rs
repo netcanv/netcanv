@@ -93,7 +93,7 @@ impl Chunk {
       let mut image_buffer = ImageBuffer::from_pixel(
          Self::SURFACE_SIZE.0,
          Self::SURFACE_SIZE.1,
-         Rgba([0, 0, 0, 0]),
+         Rgba([0, 0, 255, 255]),
       );
       self.framebuffer.download_rgba(&mut image_buffer);
       image_buffer

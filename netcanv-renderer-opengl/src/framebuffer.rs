@@ -1,6 +1,11 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
-use glow::HasContext;
+use glow::{HasContext, PixelPackData, PixelUnpackData};
+
+use crate::{
+   common::flip_vertically,
+   rendering::{GlState, RenderState},
+};
 
 pub struct Framebuffer {
    gl: Rc<glow::Context>,
@@ -8,10 +13,16 @@ pub struct Framebuffer {
    texture: glow::Texture,
    width: u32,
    height: u32,
+   gl_state: Rc<RefCell<GlState>>,
 }
 
 impl Framebuffer {
-   pub(crate) fn new(gl: Rc<glow::Context>, width: u32, height: u32) -> Self {
+   pub(crate) fn new(
+      gl: Rc<glow::Context>,
+      gl_state: Rc<RefCell<GlState>>,
+      width: u32,
+      height: u32,
+   ) -> Self {
       let texture;
       let framebuffer;
       unsafe {
@@ -61,6 +72,7 @@ impl Framebuffer {
       }
       Framebuffer {
          gl,
+         gl_state,
          texture,
          framebuffer,
          width,
@@ -82,9 +94,49 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       (self.width, self.height)
    }
 
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {}
+   fn upload_rgba(&mut self, mut position: (u32, u32), size: (u32, u32), pixels: &[u8]) {
+      let mut flipped = pixels.to_owned();
+      flip_vertically(size.0 as usize, size.1 as usize, 4, &mut flipped);
+      position.1 = self.height - position.1 - size.1;
+      unsafe {
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
+         self.gl.tex_sub_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            position.0 as i32,
+            position.1 as i32,
+            size.0 as i32,
+            size.1 as i32,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            PixelUnpackData::Slice(&flipped),
+         );
+      }
+   }
 
-   fn download_rgba(&self, dest: &mut [u8]) {}
+   fn download_rgba(&self, dest: &mut [u8]) {
+      assert!(
+         dest.len() == self.width as usize * self.height as usize * 4,
+         "destination buffer's size must match the framebuffer texture's size"
+      );
+      // Read the pixels.
+      unsafe {
+         let mut gl_state = self.gl_state.borrow_mut();
+         let previous_framebuffer = gl_state.framebuffer(&self.gl, Some(self.framebuffer));
+         self.gl.read_pixels(
+            0,
+            0,
+            self.width as i32,
+            self.height as i32,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            PixelPackData::Slice(dest),
+         );
+         gl_state.framebuffer(&self.gl, previous_framebuffer);
+      }
+      // Fleeeeeeeeeeep them 'round.
+      flip_vertically(self.width as usize, self.height as usize, 4, dest);
+   }
 }
 
 impl Drop for Framebuffer {

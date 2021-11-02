@@ -531,6 +531,7 @@ impl State {
             }
          }
          MessageKind::Chunks(chunks) => {
+            eprintln!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
                self.canvas_data(ui, chunk_position, &image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);

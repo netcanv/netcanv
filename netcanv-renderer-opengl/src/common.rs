@@ -69,3 +69,16 @@ impl GlUtilities for glow::Context {
 pub fn to_vec2(vec: Vector) -> Vec2 {
    Vec2::new(vec.x, vec.y)
 }
+
+pub fn flip_vertically(width: usize, height: usize, channels: usize, data: &mut [u8]) {
+   for y in 0..height / 2 {
+      let inv_y = height - y - 1;
+      for x in 0..width {
+         for channel in 0..channels {
+            let index_upper = (x + y * width) * 4 + channel;
+            let index_lower = (x + inv_y * width) * 4 + channel;
+            data.swap(index_upper, index_lower);
+         }
+      }
+   }
+}

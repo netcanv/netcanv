@@ -3,6 +3,7 @@
 // Most things are abstracted away such that only a few specific functions need to be called to
 // draw things, so it shouldn't be _that_ horrible.
 
+use std::cell::RefCell;
 use std::mem::size_of;
 use std::rc::Rc;
 
@@ -102,6 +103,43 @@ impl Transform {
    }
 }
 
+pub(crate) struct GlState {
+   framebuffer: Option<glow::Framebuffer>,
+   viewport: (u32, u32),
+}
+
+impl GlState {
+   // Binds a new framebuffer, and returns the old framebuffer.
+   pub(crate) fn framebuffer(
+      &mut self,
+      gl: &glow::Context,
+      new_framebuffer: Option<glow::Framebuffer>,
+   ) -> Option<glow::Framebuffer> {
+      let previous_framebuffer = self.framebuffer;
+      self.framebuffer = new_framebuffer;
+      unsafe {
+         gl.bind_framebuffer(glow::FRAMEBUFFER, self.framebuffer);
+      }
+      previous_framebuffer
+   }
+
+   fn viewport(&mut self, gl: &glow::Context, uniforms: &Uniforms, width: u32, height: u32) {
+      let (fwidth, fheight) = (width as f32, height as f32);
+      #[rustfmt::skip]
+      let matrix: [f32; 3 * 3] = [
+         2.0 / fwidth, 0.0,            -1.0,
+         0.0,          2.0 / -fheight,  1.0,
+         0.0,          0.0,             1.0,
+      ];
+      unsafe {
+         gl.viewport(0, 0, width as i32, height as i32);
+         gl.scissor(0, 0, width as i32, height as i32);
+         gl.uniform_matrix_3_f32_slice(Some(&uniforms.projection), false, &matrix);
+      }
+      self.viewport = (width, height);
+   }
+}
+
 pub(crate) struct RenderState {
    gl: Rc<glow::Context>,
    vao: glow::VertexArray,
@@ -113,8 +151,7 @@ pub(crate) struct RenderState {
    uniforms: Uniforms,
    null_texture: glow::Texture,
    stack: Vec<Transform>,
-   framebuffer: Option<glow::Framebuffer>,
-   viewport: (u32, u32),
+   gl_state: Rc<RefCell<GlState>>,
 }
 
 impl RenderState {
@@ -274,6 +311,7 @@ impl RenderState {
 
       unsafe {
          gl.enable(glow::BLEND);
+         gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
          gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
       }
 
@@ -294,8 +332,10 @@ impl RenderState {
          uniforms,
          null_texture,
          stack: vec![transform],
-         framebuffer: None,
-         viewport: (0, 0),
+         gl_state: Rc::new(RefCell::new(GlState {
+            framebuffer: None,
+            viewport: (0, 0),
+         })),
       }
    }
 
@@ -345,19 +385,7 @@ impl RenderState {
    }
 
    pub(crate) fn viewport(&mut self, width: u32, height: u32) {
-      let (fwidth, fheight) = (width as f32, height as f32);
-      #[rustfmt::skip]
-      let matrix: [f32; 3 * 3] = [
-         2.0 / fwidth, 0.0,            -1.0,
-         0.0,          2.0 / -fheight,  1.0,
-         0.0,          0.0,             1.0,
-      ];
-      unsafe {
-         self.gl.viewport(0, 0, width as i32, height as i32);
-         self.gl.scissor(0, 0, width as i32, height as i32);
-         self.gl.uniform_matrix_3_f32_slice(Some(&self.uniforms.projection), false, &matrix);
-      }
-      self.viewport = (width, height);
+      self.gl_state.borrow_mut().viewport(&self.gl, &self.uniforms, width, height);
    }
 
    fn transform(&self) -> &Transform {
@@ -524,22 +552,33 @@ impl RenderBackend for OpenGlBackend {
    type Framebuffer = Framebuffer;
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
-      Framebuffer::new(Rc::clone(&self.gl), width, height)
+      Framebuffer::new(
+         Rc::clone(&self.gl),
+         Rc::clone(&self.state.gl_state),
+         width,
+         height,
+      )
    }
 
    fn draw_to(&mut self, framebuffer: &Framebuffer, f: impl FnOnce(&mut Self)) {
-      unsafe {
-         let previous_framebuffer = self.state.framebuffer;
-         let previous_viewport = self.state.viewport;
-         self.gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer.framebuffer()));
-         self.state.framebuffer = Some(framebuffer.framebuffer());
-         self.state.viewport(framebuffer.width(), framebuffer.height());
-         f(self);
-         self.gl.bind_framebuffer(glow::FRAMEBUFFER, previous_framebuffer);
-         self.state.framebuffer = previous_framebuffer;
-         let (width, height) = previous_viewport;
-         self.state.viewport(width, height);
+      let previous_framebuffer;
+      let previous_viewport;
+      {
+         let mut gl_state = self.state.gl_state.borrow_mut();
+         previous_framebuffer = gl_state.framebuffer(&self.gl, Some(framebuffer.framebuffer()));
+         previous_viewport = gl_state.viewport;
+         gl_state.viewport(
+            &self.gl,
+            &self.state.uniforms,
+            framebuffer.width(),
+            framebuffer.height(),
+         );
       }
+      f(self);
+      let mut gl_state = self.state.gl_state.borrow_mut();
+      gl_state.framebuffer(&self.gl, previous_framebuffer);
+      let (width, height) = previous_viewport;
+      gl_state.viewport(&self.gl, &self.state.uniforms, width, height);
    }
 
    fn clear(&mut self, color: Color) {
@@ -574,7 +613,7 @@ impl RenderBackend for OpenGlBackend {
 
    fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {
       assert!(
-         self.state.framebuffer != Some(framebuffer.framebuffer()),
+         self.state.gl_state.borrow().framebuffer != Some(framebuffer.framebuffer()),
          "cannot render a framebuffer to itself"
       );
       let (fwidth, fheight) = (framebuffer.width() as f32, framebuffer.height() as f32);
