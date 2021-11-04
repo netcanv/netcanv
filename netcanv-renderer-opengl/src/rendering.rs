@@ -59,11 +59,6 @@ impl Vertex {
    }
 }
 
-pub(crate) trait Mesh {
-   fn vertices(&self) -> &[Vertex];
-   fn indices(&self) -> &[u32];
-}
-
 struct Uniforms {
    projection: glow::UniformLocation,
    the_texture: glow::UniformLocation,
@@ -150,6 +145,7 @@ pub(crate) struct RenderState {
    program: glow::Program,
    uniforms: Uniforms,
    null_texture: glow::Texture,
+   shape: ShapeBuffer,
    stack: Vec<Transform>,
    gl_state: Rc<RefCell<GlState>>,
 }
@@ -332,6 +328,7 @@ impl RenderState {
          uniforms,
          null_texture,
          stack: vec![transform],
+         shape: ShapeBuffer::new(),
          gl_state: Rc::new(RefCell::new(GlState {
             framebuffer: None,
             viewport: (0, 0),
@@ -351,11 +348,11 @@ impl RenderState {
       }
    }
 
-   fn draw(&mut self, mesh: &impl Mesh) {
+   fn draw(&mut self) {
       unsafe {
          // Update buffers
-         let vertex_data = Self::to_u8_slice(mesh.vertices());
-         let index_data = Self::to_u8_slice(mesh.indices());
+         let vertex_data = Self::to_u8_slice(&self.shape.vertices);
+         let index_data = Self::to_u8_slice(&self.shape.indices);
          if vertex_data.len() > self.vbo_size {
             self.gl.buffer_data_size(
                glow::ARRAY_BUFFER,
@@ -377,7 +374,7 @@ impl RenderState {
          // Draw triangles
          self.gl.draw_elements(
             glow::TRIANGLES,
-            mesh.indices().len() as i32,
+            self.shape.indices.len() as i32,
             glow::UNSIGNED_INT,
             0,
          );
@@ -422,6 +419,30 @@ impl Drop for RenderState {
    }
 }
 
+impl OpenGlBackend {
+   fn start(&mut self) {
+      self.state.shape.start(self.state.transform().matrix);
+   }
+
+   fn shape(&mut self) -> &mut ShapeBuffer {
+      &mut self.state.shape
+   }
+
+   fn point(&mut self, point: Point, radius: f32, color: Color, style: LineCap) {
+      match style {
+         LineCap::Butt => (),
+         LineCap::Square | LineCap::Round => self.fill(
+            Rect::new(
+               point - vector(radius, radius),
+               vector(radius * 2.0, radius * 2.0),
+            ),
+            color,
+            if style == LineCap::Round { radius } else { 0.0 },
+         ),
+      }
+   }
+}
+
 impl Renderer for OpenGlBackend {
    type Font = Font;
 
@@ -445,70 +466,233 @@ impl Renderer for OpenGlBackend {
    fn clip(&mut self, rect: Rect) {}
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
-      shape.rect(
-         Vertex::colored(rect.top_left(), color),
-         Vertex::colored(rect.bottom_right(), color),
-      );
+      use std::f32::consts::PI;
+
       self.state.bind_null_texture();
-      self.state.draw(&shape);
+      self.start();
+      if radius > 0.0 {
+         let inner_rect = Rect::new(
+            rect.position + vector(radius, radius),
+            rect.size - vector(radius, radius) * 2.0,
+         );
+         let (inner_top_left, inner_top_right, inner_bottom_right, inner_bottom_left) =
+            self.shape().rect(
+               Vertex::colored(inner_rect.top_left(), color),
+               Vertex::colored(inner_rect.bottom_right(), color),
+            );
+         // Top edge
+         let top_left = self.shape().push_vertex(Vertex::colored(
+            rect.top_left() + vector(radius, 0.0),
+            color,
+         ));
+         let top_right = self.shape().push_vertex(Vertex::colored(
+            rect.top_right() + vector(-radius, 0.0),
+            color,
+         ));
+         self.shape().quad_indices(top_left, top_right, inner_top_right, inner_top_left);
+         // Right edge
+         let right_upper = self.shape().push_vertex(Vertex::colored(
+            rect.top_right() + vector(0.0, radius),
+            color,
+         ));
+         let right_lower = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_right() + vector(0.0, -radius),
+            color,
+         ));
+         self.shape().quad_indices(
+            inner_top_right,
+            right_upper,
+            right_lower,
+            inner_bottom_right,
+         );
+         // Bottom edge
+         let bottom_left = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_left() + vector(radius, 0.0),
+            color,
+         ));
+         let bottom_right = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_right() + vector(-radius, 0.0),
+            color,
+         ));
+         self.shape().quad_indices(
+            inner_bottom_left,
+            inner_bottom_right,
+            bottom_right,
+            bottom_left,
+         );
+         // Left edge
+         let left_upper = self.shape().push_vertex(Vertex::colored(
+            rect.top_left() + vector(0.0, radius),
+            color,
+         ));
+         let left_lower = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_left() + vector(0.0, -radius),
+            color,
+         ));
+         self.shape().quad_indices(left_upper, inner_top_left, inner_bottom_left, left_lower);
+         // Corners
+         self.shape().arc(inner_top_left, inner_rect.top_left(), radius, PI, 1.5 * PI);
+         self.shape().arc(
+            inner_top_right,
+            inner_rect.top_right(),
+            radius,
+            1.5 * PI,
+            2.0 * PI,
+         );
+         self.shape().arc(
+            inner_bottom_right,
+            inner_rect.bottom_right(),
+            radius,
+            0.0,
+            0.5 * PI,
+         );
+         self.shape().arc(
+            inner_bottom_left,
+            inner_rect.bottom_left(),
+            radius,
+            0.5 * PI,
+            PI,
+         );
+         self.state.draw();
+      } else {
+         self.shape().rect(
+            Vertex::colored(rect.top_left(), color),
+            Vertex::colored(rect.bottom_right(), color),
+         );
+         self.state.draw();
+      }
    }
 
    fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
+      use std::f32::consts::PI;
+
+      self.start();
+
       if thickness % 2.0 > 0.95 {
          rect.position += vector(0.5, 0.5);
+         rect.size -= vector(1.0, 1.0);
       }
       let d = thickness / 2.0;
-      let mut shape = ShapeBuffer::<8, 24>::new(self.state.transform().matrix);
-      let outer_top_left =
-         shape.push_vertex(Vertex::colored(rect.top_left() - vector(d, d), color));
-      let inner_top_left =
-         shape.push_vertex(Vertex::colored(rect.top_left() + vector(d, d), color));
-      let outer_top_right =
-         shape.push_vertex(Vertex::colored(rect.top_right() - vector(-d, d), color));
-      let inner_top_right =
-         shape.push_vertex(Vertex::colored(rect.top_right() + vector(-d, d), color));
-      let outer_bottom_right =
-         shape.push_vertex(Vertex::colored(rect.bottom_right() - vector(-d, -d), color));
-      let inner_bottom_right =
-         shape.push_vertex(Vertex::colored(rect.bottom_right() + vector(-d, -d), color));
-      let outer_bottom_left =
-         shape.push_vertex(Vertex::colored(rect.bottom_left() - vector(d, -d), color));
-      let inner_bottom_left =
-         shape.push_vertex(Vertex::colored(rect.bottom_left() + vector(d, -d), color));
-      // Top edge
-      shape.push_indices(&[outer_top_left, inner_top_left, outer_top_right]);
-      shape.push_indices(&[outer_top_right, inner_top_left, inner_top_right]);
-      // Right edge
-      shape.push_indices(&[outer_top_right, inner_top_right, outer_bottom_right]);
-      shape.push_indices(&[outer_bottom_right, inner_bottom_right, inner_top_right]);
-      // Bottom edge
-      shape.push_indices(&[outer_bottom_left, inner_bottom_left, outer_bottom_right]);
-      shape.push_indices(&[outer_bottom_right, inner_bottom_left, inner_bottom_right]);
-      // Left edge
-      shape.push_indices(&[outer_top_left, inner_top_left, outer_bottom_left]);
-      shape.push_indices(&[outer_bottom_left, inner_bottom_left, inner_top_left]);
+      if radius > 0.0 {
+         // Top edge
+         self.shape().rect(
+            Vertex::colored(rect.top_left() + vector(radius, -d), color),
+            Vertex::colored(rect.top_right() + vector(-radius, d), color),
+         );
+         // Right edge
+         self.shape().rect(
+            Vertex::colored(rect.top_right() + vector(-d, radius), color),
+            Vertex::colored(rect.bottom_right() + vector(d, -radius), color),
+         );
+         // Bottom edge
+         self.shape().rect(
+            Vertex::colored(rect.bottom_left() + vector(radius, -d), color),
+            Vertex::colored(rect.bottom_right() + vector(-radius, d), color),
+         );
+         // Left edge
+         self.shape().rect(
+            Vertex::colored(rect.top_left() + vector(-d, radius), color),
+            Vertex::colored(rect.bottom_left() + vector(d, -radius), color),
+         );
+         // Top-left corner
+         let vertex_template = Vertex::colored(vector(0.0, 0.0), color);
+         self.shape().arc_outline(
+            rect.top_left() + vector(radius, radius),
+            vertex_template,
+            radius,
+            thickness,
+            PI,
+            PI * 1.5,
+         );
+      } else {
+         let outer_top_left =
+            self.shape().push_vertex(Vertex::colored(rect.top_left() - vector(d, d), color));
+         let inner_top_left =
+            self.shape().push_vertex(Vertex::colored(rect.top_left() + vector(d, d), color));
+         let outer_top_right =
+            self.shape().push_vertex(Vertex::colored(rect.top_right() - vector(-d, d), color));
+         let inner_top_right =
+            self.shape().push_vertex(Vertex::colored(rect.top_right() + vector(-d, d), color));
+         let outer_bottom_right =
+            self.shape().push_vertex(Vertex::colored(rect.bottom_right() - vector(-d, -d), color));
+         let inner_bottom_right =
+            self.shape().push_vertex(Vertex::colored(rect.bottom_right() + vector(-d, -d), color));
+         let outer_bottom_left =
+            self.shape().push_vertex(Vertex::colored(rect.bottom_left() - vector(d, -d), color));
+         let inner_bottom_left =
+            self.shape().push_vertex(Vertex::colored(rect.bottom_left() + vector(d, -d), color));
+         // Top edge
+         self.shape().quad_indices(
+            outer_top_left,
+            outer_top_right,
+            inner_top_right,
+            inner_top_left,
+         );
+         // Right edge
+         self.shape().quad_indices(
+            outer_top_right,
+            inner_top_right,
+            inner_bottom_right,
+            outer_bottom_right,
+         );
+         // Bottom edge
+         self.shape().quad_indices(
+            outer_bottom_left,
+            outer_bottom_right,
+            inner_bottom_right,
+            inner_bottom_left,
+         ); // Left edge
+         self.shape().quad_indices(
+            outer_top_left,
+            inner_top_left,
+            inner_bottom_left,
+            outer_bottom_left,
+         );
+      }
       self.state.bind_null_texture();
-      self.state.draw(&shape);
+      self.state.draw();
    }
 
    fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
+      use std::f32::consts::PI;
+
+      let half_thickness = thickness / 2.0;
+      if a == b {
+         self.point(a, half_thickness, color, cap);
+         return;
+      }
+
       if thickness % 2.0 > 0.95 {
          a += vector(0.5, 0.5);
          b += vector(0.5, 0.5);
       }
+
       let direction = (b - a).normalize();
-      let cw = direction.perpendicular_cw() * thickness / 2.0;
-      let ccw = direction.perpendicular_ccw() * thickness / 2.0;
-      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
-      shape.quad(
+      if cap == LineCap::Square {
+         a -= direction * half_thickness;
+         b += direction * half_thickness;
+      }
+      let cw = direction.perpendicular_cw() * half_thickness;
+      let ccw = direction.perpendicular_ccw() * half_thickness;
+      self.start();
+      self.shape().quad(
          Vertex::colored(a + cw, color),
          Vertex::colored(a + ccw, color),
          Vertex::colored(b + ccw, color),
          Vertex::colored(b + cw, color),
       );
+      if cap == LineCap::Round {
+         let angle = direction.y.atan2(direction.x);
+         let angle_cw = angle + PI / 2.0;
+         let angle_ccw = angle - PI / 2.0;
+         let a_index = self.shape().push_vertex(Vertex::colored(a, color));
+         let b_index = self.shape().push_vertex(Vertex::colored(b, color));
+         self.shape().arc(a_index, a, half_thickness, angle_cw, angle_cw + PI);
+         self.shape().arc(b_index, b, half_thickness, angle_ccw, angle_ccw + PI);
+      }
+
       self.state.bind_null_texture();
-      self.state.draw(&shape);
+      self.state.draw();
    }
 
    fn text(
@@ -527,21 +711,18 @@ impl Renderer for OpenGlBackend {
       }
 
       // Buffer up the glyphs.
-      const STACK_GLYPHS: usize = 32;
-      const VERTEX_COUNT: usize = STACK_GLYPHS * 4;
-      const INDEX_COUNT: usize = STACK_GLYPHS * 6;
-      let mut shape = ShapeBuffer::<VERTEX_COUNT, INDEX_COUNT>::new(self.state.transform().matrix);
       let origin = text_origin(&rect, font, text, alignment);
+      self.start();
       for (mut position, uv) in font.typeset(text) {
          position.position += origin;
-         shape.rect(
+         self.shape().rect(
             Vertex::textured_colored(position.top_left(), uv.top_left(), color),
             Vertex::textured_colored(position.bottom_right(), uv.bottom_right(), color),
          );
       }
 
       // Draw 'em.
-      self.state.draw(&shape);
+      self.state.draw();
       0.0
    }
 }
@@ -592,8 +773,8 @@ impl RenderBackend for OpenGlBackend {
    fn image(&mut self, position: Point, image: &Image) {
       let (fwidth, fheight) = (image.width() as f32, image.height() as f32);
       let color = image.color.unwrap_or(Color::WHITE);
-      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
-      shape.rect(
+      self.start();
+      self.shape().rect(
          Vertex::textured_colored(position, point(0.0, 0.0), color),
          Vertex::textured_colored(position + vector(fwidth, fheight), point(1.0, 1.0), color),
       );
@@ -607,7 +788,7 @@ impl RenderBackend for OpenGlBackend {
             [glow::RED, glow::GREEN, glow::BLUE, glow::ALPHA]
          };
          self.gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
-         self.state.draw(&shape);
+         self.state.draw();
       }
    }
 
@@ -617,8 +798,8 @@ impl RenderBackend for OpenGlBackend {
          "cannot render a framebuffer to itself"
       );
       let (fwidth, fheight) = (framebuffer.width() as f32, framebuffer.height() as f32);
-      let mut shape = ShapeBuffer::<4, 6>::new(self.state.transform().matrix);
-      shape.rect(
+      self.start();
+      self.shape().rect(
          Vertex::textured(position, point(0.0, 1.0)),
          Vertex::textured(position + vector(fwidth, fheight), point(1.0, 0.0)),
       );
@@ -626,7 +807,7 @@ impl RenderBackend for OpenGlBackend {
       unsafe {
          self.gl.active_texture(glow::TEXTURE0);
          self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-         self.state.draw(&shape);
+         self.state.draw();
       }
    }
 
