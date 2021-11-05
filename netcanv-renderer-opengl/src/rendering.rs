@@ -65,51 +65,11 @@ struct Uniforms {
    premultiply_alpha: glow::UniformLocation,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Transform {
    matrix: Mat3A,
    blend_mode: BlendMode,
-}
-
-impl Transform {
-   fn apply(&self, state: &RenderState) {
-      let mut premultiply_alpha = false;
-      match self.blend_mode {
-         BlendMode::Clear => unsafe {
-            state.gl.blend_equation(glow::FUNC_ADD);
-            state.gl.blend_func(glow::ZERO, glow::ZERO);
-         },
-         BlendMode::Alpha => unsafe {
-            state.gl.blend_equation(glow::FUNC_ADD);
-            state.gl.blend_func_separate(
-               glow::SRC_ALPHA,
-               glow::ONE_MINUS_SRC_ALPHA,
-               glow::ONE,
-               glow::ONE_MINUS_SRC_ALPHA,
-            );
-         },
-         BlendMode::Add => unsafe {
-            state.gl.blend_equation(glow::FUNC_ADD);
-            state.gl.blend_func(glow::SRC_ALPHA, glow::ONE);
-         },
-         BlendMode::Invert => unsafe {
-            state.gl.blend_equation(glow::FUNC_ADD);
-            state.gl.blend_func_separate(
-               glow::ONE_MINUS_DST_COLOR,
-               glow::ONE_MINUS_SRC_ALPHA,
-               glow::ZERO,
-               glow::ONE,
-            );
-            premultiply_alpha = true;
-         },
-      }
-      unsafe {
-         state.gl.uniform_1_f32(
-            Some(&state.uniforms.premultiply_alpha),
-            premultiply_alpha as i32 as f32,
-         )
-      }
-   }
+   clip: Option<Rect>,
 }
 
 pub(crate) struct GlState {
@@ -334,9 +294,10 @@ impl RenderState {
       let transform = Transform {
          matrix: Mat3A::IDENTITY,
          blend_mode: BlendMode::Alpha,
+         clip: None,
       };
 
-      let state = Self {
+      let mut state = Self {
          gl,
          vao,
          vbo,
@@ -353,7 +314,7 @@ impl RenderState {
             viewport: (0, 0),
          })),
       };
-      state.stack.last().unwrap().apply(&state);
+      state.apply_transform();
       state
    }
 
@@ -412,6 +373,57 @@ impl RenderState {
 
    fn transform_mut(&mut self) -> &mut Transform {
       self.stack.last_mut().unwrap()
+   }
+
+   fn apply_transform(&mut self) {
+      let transform = self.transform();
+      let mut premultiply_alpha = false;
+      match transform.blend_mode {
+         BlendMode::Clear => unsafe {
+            self.gl.blend_equation(glow::FUNC_ADD);
+            self.gl.blend_func(glow::ZERO, glow::ZERO);
+         },
+         BlendMode::Alpha => unsafe {
+            self.gl.blend_equation(glow::FUNC_ADD);
+            self.gl.blend_func_separate(
+               glow::SRC_ALPHA,
+               glow::ONE_MINUS_SRC_ALPHA,
+               glow::ONE,
+               glow::ONE_MINUS_SRC_ALPHA,
+            );
+         },
+         BlendMode::Add => unsafe {
+            self.gl.blend_equation(glow::FUNC_ADD);
+            self.gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+         },
+         BlendMode::Invert => unsafe {
+            self.gl.blend_equation(glow::FUNC_ADD);
+            self.gl.blend_func_separate(
+               glow::ONE_MINUS_DST_COLOR,
+               glow::ONE_MINUS_SRC_ALPHA,
+               glow::ZERO,
+               glow::ONE,
+            );
+            premultiply_alpha = true;
+         },
+      }
+      unsafe {
+         self.gl.uniform_1_f32(
+            Some(&self.uniforms.premultiply_alpha),
+            premultiply_alpha as i32 as f32,
+         );
+         if let Some(clip_rect) = &transform.clip {
+            let viewport = self.gl_state.borrow().viewport;
+            let top_left = clip_rect.top_left();
+            let bottom_right = clip_rect.bottom_right();
+            let (width, height) = (bottom_right.x - top_left.x, bottom_right.y - top_left.y);
+            let y = viewport.1 as f32 - top_left.y - height;
+            self.gl.enable(glow::SCISSOR_TEST);
+            self.gl.scissor(top_left.x as i32, y as i32, width as i32, height as i32);
+         } else {
+            self.gl.disable(glow::SCISSOR_TEST);
+         }
+      }
    }
 }
 
@@ -477,14 +489,17 @@ impl Renderer for OpenGlBackend {
          self.state.stack.len() > 0,
          "pop() called at the bottom of the stack"
       );
-      self.state.transform().apply(&self.state);
+      self.state.apply_transform();
    }
 
    fn translate(&mut self, vec: Vector) {
       self.state.transform_mut().matrix *= Mat3A::from_translation(to_vec2(vec));
    }
 
-   fn clip(&mut self, rect: Rect) {}
+   fn clip(&mut self, rect: Rect) {
+      self.state.transform_mut().clip = Some(rect);
+      self.state.apply_transform();
+   }
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
       use std::f32::consts::PI;
@@ -866,6 +881,6 @@ impl RenderBackend for OpenGlBackend {
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
       self.state.transform_mut().blend_mode = new_blend_mode;
-      self.state.transform().apply(&self.state);
+      self.state.apply_transform();
    }
 }
