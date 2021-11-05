@@ -62,6 +62,7 @@ impl Vertex {
 struct Uniforms {
    projection: glow::UniformLocation,
    the_texture: glow::UniformLocation,
+   premultiply_alpha: glow::UniformLocation,
 }
 
 #[derive(Clone, Copy)]
@@ -71,15 +72,16 @@ struct Transform {
 }
 
 impl Transform {
-   fn apply(&self, gl: &glow::Context) {
+   fn apply(&self, state: &RenderState) {
+      let mut premultiply_alpha = false;
       match self.blend_mode {
          BlendMode::Clear => unsafe {
-            gl.blend_equation(glow::FUNC_ADD);
-            gl.blend_func(glow::ZERO, glow::ZERO);
+            state.gl.blend_equation(glow::FUNC_ADD);
+            state.gl.blend_func(glow::ZERO, glow::ZERO);
          },
          BlendMode::Alpha => unsafe {
-            gl.blend_equation(glow::FUNC_ADD);
-            gl.blend_func_separate(
+            state.gl.blend_equation(glow::FUNC_ADD);
+            state.gl.blend_func_separate(
                glow::SRC_ALPHA,
                glow::ONE_MINUS_SRC_ALPHA,
                glow::ONE,
@@ -87,13 +89,25 @@ impl Transform {
             );
          },
          BlendMode::Add => unsafe {
-            gl.blend_equation(glow::FUNC_ADD);
-            gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+            state.gl.blend_equation(glow::FUNC_ADD);
+            state.gl.blend_func(glow::SRC_ALPHA, glow::ONE);
          },
-         BlendMode::Subtract => unsafe {
-            gl.blend_equation_separate(glow::FUNC_REVERSE_SUBTRACT, glow::FUNC_ADD);
-            gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+         BlendMode::Invert => unsafe {
+            state.gl.blend_equation(glow::FUNC_ADD);
+            state.gl.blend_func_separate(
+               glow::ONE_MINUS_DST_COLOR,
+               glow::ONE_MINUS_SRC_ALPHA,
+               glow::ZERO,
+               glow::ONE,
+            );
+            premultiply_alpha = true;
          },
+      }
+      unsafe {
+         state.gl.uniform_1_f32(
+            Some(&state.uniforms.premultiply_alpha),
+            premultiply_alpha as i32 as f32,
+         )
       }
    }
 }
@@ -242,12 +256,16 @@ impl RenderState {
          in vec4 vertex_color;
 
          uniform sampler2D the_texture;
+         uniform float premultiply_alpha;
 
          out vec4 fragment_color;
 
          void main(void)
          {
-            fragment_color = vertex_color * texture(the_texture, vertex_uv);
+            vec4 color = vertex_color * texture(the_texture, vertex_uv);
+            float alpha_factor = premultiply_alpha * color.a + (1.0 - premultiply_alpha);
+            color.rgb *= alpha_factor;
+            fragment_color = color;
          }
       "#;
       unsafe {
@@ -273,8 +291,10 @@ impl RenderState {
          let uniforms = Uniforms {
             projection: gl.get_uniform_location(program, "projection").unwrap(),
             the_texture: gl.get_uniform_location(program, "the_texture").unwrap(),
+            premultiply_alpha: gl.get_uniform_location(program, "premultiply_alpha").unwrap(),
          };
          gl.uniform_1_i32(Some(&uniforms.the_texture), 0);
+         gl.uniform_1_f32(Some(&uniforms.premultiply_alpha), 0.0);
 
          (program, uniforms)
       }
@@ -315,9 +335,8 @@ impl RenderState {
          matrix: Mat3A::IDENTITY,
          blend_mode: BlendMode::Alpha,
       };
-      transform.apply(&gl);
 
-      Self {
+      let state = Self {
          gl,
          vao,
          vbo,
@@ -333,7 +352,9 @@ impl RenderState {
             framebuffer: None,
             viewport: (0, 0),
          })),
-      }
+      };
+      state.stack.last().unwrap().apply(&state);
+      state
    }
 
    unsafe fn to_u8_slice<T>(slice: &[T]) -> &[u8] {
@@ -456,7 +477,7 @@ impl Renderer for OpenGlBackend {
          self.state.stack.len() > 0,
          "pop() called at the bottom of the stack"
       );
-      self.state.transform().apply(&self.gl);
+      self.state.transform().apply(&self.state);
    }
 
    fn translate(&mut self, vec: Vector) {
@@ -594,15 +615,43 @@ impl Renderer for OpenGlBackend {
             Vertex::colored(rect.top_left() + vector(-d, radius), color),
             Vertex::colored(rect.bottom_left() + vector(d, -radius), color),
          );
-         // Top-left corner
+
          let vertex_template = Vertex::colored(vector(0.0, 0.0), color);
+         // Top left corner
          self.shape().arc_outline(
             rect.top_left() + vector(radius, radius),
             vertex_template,
             radius,
             thickness,
             PI,
-            PI * 1.5,
+            1.5 * PI,
+         );
+         // Top right corner
+         self.shape().arc_outline(
+            rect.top_right() + vector(-radius, radius),
+            vertex_template,
+            radius,
+            thickness,
+            1.5 * PI,
+            2.0 * PI,
+         );
+         // Bottom right corner
+         self.shape().arc_outline(
+            rect.bottom_right() + vector(-radius, -radius),
+            vertex_template,
+            radius,
+            thickness,
+            0.0,
+            0.5 * PI,
+         );
+         // Bottom left corner
+         self.shape().arc_outline(
+            rect.bottom_left() + vector(radius, -radius),
+            vertex_template,
+            radius,
+            thickness,
+            0.5 * PI,
+            PI,
          );
       } else {
          let outer_top_left =
@@ -817,6 +866,6 @@ impl RenderBackend for OpenGlBackend {
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
       self.state.transform_mut().blend_mode = new_blend_mode;
-      self.state.transform().apply(&self.gl);
+      self.state.transform().apply(&self.state);
    }
 }

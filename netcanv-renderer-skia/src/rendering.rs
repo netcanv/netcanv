@@ -141,7 +141,7 @@ impl SkiaBackend {
          BlendMode::Clear => skia_safe::BlendMode::Clear,
          BlendMode::Alpha => skia_safe::BlendMode::SrcOver,
          BlendMode::Add => skia_safe::BlendMode::Plus,
-         BlendMode::Subtract => skia_safe::BlendMode::Difference,
+         BlendMode::Invert => skia_safe::BlendMode::Difference,
       });
       paint
    }

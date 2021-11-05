@@ -84,8 +84,8 @@ pub enum BlendMode {
    Alpha,
    /// Adds colors together.
    Add,
-   /// Subtracts colors from one another.
-   Subtract,
+   /// Inverts colors.
+   Invert,
 }
 
 /// A render backend.

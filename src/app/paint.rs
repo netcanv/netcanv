@@ -194,7 +194,7 @@ impl State {
          let mut y = ui.height() - (self.log.len() as f32 - 1.0) * 16.0 - 8.0;
          let renderer = ui.render();
          renderer.push();
-         renderer.set_blend_mode(BlendMode::Subtract);
+         renderer.set_blend_mode(BlendMode::Invert);
          for (entry, _) in &self.log {
             renderer.text(
                Rect::new(point(8.0, y), vector(0.0, 0.0)),
@@ -305,7 +305,7 @@ impl State {
          let color = Color::WHITE.with_alpha(240);
 
          ui.render().push();
-         ui.render().set_blend_mode(BlendMode::Subtract);
+         ui.render().set_blend_mode(BlendMode::Invert);
 
          for (_, mate) in self.peer.mates() {
             let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);

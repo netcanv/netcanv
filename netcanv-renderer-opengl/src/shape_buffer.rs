@@ -4,7 +4,7 @@ use glam::{Mat3A, Vec3};
 use netcanv_renderer::paws::{point, vector, Color, Point, Vector};
 use smallvec::SmallVec;
 
-use crate::rendering::Vertex;
+use crate::{common::VectorMath, rendering::Vertex};
 
 pub(crate) struct ShapeBuffer {
    transform: Mat3A,
@@ -163,6 +163,33 @@ impl ShapeBuffer {
             color,
          }));
          perimeter_positions.push(perimeter);
+      }
+      let mut previous_b = None;
+      for (i, pair) in perimeter_positions.windows(2).enumerate() {
+         let a = pair[0];
+         let b = pair[1];
+         let direction = (b - a).normalize();
+         let ccw = direction.perpendicular_ccw();
+         let outer_a = self.push_vertex(Vertex {
+            position: a + ccw * thickness,
+            uv,
+            color,
+         });
+         let outer_b = self.push_vertex(Vertex {
+            position: b + ccw * thickness,
+            uv,
+            color,
+         });
+         self.quad_indices(
+            outer_a,
+            outer_b,
+            perimeter_indices[i + 1],
+            perimeter_indices[i],
+         );
+         if let Some((b, outer_b)) = previous_b {
+            self.push_indices(&[outer_b, b, outer_a]);
+         }
+         previous_b = Some((perimeter_indices[i + 1], outer_b));
       }
    }
 }
