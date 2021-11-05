@@ -273,7 +273,7 @@ impl<'font, 'store, 'gl> GlyphRenderer<'font, 'store, 'gl> {
          size: rect.size,
          uv_rect: rect.uv(vector(TEXTURE_ATLAS_SIZE as f32, TEXTURE_ATLAS_SIZE as f32)),
          offset: vector(glyph.bitmap_left() as f32, -(glyph.bitmap_top() as f32)),
-         advance_x: glyph.advance().x,
+         advance_x: glyph.advance().x as i64,
       })
    }
 
