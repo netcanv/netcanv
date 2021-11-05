@@ -22,6 +22,7 @@ renderer-opengl = ["netcanv-renderer-opengl"]
 
 # Common things
 anyhow = "1.0.40"
+heapless = { version = "0.7.7", default-features = false }
 
 # Windowing and graphics
 winit = "0.24.0"
