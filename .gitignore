@@ -3,6 +3,7 @@
 .lite_project.lua
 *.swp
 .vscode
+*.trace
 
 appimage/out
 appimage/linuxdeploy-*

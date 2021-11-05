@@ -10,8 +10,8 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
+use netcanv_renderer::paws::{Color, LineCap, Point, Renderer, Vector};
 use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
-use paws::{Color, LineCap, Point, Renderer, Vector};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, Framebuffer};

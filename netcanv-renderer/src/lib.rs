@@ -1,3 +1,4 @@
+pub use paws;
 use paws::{vector, Color, Point, Rect, Renderer, Vector};
 
 /// A font.
@@ -37,15 +38,15 @@ pub trait Image {
    fn colorized(&self, color: Color) -> Self;
 
    /// Returns the size of the image.
-   fn size(&self) -> (usize, usize);
+   fn size(&self) -> (u32, u32);
 
    /// Returns the width of the image.
-   fn width(&self) -> usize {
+   fn width(&self) -> u32 {
       self.size().0
    }
 
    /// Returns the height of the image.
-   fn height(&self) -> usize {
+   fn height(&self) -> u32 {
       self.size().1
    }
 }
@@ -83,8 +84,8 @@ pub enum BlendMode {
    Alpha,
    /// Adds colors together.
    Add,
-   /// Subtracts colors from one another.
-   Subtract,
+   /// Inverts colors.
+   Invert,
 }
 
 /// A render backend.

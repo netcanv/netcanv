@@ -156,9 +156,9 @@ impl TextField {
       ui.fill_rounded(colors.fill, 4.0);
       ui.outline_rounded(outline_color, 4.0, 1.0);
 
-      // Rendering: text
       ui.push(ui.size(), Layout::Freeform);
       ui.pad((8.0, 0.0));
+
       ui.render().push();
       ui.clip();
 

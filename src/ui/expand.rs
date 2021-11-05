@@ -1,7 +1,7 @@
 //! Expand widgets group elements together and form what's called an "accordion".
 
+use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Renderer};
 use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
-use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Renderer};
 
 use crate::backend::{Font, Image};
 use crate::ui::*;
@@ -95,7 +95,7 @@ impl Expand {
                colors.hover
             }
             .into();
-            let y = height * 1.1;
+            let y = (height * 1.1).round();
             ui.line(
                point(0.0, y),
                point(width, y),

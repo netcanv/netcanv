@@ -7,14 +7,16 @@ edition = "2018"
 [workspace]
 members = [
    "netcanv-renderer",
+   "netcanv-renderer-opengl",
    "netcanv-renderer-skia",
    "netcanv-matchmaker",
    "netcanv-protocol",
 ]
 
 [features]
-default = ["renderer-skia"]
+default = ["renderer-opengl"]
 renderer-skia = ["netcanv-renderer-skia"]
+renderer-opengl = ["netcanv-renderer-opengl"]
 
 [dependencies]
 
@@ -23,7 +25,6 @@ anyhow = "1.0.40"
 
 # Windowing and graphics
 winit = "0.24.0"
-paws = "0.2.0"
 native-dialog = "0.5.5"
 image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }
@@ -48,6 +49,7 @@ copypasta = "0.7.1"
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
 netcanv-renderer-skia = { path = "netcanv-renderer-skia", optional = true }
+netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]

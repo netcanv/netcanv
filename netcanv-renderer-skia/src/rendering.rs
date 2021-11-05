@@ -1,7 +1,9 @@
 use std::cell::Cell;
 
+use netcanv_renderer::paws::{
+   vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+};
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
-use paws::{vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use skulpin::skia_safe::{
    self, color_filters, image_filters,
    paint::{Cap, Style},
@@ -81,8 +83,8 @@ impl netcanv_renderer::Image for Image {
       }
    }
 
-   fn size(&self) -> (usize, usize) {
-      (self.image.width() as usize, self.image.height() as usize)
+   fn size(&self) -> (u32, u32) {
+      (self.image.width() as _, self.image.height() as _)
    }
 }
 
@@ -139,7 +141,7 @@ impl SkiaBackend {
          BlendMode::Clear => skia_safe::BlendMode::Clear,
          BlendMode::Alpha => skia_safe::BlendMode::SrcOver,
          BlendMode::Add => skia_safe::BlendMode::Plus,
-         BlendMode::Subtract => skia_safe::BlendMode::Difference,
+         BlendMode::Invert => skia_safe::BlendMode::Difference,
       });
       paint
    }

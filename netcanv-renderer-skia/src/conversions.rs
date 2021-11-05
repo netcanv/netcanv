@@ -1,4 +1,4 @@
-use paws::{Color, Rect, Vector};
+use netcanv_renderer::paws::{Color, Rect, Vector};
 use skulpin::skia_safe;
 
 pub(crate) fn to_point(vec: Vector) -> skia_safe::Point {
