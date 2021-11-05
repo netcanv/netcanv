@@ -1,7 +1,7 @@
 //! A helper for constructing vertex and index arrays for shapes.
 
 use glam::{Mat3A, Vec3};
-use netcanv_renderer::paws::{point, vector, Color, Point, Vector};
+use netcanv_renderer::paws::{point, vector, Point, Vector};
 use smallvec::SmallVec;
 
 use crate::{common::VectorMath, rendering::Vertex};
@@ -99,13 +99,10 @@ impl ShapeBuffer {
       self.quad(top_left, top_right, bottom_right, bottom_left)
    }
 
+   /// Returns the number of vertices an arc with the given radius, start, and end angles should
+   /// have to look smooth.
    fn arc_vertex_count(radius: f32, start_angle: f32, end_angle: f32) -> usize {
       ((end_angle - start_angle).abs() * radius).max(6.0) as usize
-   }
-
-   fn angle_between_arc_edges(vertex_count: usize, start_angle: f32, end_angle: f32) -> f32 {
-      use std::f32::consts::PI;
-      PI - ((end_angle - start_angle) / (vertex_count - 1) as f32)
    }
 
    /// Pushes a filled arc into the shape buffer.

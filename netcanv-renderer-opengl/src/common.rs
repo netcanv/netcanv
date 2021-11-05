@@ -1,5 +1,3 @@
-use std::ops::{Deref, DerefMut, Index, IndexMut, Mul};
-
 use glam::Vec2;
 use glow::HasContext;
 use netcanv_renderer::paws::{vector, Color, Rect, Vector};

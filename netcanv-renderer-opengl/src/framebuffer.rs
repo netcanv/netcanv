@@ -2,10 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use glow::{HasContext, PixelPackData, PixelUnpackData};
 
-use crate::{
-   common::flip_vertically,
-   rendering::{GlState, RenderState},
-};
+use crate::common::flip_vertically;
+use crate::rendering::GlState;
 
 pub struct Framebuffer {
    gl: Rc<glow::Context>,

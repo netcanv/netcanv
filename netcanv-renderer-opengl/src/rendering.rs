@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::mem::size_of;
 use std::rc::Rc;
 
-use glam::{Affine2, Mat3, Mat3A, Vec2};
+use glam::Mat3A;
 use glow::HasContext;
 use memoffset::offset_of;
 use netcanv_renderer::paws::{
