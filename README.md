@@ -1,12 +1,15 @@
 # NetCanv
 
-A lightweight painting app for painting with other people over the Internet, in real time.
+A lightweight app for painting with other people over the Internet, in real time.
 
 ![screenshot](contrib/screenshot.png)
 <p align="center">
 A screenshot of my imaginary friend and I painting things together using NetCanv.
 </p>
 
+NetCanv is supposed to be a competitor for the popular whiteboard app, Google Jamboard.
+Right now it doesn't come close to its level of functionality, but I hope someday it can surpass
+the proprietary app in terms of features. It's already faster, so hey, at least that's something!
 
 ## Compiling
 
@@ -17,6 +20,25 @@ $ cargo build --release
 # or, if you just want to run the app:
 $ cargo run --release
 ```
+
+### Features
+
+Alternate rendering backends can be chosen by passing in features via the `--features` flag.
+
+- `renderer-opengl` (default) – The OpenGL rendering backend. May be incomplete or buggy in some
+  places on certain drivers, but it is much faster (both compile-time-wise and runtime-wise)
+  than the Skia backend.
+- `renderer-skia` – The old Skia backend. Slow, in the process of being deprecated; avoid using it.
+
+For example, to build with the Skia backend:
+```
+$ cargo build --features renderer-skia --release
+```
+
+Do note that PRs implementing alternate backends will not be merged, because the rendering API is
+still in flux and may change at any time. This may change after 1.0.0 is released (in the far
+future).
+
 
 ### Matchmaker
 
