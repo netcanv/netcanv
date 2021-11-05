@@ -6,10 +6,14 @@ mod rect_packer;
 mod rendering;
 mod shape_buffer;
 
+use std::fmt::Write;
 use std::rc::Rc;
 
 use glutin::dpi::PhysicalSize;
-use glutin::{ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, WindowedContext};
+use glutin::{
+   ContextBuilder, ContextWrapper, GlProfile, GlRequest, NotCurrent, PossiblyCurrent,
+   WindowedContext,
+};
 use netcanv_renderer::paws::Ui;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
@@ -26,14 +30,67 @@ pub struct OpenGlBackend {
 }
 
 impl OpenGlBackend {
+   fn build_context(
+      window_builder: WindowBuilder,
+      event_loop: &EventLoop<()>,
+   ) -> anyhow::Result<ContextWrapper<NotCurrent, Window>> {
+      struct Configuration {
+         msaa: u16,
+         error: String,
+      }
+      let mut attempted_configurations = Vec::new();
+      let mut successful_configuration = None;
+
+      // Multiply MSAA value by 2, because it's divided by 2 before construction.
+      // This gives us a maximum MSAA value of 8, and minimum of 0.
+      let mut msaa: u16 = 8 * 2;
+      while msaa > 0 {
+         let mut context = ContextBuilder::new()
+            .with_gl(GlRequest::Latest)
+            .with_gl_profile(GlProfile::Core)
+            .with_vsync(true)
+            .with_multisampling(8)
+            .with_stencil_buffer(8);
+         if msaa > 0 {
+            msaa /= 2;
+            context = context.with_multisampling(msaa);
+         }
+
+         match context.build_windowed(window_builder.clone(), event_loop) {
+            Ok(ok) => {
+               successful_configuration = Some(ok);
+               break;
+            }
+            Err(error) => {
+               attempted_configurations.push(Configuration {
+                  msaa,
+                  error: error.to_string(),
+               });
+            }
+         }
+      }
+
+      if let Some(configuration) = successful_configuration {
+         Ok(configuration)
+      } else {
+         let mut error_message = String::from(
+            "Failed to create OpenGL context.\nTried the following configurations, none of which seem to be supported:\n",
+         );
+         for Configuration { msaa, error } in &attempted_configurations {
+            let _ = writeln!(
+               error_message,
+               " - Multisampling: {:?}; failed with: '{}'",
+               msaa, error
+            );
+         }
+         error_message.push_str("Try updating your graphics drivers. In case this doesn't work, NetCanv is too new to run on your hardware!");
+         anyhow::bail!(error_message)
+      }
+   }
+
    /// Creates a new OpenGL renderer.
    pub fn new(window_builder: WindowBuilder, event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
-      let context = ContextBuilder::new()
-         .with_gl(GlRequest::Latest)
-         .with_gl_profile(GlProfile::Core)
-         .with_vsync(true)
-         .with_multisampling(8)
-         .build_windowed(window_builder, event_loop)?;
+      let context = Self::build_context(window_builder, event_loop)?;
       let context = unsafe { context.make_current().unwrap() };
       let gl = unsafe {
          glow::Context::from_loader_function(|name| context.get_proc_address(name) as *const _)
