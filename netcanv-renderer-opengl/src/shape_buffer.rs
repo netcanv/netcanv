@@ -121,11 +121,9 @@ impl ShapeBuffer {
       let Vertex { color, uv, .. } = self.vertices[center_index as usize];
       let vertex_count = Self::arc_vertex_count(radius, start_angle, end_angle);
       let mut perimeter_indices = SmallVec::<[u32; 32]>::new();
-      for i in 0..vertex_count {
-         let t = i as f32 / (vertex_count - 1) as f32;
-         let angle = start_angle + t * (end_angle - start_angle);
+      for angle_vector in Rotate::new(start_angle, end_angle, vertex_count) {
          perimeter_indices.push(self.push_vertex(Vertex {
-            position: center + vector(angle.cos(), angle.sin()) * radius,
+            position: center + angle_vector * radius,
             uv,
             color,
          }));
@@ -149,10 +147,7 @@ impl ShapeBuffer {
       let inner_radius = radius - thickness / 2.0;
       let mut perimeter_positions = SmallVec::<[Point; 32]>::new();
       let mut perimeter_indices = SmallVec::<[u32; 32]>::new();
-      for i in 0..vertex_count {
-         let t = i as f32 / (vertex_count - 1) as f32;
-         let angle = start_angle + t * (end_angle - start_angle);
-         let angle_vector = vector(angle.cos(), angle.sin());
+      for angle_vector in Rotate::new(start_angle, end_angle, vertex_count) {
          let perimeter = center + angle_vector * inner_radius;
          perimeter_indices.push(self.push_vertex(Vertex {
             position: perimeter,
@@ -187,6 +182,47 @@ impl ShapeBuffer {
             self.push_indices(&[outer_b, b, outer_a]);
          }
          previous_b = Some((perimeter_indices[i + 1], outer_b));
+      }
+   }
+}
+
+struct Rotate {
+   current_vertex: usize,
+   vertex_count: usize,
+   angle_vector: Vector,
+   sin: f32,
+   cos: f32,
+}
+
+impl Rotate {
+   fn new(start_angle: f32, end_angle: f32, vertex_count: usize) -> Self {
+      let delta_angle = (end_angle - start_angle) / (vertex_count - 1) as f32;
+      let cos = delta_angle.cos();
+      let sin = delta_angle.sin();
+      Self {
+         current_vertex: 0,
+         vertex_count,
+         angle_vector: vector(start_angle.cos(), start_angle.sin()),
+         sin,
+         cos,
+      }
+   }
+}
+
+impl Iterator for Rotate {
+   type Item = Vector;
+
+   fn next(&mut self) -> Option<Self::Item> {
+      if self.current_vertex < self.vertex_count {
+         let angle_vector = self.angle_vector;
+         self.angle_vector = vector(
+            angle_vector.x * self.cos - angle_vector.y * self.sin,
+            angle_vector.x * self.sin + angle_vector.y * self.cos,
+         );
+         self.current_vertex += 1;
+         Some(angle_vector)
+      } else {
+         None
       }
    }
 }
