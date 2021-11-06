@@ -49,8 +49,7 @@ impl OpenGlBackend {
             .with_gl(GlRequest::Latest)
             .with_gl_profile(GlProfile::Core)
             .with_vsync(true)
-            .with_multisampling(8)
-            .with_stencil_buffer(8);
+            .with_multisampling(8);
          if msaa > 0 {
             msaa /= 2;
             context = context.with_multisampling(msaa);
@@ -83,7 +82,7 @@ impl OpenGlBackend {
                msaa, error
             );
          }
-         error_message.push_str("Try updating your graphics drivers. In case this doesn't work, NetCanv is too new to run on your hardware!");
+         error_message.push_str("Try updating your graphics drivers. If that doesn't help, NetCanv is too new to run on your hardware!");
          anyhow::bail!(error_message)
       }
    }
