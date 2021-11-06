@@ -11,12 +11,13 @@ use crate::{backend::Font, ui::*};
 /// A text field's state.
 pub struct TextField {
    text: String,
+
    focused: bool,
-   blink_start: f32,
-
    selection: Selection,
-
    clipboard_context: ClipboardContext,
+
+   blink_start: f32,
+   scroll_x: f32,
 }
 
 /// A text field's color scheme.
@@ -61,6 +62,7 @@ impl TextField {
          },
 
          clipboard_context: ClipboardContext::new().unwrap(),
+         scroll_x: 0.0,
       }
    }
 
@@ -97,19 +99,13 @@ impl TextField {
 
       ui.render().push();
       ui.clip();
+      ui.render().translate(vector(-self.scroll_x, 0.0));
 
       // Rendering: hint
-      if hint.is_some() && self.text.len() == 0 {
-         ui.text(
-            font,
-            hint.unwrap(),
-            colors.text_hint,
-            (AlignH::Left, AlignV::Middle),
-         );
-      }
-
-      if !self.focused {
-         self.selection.anchor = self.selection.cursor;
+      if let Some(hint) = hint {
+         if self.text.len() == 0 {
+            ui.text(font, hint, colors.text_hint, (AlignH::Left, AlignV::Middle));
+         }
       }
 
       if self.focused
@@ -117,9 +113,13 @@ impl TextField {
       {
          ui.draw(|ui| {
             let current_text = &self.text[..self.selection.cursor()];
-            let current_text_width = font.text_width(&current_text);
+            let x = font.text_width(&current_text);
 
-            let x = current_text_width;
+            // While we have the caret's horizontal position already calculated,
+            // also process scrolling.
+            self.scroll_x = x - ui.width() + 1.0;
+            self.scroll_x = self.scroll_x.max(0.0);
+
             let y1 = (Self::height(font) * 0.2).round();
             let y2 = (Self::height(font) * 0.8).round();
             ui.line(point(x, y1), point(x, y2), colors.text, LineCap::Butt, 1.0);
@@ -359,6 +359,8 @@ impl TextField {
                self.append(*ch);
             }
          }
+      } else {
+         self.selection.anchor = self.selection.cursor;
       }
    }
 
