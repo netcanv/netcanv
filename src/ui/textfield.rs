@@ -41,8 +41,6 @@ pub struct TextFieldArgs<'a, 'b, 'c> {
 }
 
 impl TextField {
-   /// The backspace character.
-   const BACKSPACE: char = '\x08';
    /// The blinking period of the caret.
    const BLINK_PERIOD: f32 = 1.0;
    const HALF_BLINK: f32 = Self::BLINK_PERIOD / 2.0;
@@ -468,12 +466,9 @@ struct Selection {
 }
 
 impl Selection {
+   /// Returns the selection's cursor position, as a `usize`.
    pub fn cursor(&self) -> usize {
       self.cursor.0
-   }
-
-   pub fn anchor(&self) -> usize {
-      self.anchor.0
    }
 
    /// Returns the first (earlier) position in the selection.
