@@ -139,8 +139,8 @@ fn inner_main() -> anyhow::Result<()> {
 fn main() {
    let default_panic_hook = std::panic::take_hook();
    std::panic::set_hook(Box::new(move |panic_info| {
-      // Pretty error messages are only enabled in release mode, as they hinder debugging.
-      //      #[cfg(not(debug_assertions))]
+      // Pretty panic messages are only enabled in release mode, as they hinder debugging.
+      #[cfg(not(debug_assertions))]
       {
          let mut message = heapless::String::<8192>::new();
          let _ = write!(message, "Oh no! A fatal error occured.\n{}", panic_info);
