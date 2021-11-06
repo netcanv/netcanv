@@ -31,6 +31,7 @@ use backend::Backend;
 use config::UserConfig;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
+use nysa::global as bus;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -77,10 +78,7 @@ fn inner_main() -> anyhow::Result<()> {
    // Load the user configuration and color scheme.
    // TODO: User-definable color schemes, anyone?
    let config = UserConfig::load_or_create()?;
-   let color_scheme = match config.ui.color_scheme {
-      config::ColorScheme::Light => ColorScheme::light(),
-      config::ColorScheme::Dark => ColorScheme::dark(),
-   };
+   let color_scheme = ColorScheme::from(config.ui.color_scheme);
 
    // Build the render backend.
    let renderer = Backend::new(window_builder, &event_loop)?;
@@ -129,6 +127,12 @@ fn inner_main() -> anyhow::Result<()> {
                _ => (),
             }
             input.finish_frame();
+
+            #[cfg(target_family = "unix")]
+            for message in &bus::retrieve_all::<SwitchColorScheme>() {
+               let SwitchColorScheme(scheme) = message.consume();
+               ui.window().set_wayland_theme(ColorScheme::from(scheme));
+            }
          }
 
          _ => (),

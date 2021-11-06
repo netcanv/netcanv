@@ -211,6 +211,16 @@ impl ColorScheme {
    }
 }
 
+impl From<crate::config::ColorScheme> for ColorScheme {
+   fn from(scheme: crate::config::ColorScheme) -> Self {
+      use crate::config::ColorScheme;
+      match scheme {
+         ColorScheme::Light => Self::light(),
+         ColorScheme::Dark => Self::dark(),
+      }
+   }
+}
+
 /// The title bar's color scheme. This only applies to title bars on Wayland, where the compositor
 /// does not always provide a server-side title bar.
 #[derive(Clone)]
@@ -274,3 +284,7 @@ impl Theme for ColorScheme {
       }
    }
 }
+
+/// A bus message notifying the main event loop that the color scheme has been switched.
+/// Relevant only on Wayland, where the title bar is drawn by the application.
+pub struct SwitchColorScheme(pub crate::config::ColorScheme);
