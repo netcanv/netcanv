@@ -210,20 +210,24 @@ impl TextField {
       }
    }
 
+   /// Returns whether the Ctrl key is being held.
    fn ctrl_is_down(&self, input: &Input) -> bool {
       input.key_is_down(VirtualKeyCode::LControl) || input.key_is_down(VirtualKeyCode::RControl)
    }
 
+   /// Returns whether the Shift key is being held.
    fn shift_is_down(&self, input: &Input) -> bool {
       input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)
    }
 
-   fn skip_left(&mut self, condition: impl Fn(u8) -> bool, is_shift_down: bool) {
-      let bytes = self.text.as_bytes();
+   /// Moves the cursor to the left as long as the given condition is satisfied.
+   ///
+   /// The condition receives the current character under the cursor on each iteration.
+   fn skip_left(&mut self, condition: impl Fn(char) -> bool, is_shift_down: bool) {
       if self.selection.cursor() == 0 {
          return;
       }
-      while let Some(&c) = bytes.get(self.selection.cursor() - 1) {
+      while let Some(c) = self.text.get_char(self.selection.cursor() - 1) {
          if condition(c) {
             self.selection.move_left(&self.text, is_shift_down);
             if self.selection.cursor() == 0 {
@@ -235,12 +239,14 @@ impl TextField {
       }
    }
 
-   fn skip_right(&mut self, condition: impl Fn(u8) -> bool, is_shift_down: bool) {
-      let bytes = self.text.as_bytes();
+   /// Moves the cursor to the right as long as the given condition is satisfied.
+   ///
+   /// The condition receives the current character under the cursor on each iteration.
+   fn skip_right(&mut self, condition: impl Fn(char) -> bool, is_shift_down: bool) {
       if self.selection.cursor() >= self.text.len() {
          return;
       }
-      while let Some(&c) = bytes.get(self.selection.cursor()) {
+      while let Some(c) = self.text.get_char(self.selection.cursor()) {
          if condition(c) {
             self.selection.move_right(&self.text, is_shift_down);
             if self.selection.cursor() >= self.text.len() {
@@ -252,15 +258,16 @@ impl TextField {
       }
    }
 
+   /// Skips a word left or right.
    fn skip_word(&mut self, arrow_key: ArrowKey, is_shift_down: bool) {
       match arrow_key {
          ArrowKey::Left => {
-            self.skip_left(|c| c == b' ', is_shift_down);
-            self.skip_left(|c| c != b' ', is_shift_down);
+            self.skip_left(|c| c.is_whitespace(), is_shift_down);
+            self.skip_left(|c| !c.is_whitespace(), is_shift_down);
          }
          ArrowKey::Right => {
-            self.skip_right(|c| c == b' ', is_shift_down);
-            self.skip_right(|c| c != b' ', is_shift_down);
+            self.skip_right(|c| c.is_whitespace(), is_shift_down);
+            self.skip_right(|c| !c.is_whitespace(), is_shift_down);
          }
       }
    }
@@ -273,6 +280,7 @@ impl TextField {
             self.reset_blink(input);
          }
       }
+
       if self.focused {
          if !input.characters_typed().is_empty() {
             self.reset_blink(input);
@@ -296,11 +304,6 @@ impl TextField {
             } else if self.selection.cursor() < self.text.len() {
                self.selection.move_right(&self.text, self.shift_is_down(input));
             }
-         }
-
-         if input.key_just_typed(VirtualKeyCode::Delete) {
-            self.delete();
-            self.reset_blink(input);
          }
 
          if input.key_just_typed(VirtualKeyCode::Home) {
@@ -335,23 +338,27 @@ impl TextField {
             self.backspace();
          }
 
-         if self.ctrl_is_down(input) {
-            if input.key_just_typed(VirtualKeyCode::Back) {
+         if input.key_just_typed(VirtualKeyCode::Back) {
+            if self.ctrl_is_down(input) {
+               // Simulate the shift key being held down while moving to the word on the left, so as
+               // to select the word to the left and then backspace it.
                self.skip_word(ArrowKey::Left, true);
             }
+            self.backspace();
+         }
 
-            if input.key_just_typed(VirtualKeyCode::Delete) {
+         if input.key_just_typed(VirtualKeyCode::Delete) {
+            if self.ctrl_is_down(input) {
+               // Similar to backspace, simulate the shift key being held down, but this time
+               // while moving over to the right.
                self.skip_word(ArrowKey::Right, true);
-
-               self.delete();
             }
+            self.delete();
          }
 
          for ch in input.characters_typed() {
-            match *ch {
-               _ if !ch.is_control() => self.append(*ch),
-               Self::BACKSPACE => self.backspace(),
-               _ => (),
+            if !ch.is_control() {
+               self.append(*ch);
             }
          }
       }
@@ -437,6 +444,16 @@ impl TextPosition {
          }
       }
       self
+   }
+}
+
+trait GetChar {
+   fn get_char(&self, position: usize) -> Option<char>;
+}
+
+impl GetChar for String {
+   fn get_char(&self, position: usize) -> Option<char> {
+      self[position..].chars().next()
    }
 }
 
