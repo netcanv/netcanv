@@ -54,4 +54,4 @@ netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
 netcanv-protocol = { path = "netcanv-protocol" }
 
 [profile.release]
-lto = "thin"
+lto = "fat"
