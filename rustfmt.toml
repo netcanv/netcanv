@@ -2,3 +2,4 @@ tab_spaces = 3
 match_arm_leading_pipes = "Preserve"
 max_width = 100
 chain_width = 100
+imports_granularity = "Module"
