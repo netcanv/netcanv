@@ -215,8 +215,9 @@ impl State {
    }
 
    /// Processes the paint canvas.
-   fn process_canvas(&mut self, ui: &mut Ui, input: &Input) {
+   fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
       ui.push((ui.width(), ui.height() - Self::BAR_SIZE), Layout::Freeform);
+      input.set_mouse_area(mouse_areas::CANVAS, ui.has_mouse(input));
       let canvas_size = ui.size();
 
       //
@@ -355,6 +356,7 @@ impl State {
       // }
 
       ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
+      input.set_mouse_area(mouse_areas::BOTTOM_BAR, ui.has_mouse(input));
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
 
@@ -472,8 +474,6 @@ impl State {
       ui.pop();
 
       ui.pop();
-
-      input.unlock_mouse_buttons();
    }
 
    fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
@@ -601,4 +601,10 @@ impl AppState for State {
          self
       }
    }
+}
+
+mod mouse_areas {
+   pub const CANVAS: u32 = 0;
+   pub const BOTTOM_BAR: u32 = 1;
+   pub const TOOLBAR: u32 = 2;
 }

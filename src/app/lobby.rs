@@ -387,6 +387,9 @@ impl AppState for State {
    fn process(&mut self, StateArgs { ui, input }: StateArgs) {
       ui.clear(self.assets.colors.panel);
 
+      // The lobby does not use mouse areas.
+      input.set_mouse_area(0, true);
+
       if let Some(peer) = &mut self.peer {
          catch!(peer.communicate());
       }
