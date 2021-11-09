@@ -26,7 +26,7 @@ use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
-use self::tools::Tool;
+use self::tools::{Tool, ToolArgs};
 
 /// The current mode of painting.
 ///
@@ -251,7 +251,15 @@ impl State {
       // Drawing
 
       self.with_current_tool(|p, tool| {
-         tool.process_paint_canvas_input(ui, input, &mut p.paint_canvas, &p.viewport)
+         tool.process_paint_canvas_input(
+            ToolArgs {
+               ui,
+               input,
+               assets: &p.assets,
+            },
+            &mut p.paint_canvas,
+            &p.viewport,
+         )
       });
 
       //
@@ -290,7 +298,14 @@ impl State {
          }
 
          self.with_current_tool(|p, tool| {
-            tool.process_paint_canvas_overlays(ui, input, &p.viewport);
+            tool.process_paint_canvas_overlays(
+               ToolArgs {
+                  ui,
+                  input,
+                  assets: &p.assets,
+               },
+               &p.viewport,
+            );
          });
 
          ui.render().pop();
@@ -360,61 +375,15 @@ impl State {
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
 
-      // Color palette
+      // Tool
 
-      // for &color in COLOR_PALETTE {
-      //    ui.push((16.0, ui.height()), Layout::Freeform);
-      //    let y_offset = ui.height()
-      //       * if self.paint_color == color {
-      //          0.5
-      //       } else if ui.has_mouse(&input) {
-      //          0.7
-      //       } else {
-      //          0.8
-      //       };
-      //    let y_offset = y_offset.round();
-      //    if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-      //       self.paint_color = color.clone();
-      //    }
-      //    ui.draw(|ui| {
-      //       let rect = Rect::new(point(0.0, y_offset), ui.size());
-      //       ui.render().fill(rect, color, 4.0);
-      //    });
-      //    ui.pop();
-      // }
-      // ui.space(16.0);
-
-      // // Brush size
-
-      // ui.push((80.0, ui.height()), Layout::Freeform);
-      // ui.text(
-      //    &self.assets.sans,
-      //    "Brush size",
-      //    self.assets.colors.text,
-      //    (AlignH::Center, AlignV::Middle),
-      // );
-      // ui.pop();
-
-      // ui.space(8.0);
-      // self.brush_size_slider.process(
-      //    ui,
-      //    input,
-      //    SliderArgs {
-      //       width: 192.0,
-      //       color: self.assets.colors.slider,
-      //    },
-      // );
-      // ui.space(8.0);
-
-      // let brush_size_string = self.brush_size_slider.value().to_string();
-      // ui.push((ui.height(), ui.height()), Layout::Freeform);
-      // ui.text(
-      //    &self.assets.sans,
-      //    &brush_size_string,
-      //    self.assets.colors.text,
-      //    (AlignH::Center, AlignV::Middle),
-      // );
-      // ui.pop();
+      self.with_current_tool(|p, tool| {
+         tool.process_bottom_bar(ToolArgs {
+            ui,
+            input,
+            assets: &p.assets,
+         });
+      });
 
       //
       // Right side
