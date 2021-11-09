@@ -32,6 +32,7 @@ pub struct Brush {
 }
 
 impl Brush {
+   /// Creates an instance of the brush tool.
    pub fn new() -> Self {
       Self {
          icon: Assets::load_icon(include_bytes!("../../../assets/icons/brush.svg")),
@@ -42,6 +43,7 @@ impl Brush {
       }
    }
 
+   /// Returns the brush thickness.
    fn thickness(&self) -> f32 {
       self.thickness_slider.value()
    }
@@ -150,12 +152,12 @@ impl Tool for Brush {
       }
       ui.space(16.0);
 
-      // Draw the brush size: its slider and value display.
+      // Draw the thickness: its slider and value display.
 
       ui.push((80.0, ui.height()), Layout::Freeform);
       ui.text(
          &assets.sans,
-         "Brush size",
+         "Thickness",
          assets.colors.text,
          (AlignH::Center, AlignV::Middle),
       );
