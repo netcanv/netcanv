@@ -1,3 +1,7 @@
+//! The paint state. This is the screen where you paint on the canvas with other people.
+
+mod tools;
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -19,6 +23,8 @@ use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
+
+use self::tools::Tool;
 
 /// The current mode of painting.
 ///
@@ -62,14 +68,11 @@ pub struct State {
    config: UserConfig,
 
    paint_canvas: PaintCanvas,
+   tools: Vec<Box<dyn Tool>>,
+   current_tool: usize,
+
    peer: Peer,
    update_timer: Timer,
-
-   paint_mode: PaintMode,
-   paint_color: Color,
-   brush_size_slider: Slider,
-   stroke_buffer: Vec<StrokePoint>,
-
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
 
    load_from_file: Option<PathBuf>,
@@ -83,20 +86,6 @@ pub struct State {
    panning: bool,
    viewport: Viewport,
 }
-
-/// The palette of colors at the bottom of the screen.
-#[rustfmt::skip]
-const COLOR_PALETTE: &'static [Color] = &[
-   Color::rgb(0x100820), // black
-   Color::rgb(0xff003e), // red
-   Color::rgb(0xff7b00), // orange
-   Color::rgb(0xffff00), // yellow
-   Color::rgb(0x2dd70e), // green
-   Color::rgb(0x03cbfb), // aqua
-   Color::rgb(0x0868eb), // blue
-   Color::rgb(0xa315d7), // purple
-   Color::rgb(0xffffff), // white
-];
 
 macro_rules! log {
     ($log:expr, $($arg:tt)*) => {
@@ -119,14 +108,11 @@ impl State {
          config,
 
          paint_canvas: PaintCanvas::new(),
+         tools: Vec::new(),
+         current_tool: 0,
+
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
-
-         paint_mode: PaintMode::None,
-         paint_color: COLOR_PALETTE[0],
-         brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
-         stroke_buffer: Vec::new(),
-
          chunk_downloads: HashMap::new(),
 
          load_from_file: image_path,
@@ -144,6 +130,9 @@ impl State {
          panning: false,
          viewport: Viewport::new(),
       };
+
+      this.tools.push(Box::new(tools::Brush::new()));
+
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
          log!(
@@ -151,6 +140,7 @@ impl State {
             "To invite friends, send them the room ID shown in the bottom right corner of your screen."
          );
       }
+
       this
    }
 
@@ -220,46 +210,46 @@ impl State {
 
       // Drawing
 
-      if ui.has_mouse(input) {
-         if input.mouse_button_just_pressed(MouseButton::Left) {
-            self.paint_mode = PaintMode::Paint;
-         } else if input.mouse_button_just_pressed(MouseButton::Right) {
-            self.paint_mode = PaintMode::Erase;
-         }
-      }
-      if input.mouse_button_just_released(MouseButton::Left)
-         || input.mouse_button_just_released(MouseButton::Right)
-      {
-         self.paint_mode = PaintMode::None;
-      }
+      // if ui.has_mouse(input) {
+      //    if input.mouse_button_just_pressed(MouseButton::Left) {
+      //       self.paint_mode = PaintMode::Paint;
+      //    } else if input.mouse_button_just_pressed(MouseButton::Right) {
+      //       self.paint_mode = PaintMode::Erase;
+      //    }
+      // }
+      // if input.mouse_button_just_released(MouseButton::Left)
+      //    || input.mouse_button_just_released(MouseButton::Right)
+      // {
+      //    self.paint_mode = PaintMode::None;
+      // }
 
-      let brush_size = self.brush_size_slider.value();
-      let from = self.viewport.to_viewport_space(input.previous_mouse_position(), canvas_size);
-      let mouse_position = input.mouse_position();
-      let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
-      loop {
-         // Give me back my labelled blocks.
-         let brush = match self.paint_mode {
-            PaintMode::None => break,
-            PaintMode::Paint => Brush::Draw {
-               color: self.paint_color.clone(),
-               stroke_width: brush_size,
-            },
-            PaintMode::Erase => Brush::Erase {
-               stroke_width: brush_size,
-            },
-         };
-         self.paint_canvas.stroke(ui.render(), from, to, &brush);
-         if self.stroke_buffer.is_empty() {
-            self.stroke_buffer.push(StrokePoint {
-               point: from,
-               brush: brush.clone(),
-            });
-         } else if to != self.stroke_buffer.last().unwrap().point {
-            self.stroke_buffer.push(StrokePoint { point: to, brush });
-         }
-         break;
-      }
+      // let brush_size = self.brush_size_slider.value();
+      // let from = self.viewport.to_viewport_space(input.previous_mouse_position(), canvas_size);
+      // let mouse_position = input.mouse_position();
+      // let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
+      // loop {
+      //    // Give me back my labelled blocks.
+      //    let brush = match self.paint_mode {
+      //       PaintMode::None => break,
+      //       PaintMode::Paint => Brush::Draw {
+      //          color: self.paint_color.clone(),
+      //          stroke_width: brush_size,
+      //       },
+      //       PaintMode::Erase => Brush::Erase {
+      //          stroke_width: brush_size,
+      //       },
+      //    };
+      //    self.paint_canvas.stroke(ui.render(), from, to, &brush);
+      //    if self.stroke_buffer.is_empty() {
+      //       self.stroke_buffer.push(StrokePoint {
+      //          point: from,
+      //          brush: brush.clone(),
+      //       });
+      //    } else if to != self.stroke_buffer.last().unwrap().point {
+      //       self.stroke_buffer.push(StrokePoint { point: to, brush });
+      //    }
+      //    break;
+      // }
 
       // Panning and zooming
 
@@ -321,8 +311,8 @@ impl State {
             ui.render().outline_circle(cursor, brush_radius, color, 1.0);
          }
 
-         let zoomed_brush_size = brush_size * self.viewport.zoom();
-         ui.render().outline_circle(mouse_position, zoomed_brush_size * 0.5, color, 1.0);
+         // let zoomed_brush_size = brush_size * self.viewport.zoom();
+         // ui.render().outline_circle(mouse_position, zoomed_brush_size * 0.5, color, 1.0);
          ui.render().pop();
       });
       if self.tip.created.elapsed() < self.tip.visible_duration {
@@ -350,12 +340,12 @@ impl State {
 
       for _ in self.update_timer.tick() {
          // Mouse / drawing
-         if input.previous_mouse_position() != input.mouse_position() {
-            catch!(self.peer.send_cursor(to, brush_size));
-         }
-         if !self.stroke_buffer.is_empty() {
-            catch!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
-         }
+         // if input.previous_mouse_position() != input.mouse_position() {
+         //    catch!(self.peer.send_cursor(to, brush_size));
+         // }
+         // if !self.stroke_buffer.is_empty() {
+         //    catch!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
+         // }
          // Chunk downloading
          if self.save_to_file.is_some() {
             // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
@@ -381,9 +371,9 @@ impl State {
 
    /// Processes the bottom bar.
    fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
-      if self.paint_mode != PaintMode::None {
-         input.lock_mouse_buttons();
-      }
+      // if self.paint_mode != PaintMode::None {
+      //    input.lock_mouse_buttons();
+      // }
 
       ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
       ui.fill(self.assets.colors.panel);
@@ -391,59 +381,59 @@ impl State {
 
       // Color palette
 
-      for &color in COLOR_PALETTE {
-         ui.push((16.0, ui.height()), Layout::Freeform);
-         let y_offset = ui.height()
-            * if self.paint_color == color {
-               0.5
-            } else if ui.has_mouse(&input) {
-               0.7
-            } else {
-               0.8
-            };
-         let y_offset = y_offset.round();
-         if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-            self.paint_color = color.clone();
-         }
-         ui.draw(|ui| {
-            let rect = Rect::new(point(0.0, y_offset), ui.size());
-            ui.render().fill(rect, color, 4.0);
-         });
-         ui.pop();
-      }
-      ui.space(16.0);
+      // for &color in COLOR_PALETTE {
+      //    ui.push((16.0, ui.height()), Layout::Freeform);
+      //    let y_offset = ui.height()
+      //       * if self.paint_color == color {
+      //          0.5
+      //       } else if ui.has_mouse(&input) {
+      //          0.7
+      //       } else {
+      //          0.8
+      //       };
+      //    let y_offset = y_offset.round();
+      //    if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
+      //       self.paint_color = color.clone();
+      //    }
+      //    ui.draw(|ui| {
+      //       let rect = Rect::new(point(0.0, y_offset), ui.size());
+      //       ui.render().fill(rect, color, 4.0);
+      //    });
+      //    ui.pop();
+      // }
+      // ui.space(16.0);
 
-      // Brush size
+      // // Brush size
 
-      ui.push((80.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         "Brush size",
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
+      // ui.push((80.0, ui.height()), Layout::Freeform);
+      // ui.text(
+      //    &self.assets.sans,
+      //    "Brush size",
+      //    self.assets.colors.text,
+      //    (AlignH::Center, AlignV::Middle),
+      // );
+      // ui.pop();
 
-      ui.space(8.0);
-      self.brush_size_slider.process(
-         ui,
-         input,
-         SliderArgs {
-            width: 192.0,
-            color: self.assets.colors.slider,
-         },
-      );
-      ui.space(8.0);
+      // ui.space(8.0);
+      // self.brush_size_slider.process(
+      //    ui,
+      //    input,
+      //    SliderArgs {
+      //       width: 192.0,
+      //       color: self.assets.colors.slider,
+      //    },
+      // );
+      // ui.space(8.0);
 
-      let brush_size_string = self.brush_size_slider.value().to_string();
-      ui.push((ui.height(), ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         &brush_size_string,
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
+      // let brush_size_string = self.brush_size_slider.value().to_string();
+      // ui.push((ui.height(), ui.height()), Layout::Freeform);
+      // ui.text(
+      //    &self.assets.sans,
+      //    &brush_size_string,
+      //    self.assets.colors.text,
+      //    (AlignH::Center, AlignV::Middle),
+      // );
+      // ui.pop();
 
       //
       // Right side

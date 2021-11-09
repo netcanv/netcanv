@@ -71,7 +71,7 @@ pub struct Assets {
 
 impl Assets {
    /// Loads an icon from an SVG file.
-   fn load_icon(data: &[u8]) -> Image {
+   pub fn load_icon(data: &[u8]) -> Image {
       use usvg::{FitTo, NodeKind, Tree};
 
       let tree =
