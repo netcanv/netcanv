@@ -2,9 +2,11 @@
 
 mod tools;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
@@ -68,7 +70,7 @@ pub struct State {
    config: UserConfig,
 
    paint_canvas: PaintCanvas,
-   tools: Vec<Box<dyn Tool>>,
+   tools: Rc<RefCell<Vec<Box<dyn Tool>>>>,
    current_tool: usize,
 
    peer: Peer,
@@ -108,7 +110,7 @@ impl State {
          config,
 
          paint_canvas: PaintCanvas::new(),
-         tools: Vec::new(),
+         tools: Rc::new(RefCell::new(Vec::new())),
          current_tool: 0,
 
          peer,
@@ -130,8 +132,7 @@ impl State {
          panning: false,
          viewport: Viewport::new(),
       };
-
-      this.tools.push(Box::new(tools::Brush::new()));
+      this.register_tools();
 
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
@@ -142,6 +143,20 @@ impl State {
       }
 
       this
+   }
+
+   /// Registers all the tools.
+   fn register_tools(&mut self) {
+      let mut tools = self.tools.borrow_mut();
+      tools.push(Box::new(tools::Brush::new()));
+   }
+
+   /// Executes the given callback with the currently selected tool.
+   fn with_current_tool(&mut self, mut callback: impl FnMut(&mut Self, &mut Box<dyn Tool>)) {
+      let tools = Rc::clone(&self.tools);
+      let mut tools = tools.borrow_mut();
+      let tool = &mut tools[self.current_tool];
+      callback(self, tool);
    }
 
    /// Requests a chunk download from the host.
@@ -210,46 +225,9 @@ impl State {
 
       // Drawing
 
-      // if ui.has_mouse(input) {
-      //    if input.mouse_button_just_pressed(MouseButton::Left) {
-      //       self.paint_mode = PaintMode::Paint;
-      //    } else if input.mouse_button_just_pressed(MouseButton::Right) {
-      //       self.paint_mode = PaintMode::Erase;
-      //    }
-      // }
-      // if input.mouse_button_just_released(MouseButton::Left)
-      //    || input.mouse_button_just_released(MouseButton::Right)
-      // {
-      //    self.paint_mode = PaintMode::None;
-      // }
-
-      // let brush_size = self.brush_size_slider.value();
-      // let from = self.viewport.to_viewport_space(input.previous_mouse_position(), canvas_size);
-      // let mouse_position = input.mouse_position();
-      // let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
-      // loop {
-      //    // Give me back my labelled blocks.
-      //    let brush = match self.paint_mode {
-      //       PaintMode::None => break,
-      //       PaintMode::Paint => Brush::Draw {
-      //          color: self.paint_color.clone(),
-      //          stroke_width: brush_size,
-      //       },
-      //       PaintMode::Erase => Brush::Erase {
-      //          stroke_width: brush_size,
-      //       },
-      //    };
-      //    self.paint_canvas.stroke(ui.render(), from, to, &brush);
-      //    if self.stroke_buffer.is_empty() {
-      //       self.stroke_buffer.push(StrokePoint {
-      //          point: from,
-      //          brush: brush.clone(),
-      //       });
-      //    } else if to != self.stroke_buffer.last().unwrap().point {
-      //       self.stroke_buffer.push(StrokePoint { point: to, brush });
-      //    }
-      //    break;
-      // }
+      self.with_current_tool(|p, tool| {
+         tool.process_paint_canvas_input(ui, input, &mut p.paint_canvas, &p.viewport)
+      });
 
       // Panning and zooming
 
@@ -279,7 +257,6 @@ impl State {
       // Rendering
       //
 
-      let paint_canvas = &self.paint_canvas;
       ui.draw(|ui| {
          ui.render().push();
          let Vector {
@@ -289,7 +266,7 @@ impl State {
          ui.render().translate(vector(width / 2.0, height / 2.0));
          ui.render().scale(vector(self.viewport.zoom(), self.viewport.zoom()));
          ui.render().translate(-self.viewport.pan());
-         paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
+         self.paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
          ui.render().pop();
 
          let color = Color::WHITE.with_alpha(240);
@@ -311,8 +288,10 @@ impl State {
             ui.render().outline_circle(cursor, brush_radius, color, 1.0);
          }
 
-         // let zoomed_brush_size = brush_size * self.viewport.zoom();
-         // ui.render().outline_circle(mouse_position, zoomed_brush_size * 0.5, color, 1.0);
+         self.with_current_tool(|p, tool| {
+            tool.process_paint_canvas_overlays(ui, input, &p.viewport);
+         });
+
          ui.render().pop();
       });
       if self.tip.created.elapsed() < self.tip.visible_duration {

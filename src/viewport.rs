@@ -86,15 +86,15 @@ impl Viewport {
    /// Converts a point from screen space to viewport space.
    ///
    /// This can be used to pick things on the canvas, given a mouse position.
-   pub fn to_viewport_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
-      (point.into() - window_size / 2.0) * (1.0 / self.zoom()) + self.pan
+   pub fn to_viewport_space(&self, point: Point, window_size: Vector) -> Point {
+      (point - window_size / 2.0) * (1.0 / self.zoom()) + self.pan
    }
 
    /// Converts a point from viewport space to screen space.
    ///
    /// This transformation is the inverse of [`Viewport::to_viewport_space`].
-   pub fn to_screen_space(&self, point: impl Into<Point>, window_size: Vector) -> Point {
-      (point.into() - self.pan) * self.zoom() + window_size / 2.0
+   pub fn to_screen_space(&self, point: Point, window_size: Vector) -> Point {
+      (point - self.pan) * self.zoom() + window_size / 2.0
    }
 }
 

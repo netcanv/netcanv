@@ -10,7 +10,7 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
-use netcanv_renderer::paws::{Color, LineCap, Point, Renderer, Vector};
+use netcanv_renderer::paws::{vector, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 
@@ -335,6 +335,41 @@ impl PaintCanvas {
    fn ensure_chunk_exists(&mut self, renderer: &mut Backend, position: (i32, i32)) {
       if !self.chunks.contains_key(&position) {
          self.chunks.insert(position, Chunk::new(renderer));
+      }
+   }
+
+   /// Draws to the paint canvas's chunks.
+   ///
+   /// The provided `coverage` rectangle is used to determine which chunks should be drawn to, and
+   /// thus should cover the entire area of the thing being drawn. Note that the coordinates here
+   /// are expressed in _pixels_ rather than _chunks_.
+   ///
+   /// The callback may be called multiple times, once for each chunk being drawn to.
+   pub fn draw(
+      &mut self,
+      renderer: &mut Backend,
+      coverage: Rect,
+      mut callback: impl FnMut(&mut Backend),
+   ) {
+      let left = (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32;
+      let top = (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32;
+      let bottom = (coverage.bottom() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32;
+      let right = (coverage.right() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32;
+      for y in top..=bottom {
+         for x in left..=right {
+            let master_chunk = (x, y);
+            self.ensure_chunk_exists(renderer, master_chunk);
+            let chunk = self.chunks.get_mut(&master_chunk).unwrap();
+            renderer.push();
+            renderer.translate(vector(
+               -x as f32 * Chunk::SURFACE_SIZE.0 as f32,
+               -y as f32 * Chunk::SURFACE_SIZE.0 as f32,
+            ));
+            renderer.draw_to(&chunk.framebuffer, |renderer| {
+               callback(renderer);
+            });
+            renderer.pop();
+         }
       }
    }
 

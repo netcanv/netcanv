@@ -20,13 +20,21 @@ pub use textfield::*;
 pub type Ui = paws::Ui<Backend>;
 
 pub trait UiInput {
+   /// Returns the mouse position relative to the current group.
    fn mouse_position(&self, input: &Input) -> Point;
+   /// Returns the previous mouse position relative to the current group.
+   fn previous_mouse_position(&self, input: &Input) -> Point;
+   /// Returns whether the mouse position is in the current group's rectangle.
    fn has_mouse(&self, input: &Input) -> bool;
 }
 
 impl UiInput for Ui {
    fn mouse_position(&self, input: &Input) -> Point {
       input.mouse_position() - self.position()
+   }
+
+   fn previous_mouse_position(&self, input: &Input) -> Point {
+      input.previous_mouse_position() - self.position()
    }
 
    fn has_mouse(&self, input: &Input) -> bool {
