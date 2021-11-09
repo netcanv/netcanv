@@ -223,12 +223,6 @@ impl State {
       // Input
       //
 
-      // Drawing
-
-      self.with_current_tool(|p, tool| {
-         tool.process_paint_canvas_input(ui, input, &mut p.paint_canvas, &p.viewport)
-      });
-
       // Panning and zooming
 
       if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
@@ -252,6 +246,12 @@ impl State {
             Duration::from_secs(3),
          );
       }
+
+      // Drawing
+
+      self.with_current_tool(|p, tool| {
+         tool.process_paint_canvas_input(ui, input, &mut p.paint_canvas, &p.viewport)
+      });
 
       //
       // Rendering
