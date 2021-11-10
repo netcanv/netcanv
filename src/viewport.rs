@@ -46,9 +46,6 @@ impl Viewport {
    /// Pans the viewport around by the given vector.
    pub fn pan_around(&mut self, by: Vector) {
       self.pan += by * (1.0 / self.zoom());
-      if self.zoom_level == 0.0 {
-         self.pan = vector(self.pan.x.round(), self.pan.y.round());
-      }
    }
 
    /// Zooms in or out of the viewport by the given delta.

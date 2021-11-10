@@ -1,9 +1,10 @@
 use netcanv_renderer::paws::{point, vector, Color, Layout, Point, Rect, Renderer, Vector};
-use netcanv_renderer::Font as FontTrait;
+use netcanv_renderer::{Font as FontTrait, RenderBackend};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
-use crate::backend::{Font, Image};
+use crate::backend::{Backend, Font, Image};
+use crate::common::VectorMath;
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -26,6 +27,8 @@ pub struct Selection {
 
 impl Selection {
    const MAX_SIZE: f32 = 1024.0;
+   const COLOR: Color = Color::rgb(0x0397fb);
+   const HANDLE_RADIUS: f32 = 4.0;
 
    pub fn new() -> Self {
       Self {
@@ -51,8 +54,8 @@ impl Selection {
          let rect = Rect::new(
             rect.position,
             vector(
-               rect.width().abs().min(Self::MAX_SIZE) * rect.width().signum(),
-               rect.height().abs().min(Self::MAX_SIZE) * rect.height().signum(),
+               rect.width().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
+               rect.height().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
             ),
          );
          let rect = rect.sort();
@@ -62,6 +65,11 @@ impl Selection {
          );
          rect
       })
+   }
+
+   fn draw_handle(renderer: &mut Backend, position: Point) {
+      renderer.fill_circle(position, Self::HANDLE_RADIUS + 2.0, Color::WHITE);
+      renderer.fill_circle(position, Self::HANDLE_RADIUS, Self::COLOR);
    }
 }
 
@@ -111,18 +119,20 @@ impl Tool for Selection {
       }
    }
 
-   fn process_paint_canvas_overlays(
-      &mut self,
-      ToolArgs { ui, input, .. }: ToolArgs,
-      viewport: &Viewport,
-   ) {
+   fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
       if let Some(rect) = self.selection() {
          ui.draw(|ui| {
-            let top_left = viewport.to_screen_space(rect.top_left(), ui.size());
-            let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size());
+            let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).round();
+            let top_right = viewport.to_screen_space(rect.top_right(), ui.size()).round();
+            let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size()).round();
+            let bottom_left = viewport.to_screen_space(rect.bottom_left(), ui.size()).round();
             let rect = Rect::new(top_left, bottom_right - top_left);
             let renderer = ui.render();
-            renderer.outline(rect, Color::rgb(0x1945a1), 0.0, 2.0);
+            renderer.outline(rect, Self::COLOR, 0.0, 2.0);
+            Self::draw_handle(renderer, top_left);
+            Self::draw_handle(renderer, top_right);
+            Self::draw_handle(renderer, bottom_right);
+            Self::draw_handle(renderer, bottom_left);
          });
       }
    }

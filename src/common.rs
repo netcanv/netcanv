@@ -1,6 +1,6 @@
 //! Various assorted utilities.
 
-use netcanv_renderer::paws::Point;
+use netcanv_renderer::paws::{point, vector, Point, Vector};
 
 //
 // Math
@@ -17,10 +17,18 @@ pub fn lerp(v0: f32, v1: f32, t: f32) -> f32 {
 }
 
 /// Performs linear interpolation between two points.
-pub fn lerp_point(p0: impl Into<Point>, p1: impl Into<Point>, t: f32) -> Point {
-   let p0 = p0.into();
-   let p1 = p1.into();
-   Point::new(lerp(p0.x, p1.x, t), lerp(p0.y, p1.y, t))
+pub fn lerp_point(p0: Point, p1: Point, t: f32) -> Point {
+   point(lerp(p0.x, p1.x, t), lerp(p0.y, p1.y, t))
+}
+
+pub trait VectorMath {
+   fn round(self) -> Self;
+}
+
+impl VectorMath for Vector {
+   fn round(self) -> Self {
+      vector(self.x.round(), self.y.round())
+   }
 }
 
 //
