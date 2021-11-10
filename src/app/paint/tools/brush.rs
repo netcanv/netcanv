@@ -49,6 +49,26 @@ impl Brush {
    fn thickness(&self) -> f32 {
       self.thickness_slider.value()
    }
+
+   /// Returns the coverage rectangle for the provided point.
+   fn point_coverage(&self, p: Point) -> Rect {
+      let half_thickness = self.thickness() / 2.0;
+      Rect::new(
+         point(p.x - half_thickness, p.y - half_thickness),
+         vector(self.thickness(), self.thickness()),
+      )
+   }
+
+   /// Returns the coverage rectangle for the two points.
+   fn coverage(&self, a: Point, b: Point) -> Rect {
+      let a_coverage = self.point_coverage(a);
+      let b_coverage = self.point_coverage(b);
+      let left = a_coverage.left().min(b_coverage.left());
+      let top = a_coverage.top().min(b_coverage.top());
+      let right = a_coverage.right().max(b_coverage.right());
+      let bottom = a_coverage.bottom().max(b_coverage.bottom());
+      Rect::new(point(left, top), vector(right - left, bottom - top))
+   }
 }
 
 impl Tool for Brush {
@@ -89,8 +109,7 @@ impl Tool for Brush {
          viewport.to_viewport_space(b, ui.size()),
       );
       if self.state != BrushState::Idle {
-         let thickness = vector(self.thickness(), self.thickness());
-         let coverage = Rect::new(a - thickness, b - a + thickness * 2.0).sort();
+         let coverage = self.coverage(a, b);
          paint_canvas.draw(ui, coverage, |renderer| {
             renderer.set_blend_mode(match self.state {
                BrushState::Idle => unreachable!(),
@@ -179,10 +198,10 @@ impl Tool for Brush {
             let renderer = ui.render();
             let rect = Rect::new(point(x, -size - 8.0), vector(size, size));
             renderer.fill(rect, assets.colors.panel, 8.0);
-            renderer.outline(
-               Rect::centered_at(rect.center(), vector(self.thickness(), self.thickness())),
-               assets.colors.text,
+            renderer.outline_circle(
+               rect.center(),
                self.thickness() / 2.0,
+               assets.colors.text,
                1.0,
             );
          });
