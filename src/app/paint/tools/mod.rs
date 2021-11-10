@@ -21,6 +21,12 @@ pub trait Tool {
    /// Returns the icon this tool uses.
    fn icon(&self) -> &Image;
 
+   /// Called when the tool is selected.
+   fn activate(&mut self) {}
+
+   /// Called when the tool is deselected.
+   fn deactivate(&mut self) {}
+
    /// Called before the paint canvas is rendered to the screen. Primarily used for drawing to the
    /// paint canvas, or updating related state.
    ///

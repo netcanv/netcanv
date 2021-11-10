@@ -456,7 +456,10 @@ impl State {
       ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
       ui.pad(4.0);
 
-      let tools = self.tools.borrow();
+      let mut tools = self.tools.borrow_mut();
+
+      let previous_tool = self.current_tool;
+      let mut selected_tool = None;
       for (i, tool) in tools.iter().enumerate() {
          ui.push((tool_size, tool_size), Layout::Freeform);
          if Button::with_icon(
@@ -476,9 +479,15 @@ impl State {
          .clicked()
          {
             self.current_tool = i;
+            selected_tool = Some(i);
          }
          ui.pop();
          ui.space(4.0);
+      }
+
+      if let Some(selected_tool) = selected_tool {
+         tools[previous_tool].deactivate();
+         tools[selected_tool].activate();
       }
 
       ui.pop();

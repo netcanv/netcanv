@@ -22,12 +22,12 @@ pub fn lerp_point(p0: Point, p1: Point, t: f32) -> Point {
 }
 
 pub trait VectorMath {
-   fn round(self) -> Self;
+   fn floor(self) -> Self;
 }
 
 impl VectorMath for Vector {
-   fn round(self) -> Self {
-      vector(self.x.round(), self.y.round())
+   fn floor(self) -> Self {
+      vector(self.x.floor(), self.y.floor())
    }
 }
 

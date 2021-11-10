@@ -67,6 +67,7 @@ impl Selection {
       })
    }
 
+   /// Draws a resize handle.
    fn draw_handle(renderer: &mut Backend, position: Point) {
       renderer.fill_circle(position, Self::HANDLE_RADIUS + 2.0, Color::WHITE);
       renderer.fill_circle(position, Self::HANDLE_RADIUS, Self::COLOR);
@@ -80,6 +81,10 @@ impl Tool for Selection {
 
    fn icon(&self) -> &Image {
       &self.icons.tool
+   }
+
+   fn deactivate(&mut self) {
+      self.selection = None;
    }
 
    fn process_paint_canvas_input(
@@ -102,9 +107,9 @@ impl Tool for Selection {
       }
       if input.mouse_button_just_released(MouseButton::Left) {
          self.selecting = false;
-         // After the button is released and the selection's size is 0, deselect.
+         // After the button is released and the selection's size is close to 0, deselect.
          if let Some(rect) = self.selection {
-            if rect.width().abs() < 1.0 || rect.height().abs() < 1.0 {
+            if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
                self.selection = None;
             }
          }
@@ -121,19 +126,21 @@ impl Tool for Selection {
 
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
       if let Some(rect) = self.selection() {
-         ui.draw(|ui| {
-            let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).round();
-            let top_right = viewport.to_screen_space(rect.top_right(), ui.size()).round();
-            let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size()).round();
-            let bottom_left = viewport.to_screen_space(rect.bottom_left(), ui.size()).round();
-            let rect = Rect::new(top_left, bottom_right - top_left);
-            let renderer = ui.render();
-            renderer.outline(rect, Self::COLOR, 0.0, 2.0);
-            Self::draw_handle(renderer, top_left);
-            Self::draw_handle(renderer, top_right);
-            Self::draw_handle(renderer, bottom_right);
-            Self::draw_handle(renderer, bottom_left);
-         });
+         if rect.width() * rect.height() > 0.1 {
+            ui.draw(|ui| {
+               let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
+               let top_right = viewport.to_screen_space(rect.top_right(), ui.size()).floor();
+               let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size()).floor();
+               let bottom_left = viewport.to_screen_space(rect.bottom_left(), ui.size()).floor();
+               let rect = Rect::new(top_left, bottom_right - top_left);
+               let renderer = ui.render();
+               renderer.outline(rect, Self::COLOR, 0.0, 2.0);
+               Self::draw_handle(renderer, top_left);
+               Self::draw_handle(renderer, top_right);
+               Self::draw_handle(renderer, bottom_right);
+               Self::draw_handle(renderer, bottom_left);
+            });
+         }
       }
    }
 
