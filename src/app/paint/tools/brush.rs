@@ -9,7 +9,7 @@ use winit::event::MouseButton;
 use crate::assets::Assets;
 use crate::backend::Image;
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{Input, Slider, SliderArgs, SliderStep, Ui, UiInput};
+use crate::ui::{Input, Slider, SliderArgs, SliderStep, Ui, UiElements, UiInput};
 use crate::viewport::Viewport;
 
 use super::{Tool, ToolArgs};
@@ -32,12 +32,14 @@ pub struct Brush {
 }
 
 impl Brush {
+   const MAX_THICKNESS: f32 = 64.0;
+
    /// Creates an instance of the brush tool.
    pub fn new() -> Self {
       Self {
          icon: Assets::load_icon(include_bytes!("../../../assets/icons/brush.svg")),
          state: BrushState::Idle,
-         thickness_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
+         thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
          color: COLOR_PALETTE[0],
          position: point(0.0, 0.0),
       }
@@ -107,23 +109,25 @@ impl Tool for Brush {
       ToolArgs { ui, input, .. }: ToolArgs,
       viewport: &Viewport,
    ) {
-      // Draw the guide circle.
-      let position = viewport.to_screen_space(self.position, ui.size());
-      let renderer = ui.render();
-      renderer.push();
-      // The circle is drawn with the Invert blend mode, such that it's visible on all
-      // (well, most) backgrounds.
-      // This doesn't work on 50% gray but this is the best we can do.
-      renderer.set_blend_mode(BlendMode::Invert);
-      let thickness = self.thickness() * viewport.zoom();
-      let thickness_offset = vector(thickness, thickness) / 2.0;
-      renderer.outline(
-         Rect::new(position - thickness_offset, thickness_offset * 2.0),
-         Color::WHITE.with_alpha(240),
-         thickness / 2.0,
-         1.0,
-      );
-      renderer.pop();
+      if input.mouse_active() {
+         // Draw the guide circle.
+         let position = viewport.to_screen_space(self.position, ui.size());
+         let renderer = ui.render();
+         renderer.push();
+         // The circle is drawn with the Invert blend mode, such that it's visible on all
+         // (well, most) backgrounds.
+         // This doesn't work on 50% gray but this is the best we can do.
+         renderer.set_blend_mode(BlendMode::Invert);
+         let thickness = self.thickness() * viewport.zoom();
+         let thickness_offset = vector(thickness, thickness) / 2.0;
+         renderer.outline(
+            Rect::new(position - thickness_offset, thickness_offset * 2.0),
+            Color::WHITE.with_alpha(240),
+            thickness / 2.0,
+            1.0,
+         );
+         renderer.pop();
+      }
    }
 
    /// Processes the color picker and brush size slider on the bottom bar.
@@ -154,35 +158,42 @@ impl Tool for Brush {
 
       // Draw the thickness: its slider and value display.
 
-      ui.push((80.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &assets.sans,
-         "Thickness",
-         assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
-
-      ui.space(8.0);
+      ui.label(&assets.sans, "Thickness", assets.colors.text, None);
+      ui.space(16.0);
+      ui.push((192.0, ui.height()), Layout::Freeform);
       self.thickness_slider.process(
          ui,
          input,
          SliderArgs {
-            width: 192.0,
+            width: ui.width(),
             color: assets.colors.slider,
          },
       );
-      ui.space(8.0);
-
-      let brush_size_string = self.thickness().to_string();
-      ui.push((ui.height(), ui.height()), Layout::Freeform);
-      ui.text(
-         &assets.sans,
-         &brush_size_string,
-         assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
+      // Draw the size indicator above the slider.
+      if self.thickness_slider.is_sliding() {
+         ui.draw(|ui| {
+            let size =
+               (self.thickness() + (self.thickness() / Self::MAX_THICKNESS * 8.0 + 8.0)).max(32.0);
+            let x = self.thickness_slider.raw_value() * ui.width() - size / 2.0;
+            let renderer = ui.render();
+            let rect = Rect::new(point(x, -size - 8.0), vector(size, size));
+            renderer.fill(rect, assets.colors.panel, 8.0);
+            renderer.outline(
+               Rect::centered_at(rect.center(), vector(self.thickness(), self.thickness())),
+               assets.colors.text,
+               self.thickness() / 2.0,
+               1.0,
+            );
+         });
+      }
       ui.pop();
+      ui.space(8.0);
+      ui.label(
+         &assets.sans_bold,
+         &self.thickness().to_string(),
+         assets.colors.text,
+         Some(ui.height()),
+      );
    }
 }
 

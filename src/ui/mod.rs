@@ -48,7 +48,13 @@ impl UiInput for Ui {
 }
 
 pub trait UiElements {
+   /// Draws a colorized image centered in a new group.
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
+   /// Draws text in a new group.
+   ///
+   /// Intended for use with horizontal layouts. Will not work all that well with vertical.
+   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
+   /// Draws a paragraph of text. Each string in `text` is treated as a new group.
    fn paragraph(
       &mut self,
       font: &Font,
@@ -67,6 +73,13 @@ impl UiElements for Ui {
          self.position() + size / 2.0 - vector(image.width() as f32, image.height() as f32) / 2.0;
       self.push(size, Layout::Freeform);
       self.render().image(position, &icon);
+      self.pop();
+   }
+
+   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
+      let width = width.unwrap_or_else(|| font.text_width(text));
+      self.push((width, self.height()), Layout::Freeform);
+      self.text(font, text, color, (AlignH::Center, AlignV::Middle));
       self.pop();
    }
 

@@ -98,12 +98,22 @@ impl Slider {
       ui.pop();
    }
 
-   /// Returns the slider's value.
+   /// Returns the slider's raw (normalized – unmapped) value (range [0.0; 1.0]).
+   pub fn raw_value(&self) -> f32 {
+      self.value
+   }
+
+   /// Returns the slider's value (mapped; range [min; max]).
    pub fn value(&self) -> f32 {
       let raw = (self.value * (self.max - self.min)) + self.min;
       match self.step {
          SliderStep::Smooth => raw,
          SliderStep::Discrete(step) => quantize(raw, step),
       }
+   }
+
+   /// Returns whether the slider is currently being slided.
+   pub fn is_sliding(&self) -> bool {
+      self.sliding
    }
 }

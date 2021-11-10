@@ -77,6 +77,11 @@ impl Input {
       self.active_mouse_area != self.frame_mouse_area
    }
 
+   /// Returns whether mouse events will be received.
+   pub fn mouse_active(&self) -> bool {
+      !self.mouse_buttons_locked()
+   }
+
    /// Returns whether the given mouse button is being held down.
    pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
       if self.mouse_buttons_locked() {
