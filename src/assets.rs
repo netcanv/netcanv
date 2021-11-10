@@ -28,6 +28,7 @@ pub struct ColorScheme {
 
    pub button: ButtonColors,
    pub tool_button: ButtonColors,
+   pub selected_tool_button: ButtonColors,
    pub expand: ExpandColors,
    pub slider: Color,
    pub text_field: TextFieldColors,
@@ -124,14 +125,23 @@ impl ColorScheme {
          error: Color::argb(0xff7f0000),
 
          button: ButtonColors {
+            fill: Color::argb(0x00000000),
             outline: Color::argb(0x60000000),
             text: Color::argb(0xff000000),
             hover: Color::argb(0x40000000),
             pressed: Color::argb(0x70000000),
          },
          tool_button: ButtonColors {
+            fill: Color::argb(0x00000000),
             outline: Color::argb(0x00000000),
             text: Color::argb(0xff000000),
+            hover: Color::argb(0x40000000),
+            pressed: Color::argb(0x70000000),
+         },
+         selected_tool_button: ButtonColors {
+            fill: Color::argb(0xff444444),
+            outline: Color::argb(0x00000000),
+            text: Color::argb(0xffeeeeee),
             hover: Color::argb(0x40000000),
             pressed: Color::argb(0x70000000),
          },
@@ -172,15 +182,24 @@ impl ColorScheme {
          error: Color::argb(0xfffc9292),
 
          button: ButtonColors {
+            fill: Color::argb(0x00000000),
             outline: Color::argb(0xff444444),
             text: Color::argb(0xffd2d2d2),
             hover: Color::argb(0x10ffffff),
             pressed: Color::argb(0x05ffffff),
          },
          tool_button: ButtonColors {
+            fill: Color::argb(0x00000000),
             outline: Color::argb(0x00000000),
             text: Color::argb(0xffb7b7b7),
-            hover: Color::argb(0x10ffffff),
+            hover: Color::argb(0x20ffffff),
+            pressed: Color::argb(0x05ffffff),
+         },
+         selected_tool_button: ButtonColors {
+            fill: Color::argb(0xffa0a0a0),
+            outline: Color::argb(0x00000000),
+            text: Color::argb(0xff1f1f1f),
+            hover: Color::argb(0x20ffffff),
             pressed: Color::argb(0x05ffffff),
          },
          slider: Color::argb(0xff979797),

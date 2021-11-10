@@ -160,6 +160,7 @@ impl Tool for Brush {
 
       ui.label(&assets.sans, "Thickness", assets.colors.text, None);
       ui.space(16.0);
+
       ui.push((192.0, ui.height()), Layout::Freeform);
       self.thickness_slider.process(
          ui,
@@ -188,6 +189,7 @@ impl Tool for Brush {
       }
       ui.pop();
       ui.space(8.0);
+
       ui.label(
          &assets.sans_bold,
          &self.thickness().to_string(),

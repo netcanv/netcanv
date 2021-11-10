@@ -28,17 +28,6 @@ use crate::viewport::Viewport;
 
 use self::tools::{Tool, ToolArgs};
 
-/// The current mode of painting.
-///
-/// This is either `Paint` or `Erase` when the mouse buttons are held, and `None` when it's
-/// released.
-#[derive(PartialEq, Eq)]
-enum PaintMode {
-   None,
-   Paint,
-   Erase,
-}
-
 /// A log message in the lower left corner.
 ///
 /// These are used for displaying errors and joined/left messages.
@@ -99,7 +88,9 @@ impl State {
    /// The interval of automatic saving.
    const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
    /// The height of the bottom bar.
-   const BAR_SIZE: f32 = 32.0;
+   const BOTTOM_BAR_SIZE: f32 = 32.0;
+   /// The width of the toolbar.
+   const TOOLBAR_SIZE: f32 = 40.0;
    /// The network communication tick interval.
    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
@@ -148,6 +139,7 @@ impl State {
    /// Registers all the tools.
    fn register_tools(&mut self) {
       let mut tools = self.tools.borrow_mut();
+      tools.push(Box::new(tools::Selection::new()));
       tools.push(Box::new(tools::Brush::new()));
    }
 
@@ -216,7 +208,10 @@ impl State {
 
    /// Processes the paint canvas.
    fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
-      ui.push((ui.width(), ui.height() - Self::BAR_SIZE), Layout::Freeform);
+      ui.push(
+         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
+         Layout::Freeform,
+      );
       input.set_mouse_area(mouse_areas::CANVAS, ui.has_mouse(input));
       let canvas_size = ui.size();
 
@@ -366,11 +361,8 @@ impl State {
 
    /// Processes the bottom bar.
    fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
-      // if self.paint_mode != PaintMode::None {
-      //    input.lock_mouse_buttons();
-      // }
-
-      ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
+      ui.push((ui.width(), Self::BOTTOM_BAR_SIZE), Layout::Horizontal);
+      ui.align((AlignH::Left, AlignV::Bottom));
       input.set_mouse_area(mouse_areas::BOTTOM_BAR, ui.has_mouse(input));
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
@@ -387,19 +379,19 @@ impl State {
 
       //
       // Right side
+      // Note that elements in HorizontalRev go from right to left rather than left to right.
       //
 
       // Room ID display
 
-      // Note that elements in HorizontalRev go from right to left rather than left to right.
       ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
       if Button::with_icon(
          ui,
          input,
          ButtonArgs {
-            font: &self.assets.sans,
             height: 32.0,
             colors: &self.assets.colors.tool_button,
+            corner_radius: 0.0,
          },
          &self.assets.icons.file.save,
       )
@@ -440,6 +432,53 @@ impl State {
          );
          ui.pop();
       }
+      ui.pop();
+
+      ui.pop();
+   }
+
+   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
+      // The outer group, to add some padding.
+      ui.push(
+         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
+         Layout::Freeform,
+      );
+      ui.pad(8.0);
+
+      // The inner group, that actually contains the bar.
+      let tool_size = Self::TOOLBAR_SIZE - 8.0;
+      let height = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
+      ui.push((Self::TOOLBAR_SIZE, height), Layout::Vertical);
+      ui.align((AlignH::Left, AlignV::Middle));
+      input.set_mouse_area(mouse_areas::TOOLBAR, ui.has_mouse(input));
+      ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
+      ui.pad(4.0);
+
+      let tools = self.tools.borrow();
+      for (i, tool) in tools.iter().enumerate() {
+         ui.push((tool_size, tool_size), Layout::Freeform);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: tool_size,
+               colors: if self.current_tool == i {
+                  &self.assets.colors.selected_tool_button
+               } else {
+                  &self.assets.colors.tool_button
+               },
+               corner_radius: ui.width() / 2.0,
+            },
+            tool.icon(),
+         )
+         .clicked()
+         {
+            self.current_tool = i;
+         }
+         ui.pop();
+         ui.space(4.0);
+      }
+
       ui.pop();
 
       ui.pop();
@@ -507,7 +546,7 @@ impl State {
 
 impl AppState for State {
    fn process(&mut self, StateArgs { ui, input }: StateArgs) {
-      ui.clear(Color::WHITE);
+      ui.clear(Color::BLACK.with_alpha(0));
 
       // Loading from file
 
@@ -559,7 +598,8 @@ impl AppState for State {
       // Paint canvas
       self.process_canvas(ui, input);
 
-      // Bar
+      // Bars
+      self.process_toolbar(ui, input);
       self.process_bar(ui, input);
    }
 

@@ -109,9 +109,9 @@ impl State {
       ui.push((ui.width(), ui.remaining_height()), Layout::Vertical);
 
       let button = ButtonArgs {
-         font: &self.assets.sans,
          height: 32.0,
          colors: &self.assets.colors.button.clone(),
+         corner_radius: 0.0,
       };
       let textfield = TextFieldArgs {
          font: &self.assets.sans,
@@ -195,7 +195,7 @@ impl State {
             },
          );
          ui.offset(vector(16.0, 16.0));
-         if Button::with_text(ui, input, button, "Join").clicked() {
+         if Button::with_text(ui, input, button, &self.assets.sans, "Join").clicked() {
             match Self::join_room(
                &self.matchmaker_socksys,
                self.nickname_field.text(),
@@ -260,11 +260,11 @@ impl State {
          }
 
          ui.push((ui.remaining_width(), 32.0), Layout::Horizontal);
-         if Button::with_text(ui, input, button, "Host").clicked() {
+         if Button::with_text(ui, input, button, &self.assets.sans, "Host").clicked() {
             host_room!();
          }
          ui.space(8.0);
-         if Button::with_text(ui, input, button, "from File").clicked() {
+         if Button::with_text(ui, input, button, &self.assets.sans, "from File").clicked() {
             match FileDialog::new()
                .set_filename("canvas.png")
                .add_filter("Supported image files", &["png", "jpg", "jpeg", "jfif"])
@@ -412,9 +412,9 @@ impl AppState for State {
          ui,
          input,
          ButtonArgs {
-            font: &self.assets.sans,
             height: 32.0,
             colors: &self.assets.colors.tool_button,
+            corner_radius: 0.0,
          },
          if self.config.ui.color_scheme == config::ColorScheme::Dark {
             &self.assets.icons.color_switcher.light

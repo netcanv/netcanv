@@ -113,7 +113,7 @@ fn inner_main() -> anyhow::Result<()> {
             match ui.render_frame(|ui| {
                ui.root(
                   vector(window_size.width as f32, window_size.height as f32),
-                  Layout::Vertical,
+                  Layout::Freeform,
                );
                // `unwrap()` always succeeds here as app is never None.
                app.as_mut().unwrap().process(StateArgs {

@@ -7,8 +7,10 @@ use crate::ui::{Input, Ui};
 use crate::viewport::Viewport;
 
 mod brush;
+mod selection;
 
 pub use brush::*;
+pub use selection::*;
 
 pub trait Tool {
    /// Returns the name of the tool.
