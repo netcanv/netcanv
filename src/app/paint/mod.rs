@@ -546,7 +546,7 @@ impl State {
 
 impl AppState for State {
    fn process(&mut self, StateArgs { ui, input }: StateArgs) {
-      ui.clear(Color::BLACK.with_alpha(0));
+      ui.clear(Color::WHITE);
 
       // Loading from file
 
