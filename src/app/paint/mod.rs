@@ -294,6 +294,8 @@ impl State {
             ui.render().outline_circle(cursor, brush_radius, color, 1.0);
          }
 
+         ui.render().pop();
+
          self.with_current_tool(|p, tool| {
             tool.process_paint_canvas_overlays(
                ToolArgs {
@@ -304,8 +306,6 @@ impl State {
                &p.viewport,
             );
          });
-
-         ui.render().pop();
       });
       if self.tip.created.elapsed() < self.tip.visible_duration {
          ui.push(ui.size(), Layout::Freeform);
