@@ -140,6 +140,8 @@ impl State {
    fn register_tools(&mut self) {
       let mut tools = self.tools.borrow_mut();
       tools.push(Box::new(tools::Selection::new()));
+      // Set the default tool to the brush.
+      self.current_tool = tools.len();
       tools.push(Box::new(tools::Brush::new()));
    }
 
