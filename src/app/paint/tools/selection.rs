@@ -1,10 +1,10 @@
-use netcanv_renderer::paws::{point, vector, Color, Layout, Point, Rect, Renderer, Vector};
+use netcanv_renderer::paws::{point, vector, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{Font as FontTrait, RenderBackend};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Image};
-use crate::common::VectorMath;
+use crate::common::{RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -18,10 +18,28 @@ struct Icons {
    rectangle: Image,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Corner {
+   TopLeft,
+   TopRight,
+   BottomRight,
+   BottomLeft,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Action {
+   None,
+   Selecting,
+   DraggingCorner(Corner),
+   DraggingWhole,
+}
+
 pub struct Selection {
    icons: Icons,
    mouse_position: Point,
-   selecting: bool,
+   /// The "potential" action; that is, the action that can be triggered right now by left-clicking.
+   potential_action: Action,
+   action: Action,
    selection: Option<Rect>,
 }
 
@@ -43,7 +61,8 @@ impl Selection {
             )),
          },
          mouse_position: point(0.0, 0.0),
-         selecting: false,
+         potential_action: Action::None,
+         action: Action::None,
          selection: None,
       }
    }
@@ -68,9 +87,14 @@ impl Selection {
    }
 
    /// Draws a resize handle.
-   fn draw_handle(renderer: &mut Backend, position: Point) {
-      renderer.fill_circle(position, Self::HANDLE_RADIUS + 2.0, Color::WHITE);
-      renderer.fill_circle(position, Self::HANDLE_RADIUS, Self::COLOR);
+   fn draw_handle(&self, renderer: &mut Backend, position: Point, corner: Corner) {
+      let radius = if self.potential_action == Action::DraggingCorner(corner) {
+         Self::HANDLE_RADIUS * 2.0
+      } else {
+         Self::HANDLE_RADIUS
+      };
+      renderer.fill_circle(position, radius + 2.0, Color::WHITE);
+      renderer.fill_circle(position, radius, Self::COLOR);
    }
 }
 
@@ -96,31 +120,80 @@ impl Tool for Selection {
       // Calculate the mouse position.
       let mouse_position = ui.mouse_position(input);
       let mouse_position = viewport.to_viewport_space(mouse_position, ui.size());
+      let previous_mouse_position = ui.previous_mouse_position(input);
+      let previous_mouse_position = viewport.to_viewport_space(previous_mouse_position, ui.size());
       // Store the mouse position for the bottom bar display.
       self.mouse_position = mouse_position;
 
-      // Check if the left mouse button was pressed, and if yes, start selecting.
-      if input.mouse_button_just_pressed(MouseButton::Left) {
-         self.selecting = true;
-         // Here, anchor the selection to the mouse position.
-         self.selection = Some(Rect::new(mouse_position, vector(0.0, 0.0)));
-      }
-      if input.mouse_button_just_released(MouseButton::Left) {
-         self.selecting = false;
-         // After the button is released and the selection's size is close to 0, deselect.
-         if let Some(rect) = self.selection {
-            if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
-               self.selection = None;
+      self.potential_action = Action::Selecting;
+      // Only let the user resize or drag the selection if they aren't doing anything at the moment.
+      if self.action == Action::None {
+         if let Some(rect) = self.selection() {
+            // Check the corners.
+            let handle_radius = Self::HANDLE_RADIUS * 2.0 / viewport.zoom();
+            let corner = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
+               Some(Corner::TopLeft)
+            } else if mouse_position.is_in_circle(rect.top_right(), handle_radius) {
+               Some(Corner::TopRight)
+            } else if mouse_position.is_in_circle(rect.bottom_right(), handle_radius) {
+               Some(Corner::BottomRight)
+            } else if mouse_position.is_in_circle(rect.bottom_left(), handle_radius) {
+               Some(Corner::BottomLeft)
+            } else {
+               None
+            };
+            if let Some(corner) = corner {
+               self.potential_action = Action::DraggingCorner(corner);
+            } else {
+               // Check the inside.
+               if mouse_position.is_in_rect(rect) {
+                  self.potential_action = Action::DraggingWhole;
+               }
             }
          }
       }
 
-      // While we're selecting, update the size of the rectangle such that its second corner
-      // is at the mouse.
-      if self.selecting {
-         // The rectangle must be Some while we're selecting.
-         let rect = self.selection.as_mut().unwrap();
-         rect.size = mouse_position - rect.position;
+      // Check if the left mouse button was pressed, and if yes, start selecting.
+      if input.mouse_button_just_pressed(MouseButton::Left) {
+         if self.potential_action == Action::Selecting {
+            // Anchor the selection to the mouse position.
+            self.selection = Some(Rect::new(mouse_position, vector(0.0, 0.0)));
+         }
+         self.action = self.potential_action;
+      }
+      if input.mouse_button_just_released(MouseButton::Left) {
+         if self.action == Action::Selecting {
+            // After the button is released and the selection's size is close to 0, deselect.
+            if let Some(rect) = self.selection {
+               if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
+                  self.selection = None;
+               }
+            }
+         }
+         // Normalize the stored selection after the user's done marking.
+         self.selection = self.selection();
+         self.action = Action::None;
+      }
+
+      // Perform all the actions.
+      if let Some(rect) = self.selection.as_mut() {
+         match self.action {
+            Action::None => (),
+            Action::Selecting => {
+               // The rectangle must be Some while we're selecting.
+               rect.size = mouse_position - rect.position;
+            }
+            Action::DraggingCorner(corner) => match corner {
+               Corner::TopLeft => *rect = rect.with_top_left(mouse_position),
+               Corner::TopRight => *rect = rect.with_top_right(mouse_position),
+               Corner::BottomRight => *rect = rect.with_bottom_right(mouse_position),
+               Corner::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
+            },
+            Action::DraggingWhole => {
+               let delta_position = mouse_position - previous_mouse_position;
+               rect.position += delta_position;
+            }
+         }
       }
    }
 
@@ -134,11 +207,20 @@ impl Tool for Selection {
                let bottom_left = viewport.to_screen_space(rect.bottom_left(), ui.size()).floor();
                let rect = Rect::new(top_left, bottom_right - top_left);
                let renderer = ui.render();
-               renderer.outline(rect, Self::COLOR, 0.0, 2.0);
-               Self::draw_handle(renderer, top_left);
-               Self::draw_handle(renderer, top_right);
-               Self::draw_handle(renderer, bottom_right);
-               Self::draw_handle(renderer, bottom_left);
+               renderer.outline(
+                  rect,
+                  Self::COLOR,
+                  0.0,
+                  if self.potential_action == Action::DraggingWhole {
+                     4.0
+                  } else {
+                     2.0
+                  },
+               );
+               self.draw_handle(renderer, top_left, Corner::TopLeft);
+               self.draw_handle(renderer, top_right, Corner::TopRight);
+               self.draw_handle(renderer, bottom_right, Corner::BottomRight);
+               self.draw_handle(renderer, bottom_left, Corner::BottomLeft);
             });
          }
       }
