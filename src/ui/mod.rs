@@ -76,7 +76,7 @@ impl UiElements for Ui {
       let position = size / 2.0 - vector(image.width() as f32, image.height() as f32) / 2.0;
       self.push(size, Layout::Freeform);
       self.draw(|ui| {
-         ui.render().image(position, &icon);
+         ui.render().image(icon.rect(position), &icon);
       });
       self.pop();
    }

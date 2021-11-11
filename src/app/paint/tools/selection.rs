@@ -130,7 +130,7 @@ impl Tool for Selection {
       self.potential_action = Action::Selecting;
       // Only let the user resize or drag the selection if they aren't doing anything at the moment.
       if self.action == Action::None {
-         if let Some(rect) = self.normalized_selection() {
+         if let Some(rect) = self.selection {
             // Check the corners.
             let handle_radius = Self::HANDLE_RADIUS * 2.0 / viewport.zoom();
             let corner = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
@@ -162,30 +162,31 @@ impl Tool for Selection {
             if let Some(capture) = self.capture.as_ref() {
                if let Some(rect) = self.selection {
                   paint_canvas.draw(ui, rect, |renderer| {
-                     renderer.framebuffer(rect.position, capture);
+                     renderer.framebuffer(rect, capture);
                   });
                }
             }
+            self.capture = None;
             // Anchor the selection to the mouse position.
             self.selection = Some(Rect::new(mouse_position, vector(0.0, 0.0)));
+            self.selection = self.normalized_selection();
          }
          self.action = self.potential_action;
       }
       if input.mouse_button_just_released(MouseButton::Left) {
-         // Normalize the stored selection after the user's done marking.
-         // This will make sure that before making any other actions mutating the selection, the
-         // selection's rectangle satisfies all the expectations, eg. that the corners' names are
-         // what they are visually.
-         self.selection = self.normalized_selection();
          // After the button is released and the selection's size is close to 0, deselect.
          if self.action == Action::Selecting {
-            let rect = self.selection.unwrap();
-            if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
-               self.selection = None;
-               self.capture = None;
+            if let Some(rect) = self.selection {
+               if (rect.width() * rect.height()).abs() < 1.0 {
+                  self.selection = None;
+                  self.capture = None;
+               }
             }
-            // Don't use the rect anymore after this, as the selection be gone by now.
-            drop(rect);
+            // Normalize the stored selection after the user's done marking.
+            // This will make sure that before making any other actions mutating the selection, the
+            // selection's rectangle satisfies all the expectations, eg. that the corners' names are
+            // what they are visually.
+            self.selection = self.normalized_selection();
             // If there's still a selection after all of this, capture the paint canvas into an
             // image.
             if let Some(rect) = self.selection {
@@ -230,8 +231,8 @@ impl Tool for Selection {
    }
 
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
-      if let Some(rect) = self.normalized_selection() {
-         if rect.width() * rect.height() > 0.1 {
+      if let Some(rect) = self.selection {
+         if (rect.width() * rect.height()).abs() >= 1.0 {
             ui.draw(|ui| {
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
                let top_right = viewport.to_screen_space(rect.top_right(), ui.size()).floor();
@@ -240,7 +241,7 @@ impl Tool for Selection {
                let rect = Rect::new(top_left, bottom_right - top_left);
                let renderer = ui.render();
                if let Some(capture) = self.capture.as_ref() {
-                  renderer.framebuffer(rect.position, &capture);
+                  renderer.framebuffer(rect, &capture);
                }
                renderer.outline(
                   rect,

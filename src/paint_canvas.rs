@@ -351,6 +351,7 @@ impl PaintCanvas {
    /// Returns the left, top, bottom, right sides covered by the rectangle, in master chunk
    /// coordinates.
    fn chunk_coverage(coverage: Rect) -> (i32, i32, i32, i32) {
+      let coverage = coverage.sort();
       (
          (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
          (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
@@ -372,7 +373,9 @@ impl PaintCanvas {
       coverage: Rect,
       mut callback: impl FnMut(&mut Backend),
    ) {
-      let (left, top, bottom, right) = dbg!(Self::chunk_coverage(coverage));
+      let (left, top, bottom, right) = Self::chunk_coverage(coverage);
+      assert!(left <= right);
+      assert!(top <= bottom);
       for y in top..=bottom {
          for x in left..=right {
             let master_chunk = (x, y);
@@ -482,7 +485,7 @@ impl PaintCanvas {
       for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
          if let Some(chunk) = self.chunks.get(&chunk_position) {
             let screen_position = Chunk::screen_position(chunk_position);
-            renderer.framebuffer(screen_position, &chunk.framebuffer);
+            renderer.framebuffer(chunk.framebuffer.rect(screen_position), &chunk.framebuffer);
          }
       }
    }

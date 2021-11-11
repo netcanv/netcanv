@@ -834,13 +834,12 @@ impl RenderBackend for OpenGlBackend {
       }
    }
 
-   fn image(&mut self, position: Point, image: &Image) {
-      let (fwidth, fheight) = (image.width() as f32, image.height() as f32);
+   fn image(&mut self, rect: Rect, image: &Image) {
       let color = image.color.unwrap_or(Color::WHITE);
       self.start();
       self.shape().rect(
-         Vertex::textured_colored(position, point(0.0, 0.0), color),
-         Vertex::textured_colored(position + vector(fwidth, fheight), point(1.0, 1.0), color),
+         Vertex::textured_colored(rect.top_left(), point(0.0, 0.0), color),
+         Vertex::textured_colored(rect.bottom_right(), point(1.0, 1.0), color),
       );
       let texture = image.upload(&self.gl);
       unsafe {
@@ -856,16 +855,15 @@ impl RenderBackend for OpenGlBackend {
       }
    }
 
-   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {
+   fn framebuffer(&mut self, rect: Rect, framebuffer: &Framebuffer) {
       assert!(
          self.state.gl_state.borrow().framebuffer != Some(framebuffer.framebuffer()),
          "cannot render a framebuffer to itself"
       );
-      let (fwidth, fheight) = (framebuffer.width() as f32, framebuffer.height() as f32);
       self.start();
       self.shape().rect(
-         Vertex::textured(position, point(0.0, 1.0)),
-         Vertex::textured(position + vector(fwidth, fheight), point(1.0, 0.0)),
+         Vertex::textured(rect.top_left(), point(0.0, 1.0)),
+         Vertex::textured(rect.bottom_right(), point(1.0, 0.0)),
       );
       let texture = framebuffer.texture();
       unsafe {
