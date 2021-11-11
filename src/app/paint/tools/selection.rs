@@ -79,7 +79,6 @@ impl Selection {
                rect.height().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
             ),
          );
-         let rect = rect.sort();
          let rect = Rect::new(
             point(rect.x().floor(), rect.y().floor()),
             vector(rect.width().ceil(), rect.height().ceil()),
@@ -186,7 +185,7 @@ impl Tool for Selection {
             // This will make sure that before making any other actions mutating the selection, the
             // selection's rectangle satisfies all the expectations, eg. that the corners' names are
             // what they are visually.
-            self.selection = self.normalized_selection();
+            self.selection = self.normalized_selection().map(|rect| rect.sort());
             // If there's still a selection after all of this, capture the paint canvas into an
             // image.
             if let Some(rect) = self.selection {
@@ -213,15 +212,17 @@ impl Tool for Selection {
          match self.action {
             Action::None => (),
             Action::Selecting => {
-               // The rectangle must be Some while we're selecting.
                rect.size = mouse_position - rect.position;
             }
-            Action::DraggingCorner(corner) => match corner {
-               Corner::TopLeft => *rect = rect.with_top_left(mouse_position),
-               Corner::TopRight => *rect = rect.with_top_right(mouse_position),
-               Corner::BottomRight => *rect = rect.with_bottom_right(mouse_position),
-               Corner::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
-            },
+            Action::DraggingCorner(corner) => {
+               match corner {
+                  Corner::TopLeft => *rect = rect.with_top_left(mouse_position),
+                  Corner::TopRight => *rect = rect.with_top_right(mouse_position),
+                  Corner::BottomRight => *rect = rect.with_bottom_right(mouse_position),
+                  Corner::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
+               }
+               self.selection = self.normalized_selection();
+            }
             Action::DraggingWhole => {
                let delta_position = mouse_position - previous_mouse_position;
                rect.position += delta_position;
@@ -231,7 +232,7 @@ impl Tool for Selection {
    }
 
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
-      if let Some(rect) = self.selection {
+      if let Some(rect) = self.normalized_selection() {
          if (rect.width() * rect.height()).abs() >= 1.0 {
             ui.draw(|ui| {
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
@@ -276,6 +277,7 @@ impl Tool for Selection {
       );
 
       if let Some(rect) = self.normalized_selection() {
+         let rect = rect.sort();
          // Show the selection anchor.
          let anchor = format_vector(rect.position);
          ui.icon(&self.icons.position, assets.colors.text, Some(icon_size));
