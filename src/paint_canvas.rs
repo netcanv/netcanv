@@ -1,5 +1,6 @@
 //! NetCanv's infinite paint canvas.
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::io::Cursor;
@@ -40,6 +41,7 @@ pub struct Chunk {
    // at once. Maybe it'll become less terrible if issue #29 ever gets implemented.
    // https://github.com/liquidev/netcanv/issues/29
    framebuffer: Framebuffer,
+   image_data: Cell<Option<RgbaImage>>,
    png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    webp_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    non_empty_subs: [bool; Self::SUB_COUNT],
@@ -73,6 +75,7 @@ impl Chunk {
    fn new(renderer: &mut Backend) -> Self {
       Self {
          framebuffer: renderer.create_framebuffer(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1),
+         image_data: Cell::new(None),
          png_data: Default::default(),
          webp_data: Default::default(),
          non_empty_subs: [false; Self::SUB_COUNT],
@@ -90,13 +93,20 @@ impl Chunk {
 
    /// Downloads the image of the chunk from the graphics card.
    fn download_image(&self) -> RgbaImage {
-      let mut image_buffer = ImageBuffer::from_pixel(
-         Self::SURFACE_SIZE.0,
-         Self::SURFACE_SIZE.1,
-         Rgba([0, 0, 0, 0]),
-      );
-      self.framebuffer.download_rgba(&mut image_buffer);
-      image_buffer
+      if let Some(image_data) = self.image_data.take() {
+         let clone = image_data.clone();
+         self.image_data.set(Some(image_data));
+         clone
+      } else {
+         let mut image_buffer = ImageBuffer::from_pixel(
+            Self::SURFACE_SIZE.0,
+            Self::SURFACE_SIZE.1,
+            Rgba([0, 0, 0, 0]),
+         );
+         self.framebuffer.download_rgba(&mut image_buffer);
+         self.image_data.set(Some(image_buffer.clone()));
+         image_buffer
+      }
    }
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
@@ -338,6 +348,17 @@ impl PaintCanvas {
       }
    }
 
+   /// Returns the left, top, bottom, right sides covered by the rectangle, in master chunk
+   /// coordinates.
+   fn chunk_coverage(coverage: Rect) -> (i32, i32, i32, i32) {
+      (
+         (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
+         (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
+         (coverage.bottom() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
+         (coverage.right() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
+      )
+   }
+
    /// Draws to the paint canvas's chunks.
    ///
    /// The provided `coverage` rectangle is used to determine which chunks should be drawn to, and
@@ -351,10 +372,7 @@ impl PaintCanvas {
       coverage: Rect,
       mut callback: impl FnMut(&mut Backend),
    ) {
-      let left = (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32;
-      let top = (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32;
-      let bottom = (coverage.bottom() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32;
-      let right = (coverage.right() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32;
+      let (left, top, bottom, right) = dbg!(Self::chunk_coverage(coverage));
       for y in top..=bottom {
          for x in left..=right {
             let master_chunk = (x, y);
@@ -386,7 +404,6 @@ impl PaintCanvas {
       let a = from.into();
       let b = to.into();
       let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
-      // let stroke_width = paint.stroke_width();
       let (color, stroke_width) = match brush {
          Brush::Draw {
             color,
@@ -444,6 +461,17 @@ impl PaintCanvas {
             }
          }
       }
+   }
+
+   /// Captures a fragment of the paint canvas onto a framebuffer.
+   pub fn capture(&self, renderer: &mut Backend, framebuffer: &Framebuffer, viewport: &Viewport) {
+      renderer.draw_to(framebuffer, |renderer| {
+         self.draw_to(
+            renderer,
+            viewport,
+            vector(framebuffer.width() as f32, framebuffer.height() as f32),
+         );
+      });
    }
 
    /// Draws the paint canvas onto the given Skia canvas.

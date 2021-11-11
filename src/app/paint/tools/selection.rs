@@ -1,9 +1,9 @@
 use netcanv_renderer::paws::{point, vector, Color, Point, Rect, Renderer, Vector};
-use netcanv_renderer::{Font as FontTrait, RenderBackend};
+use netcanv_renderer::{BlendMode, Font as FontTrait, Image as ImageTrait, RenderBackend};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
-use crate::backend::{Backend, Font, Image};
+use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::common::{RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
@@ -41,6 +41,7 @@ pub struct Selection {
    potential_action: Action,
    action: Action,
    selection: Option<Rect>,
+   capture: Option<Framebuffer>,
 }
 
 impl Selection {
@@ -64,11 +65,12 @@ impl Selection {
          potential_action: Action::None,
          action: Action::None,
          selection: None,
+         capture: None,
       }
    }
 
    /// Returns a sorted, rounded, limited, squared version of the selection rectangle.
-   fn selection(&self) -> Option<Rect> {
+   fn normalized_selection(&self) -> Option<Rect> {
       self.selection.map(|rect| {
          let rect = Rect::new(
             rect.position,
@@ -114,7 +116,7 @@ impl Tool for Selection {
    fn process_paint_canvas_input(
       &mut self,
       ToolArgs { ui, input, .. }: ToolArgs,
-      _paint_canvas: &mut PaintCanvas,
+      paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) {
       // Calculate the mouse position.
@@ -128,7 +130,7 @@ impl Tool for Selection {
       self.potential_action = Action::Selecting;
       // Only let the user resize or drag the selection if they aren't doing anything at the moment.
       if self.action == Action::None {
-         if let Some(rect) = self.selection() {
+         if let Some(rect) = self.normalized_selection() {
             // Check the corners.
             let handle_radius = Self::HANDLE_RADIUS * 2.0 / viewport.zoom();
             let corner = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
@@ -153,25 +155,55 @@ impl Tool for Selection {
          }
       }
 
-      // Check if the left mouse button was pressed, and if yes, start selecting.
+      // Check if the left mouse button was pressed, and if so, start selecting.
       if input.mouse_button_just_pressed(MouseButton::Left) {
          if self.potential_action == Action::Selecting {
+            // Before we erase the old data, draw the capture back onto the canvas.
+            if let Some(capture) = self.capture.as_ref() {
+               if let Some(rect) = self.selection {
+                  paint_canvas.draw(ui, rect, |renderer| {
+                     renderer.framebuffer(rect.position, capture);
+                  });
+               }
+            }
             // Anchor the selection to the mouse position.
             self.selection = Some(Rect::new(mouse_position, vector(0.0, 0.0)));
          }
          self.action = self.potential_action;
       }
       if input.mouse_button_just_released(MouseButton::Left) {
+         // Normalize the stored selection after the user's done marking.
+         // This will make sure that before making any other actions mutating the selection, the
+         // selection's rectangle satisfies all the expectations, eg. that the corners' names are
+         // what they are visually.
+         self.selection = self.normalized_selection();
+         // After the button is released and the selection's size is close to 0, deselect.
          if self.action == Action::Selecting {
-            // After the button is released and the selection's size is close to 0, deselect.
+            let rect = self.selection.unwrap();
+            if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
+               self.selection = None;
+               self.capture = None;
+            }
+            // Don't use the rect anymore after this, as the selection be gone by now.
+            drop(rect);
+            // If there's still a selection after all of this, capture the paint canvas into an
+            // image.
             if let Some(rect) = self.selection {
-               if rect.width().abs() < 0.1 || rect.height().abs() < 0.1 {
-                  self.selection = None;
-               }
+               let viewport = Viewport::from_top_left(rect);
+               let renderer = ui.render();
+               let capture = renderer.create_framebuffer(rect.width() as u32, rect.height() as u32);
+               renderer.push();
+               renderer.translate(-rect.position);
+               paint_canvas.capture(renderer, &capture, &viewport);
+               renderer.pop();
+               self.capture = Some(capture);
+               // After the capture is taken, erase the rectangle from the paint canvas.
+               paint_canvas.draw(renderer, rect, |renderer| {
+                  renderer.set_blend_mode(BlendMode::Clear);
+                  renderer.fill(rect, Color::BLACK, 0.0);
+               });
             }
          }
-         // Normalize the stored selection after the user's done marking.
-         self.selection = self.selection();
          self.action = Action::None;
       }
 
@@ -198,7 +230,7 @@ impl Tool for Selection {
    }
 
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
-      if let Some(rect) = self.selection() {
+      if let Some(rect) = self.normalized_selection() {
          if rect.width() * rect.height() > 0.1 {
             ui.draw(|ui| {
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
@@ -207,6 +239,9 @@ impl Tool for Selection {
                let bottom_left = viewport.to_screen_space(rect.bottom_left(), ui.size()).floor();
                let rect = Rect::new(top_left, bottom_right - top_left);
                let renderer = ui.render();
+               if let Some(capture) = self.capture.as_ref() {
+                  renderer.framebuffer(rect.position, &capture);
+               }
                renderer.outline(
                   rect,
                   Self::COLOR,
@@ -239,7 +274,7 @@ impl Tool for Selection {
          Some(label_width(&assets.sans, &mouse_position)),
       );
 
-      if let Some(rect) = self.selection() {
+      if let Some(rect) = self.normalized_selection() {
          // Show the selection anchor.
          let anchor = format_vector(rect.position);
          ui.icon(&self.icons.position, assets.colors.text, Some(icon_size));

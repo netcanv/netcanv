@@ -3,13 +3,14 @@
 use netcanv_renderer::paws::{point, vector, Point, Rect, Vector};
 
 /// A viewport that can be panned around and zoomed into.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Viewport {
    pan: Vector,
    zoom_level: f32,
 }
 
 /// A rectangle with integer coordinates.
+#[derive(Debug, Clone)]
 pub struct IntRect {
    right: i32,
    bottom: i32,
@@ -28,7 +29,16 @@ impl Viewport {
    /// Creates a new viewport.
    pub fn new() -> Self {
       Self {
-         pan: Vector::new(0.0, 0.0),
+         pan: vector(0.0, 0.0),
+         zoom_level: 0.0,
+      }
+   }
+
+   /// Creates a new viewport, panned such that the top-left of the given rectangle corner lands at
+   /// the given point.
+   pub fn from_top_left(rect: Rect) -> Self {
+      Self {
+         pan: rect.center(),
          zoom_level: 0.0,
       }
    }
