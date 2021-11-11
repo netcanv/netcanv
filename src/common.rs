@@ -62,14 +62,26 @@ pub trait RectMath {
    /// Creates a rectangle from four sides.
    fn from_sides(sides: RectSides) -> Self;
 
+   // Return points centered along the given side.
+   fn top_center(&self) -> Point;
+   fn right_center(&self) -> Point;
+   fn bottom_center(&self) -> Point;
+   fn left_center(&self) -> Point;
+
+   // Sets a side of the rectangle.
+   fn with_left(self, left: f32) -> Self;
+   fn with_top(self, top: f32) -> Self;
+   fn with_right(self, right: f32) -> Self;
+   fn with_bottom(self, bottom: f32) -> Self;
+
    /// Sets the top-left corner of the rectangle, leaving the other corners unaffected.
-   fn with_top_left(&mut self, top_left: Point) -> Self;
+   fn with_top_left(self, top_left: Point) -> Self;
    /// Sets the top-right corner of the rectangle, leaving the other corners unaffected.
-   fn with_top_right(&mut self, top_right: Point) -> Self;
+   fn with_top_right(self, top_right: Point) -> Self;
    /// Sets the bottom-right corner of the rectangle, leaving the other corners unaffected.
-   fn with_bottom_right(&mut self, bottom_right: Point) -> Self;
+   fn with_bottom_right(self, bottom_right: Point) -> Self;
    /// Sets the bottom-left corner of the rectangle, leaving the other corners unaffected.
-   fn with_bottom_left(&mut self, bottom_left: Point) -> Self;
+   fn with_bottom_left(self, bottom_left: Point) -> Self;
 }
 
 impl RectMath for Rect {
@@ -80,7 +92,53 @@ impl RectMath for Rect {
       }
    }
 
-   fn with_top_left(&mut self, top_left: Point) -> Self {
+   fn left_center(&self) -> Point {
+      vector(self.left(), self.center_y())
+   }
+
+   fn top_center(&self) -> Point {
+      vector(self.center_x(), self.top())
+   }
+
+   fn right_center(&self) -> Point {
+      vector(self.right(), self.center_y())
+   }
+
+   fn bottom_center(&self) -> Point {
+      vector(self.center_x(), self.bottom())
+   }
+
+   fn with_left(self, left: f32) -> Self {
+      let right = self.right();
+      Self::from_sides(RectSides {
+         left,
+         top: self.top(),
+         right,
+         bottom: self.bottom(),
+      })
+   }
+
+   fn with_top(self, top: f32) -> Self {
+      let bottom = self.bottom();
+      Self::from_sides(RectSides {
+         left: self.left(),
+         top,
+         right: self.right(),
+         bottom,
+      })
+   }
+
+   fn with_right(mut self, right: f32) -> Self {
+      self.size.x = right - self.left();
+      self
+   }
+
+   fn with_bottom(mut self, bottom: f32) -> Self {
+      self.size.y = bottom - self.top();
+      self
+   }
+
+   fn with_top_left(self, top_left: Point) -> Self {
       let right = self.right();
       let bottom = self.bottom();
       Self::from_sides(RectSides {
@@ -91,7 +149,7 @@ impl RectMath for Rect {
       })
    }
 
-   fn with_top_right(&mut self, top_right: Point) -> Self {
+   fn with_top_right(self, top_right: Point) -> Self {
       let left = self.left();
       let bottom = self.bottom();
       Self::from_sides(RectSides {
@@ -102,7 +160,7 @@ impl RectMath for Rect {
       })
    }
 
-   fn with_bottom_right(&mut self, bottom_right: Point) -> Self {
+   fn with_bottom_right(self, bottom_right: Point) -> Self {
       let left = self.left();
       let top = self.top();
       Self::from_sides(RectSides {
@@ -113,7 +171,7 @@ impl RectMath for Rect {
       })
    }
 
-   fn with_bottom_left(&mut self, bottom_left: Point) -> Self {
+   fn with_bottom_left(self, bottom_left: Point) -> Self {
       let right = self.right();
       let top = self.top();
       Self::from_sides(RectSides {

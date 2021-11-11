@@ -1,15 +1,13 @@
 //! The Brush tool. Allows for painting, as well as erasing pixels from the canvas.
 
-use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
-};
+use netcanv_renderer::paws::{point, vector, Color, Layout, LineCap, Point, Rect, Renderer};
 use netcanv_renderer::{BlendMode, RenderBackend};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
 use crate::backend::Image;
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{Input, Slider, SliderArgs, SliderStep, Ui, UiElements, UiInput};
+use crate::ui::{Slider, SliderArgs, SliderStep, UiElements, UiInput};
 use crate::viewport::Viewport;
 
 use super::{Tool, ToolArgs};

@@ -392,7 +392,7 @@ impl State {
          input,
          ButtonArgs {
             height: 32.0,
-            colors: &self.assets.colors.tool_button,
+            colors: &self.assets.colors.action_button,
             corner_radius: 0.0,
          },
          &self.assets.icons.file.save,
@@ -468,9 +468,9 @@ impl State {
             ButtonArgs {
                height: tool_size,
                colors: if self.current_tool == i {
-                  &self.assets.colors.selected_tool_button
+                  &self.assets.colors.selected_toolbar_button
                } else {
-                  &self.assets.colors.tool_button
+                  &self.assets.colors.toolbar_button
                },
                corner_radius: ui.width() / 2.0,
             },
@@ -486,7 +486,7 @@ impl State {
       }
 
       if let Some(selected_tool) = selected_tool {
-         tools[previous_tool].deactivate();
+         tools[previous_tool].deactivate(ui, &mut self.paint_canvas);
          tools[selected_tool].activate();
       }
 

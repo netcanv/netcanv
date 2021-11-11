@@ -413,7 +413,7 @@ impl AppState for State {
          input,
          ButtonArgs {
             height: 32.0,
-            colors: &self.assets.colors.tool_button,
+            colors: &self.assets.colors.action_button,
             corner_radius: 0.0,
          },
          if self.config.ui.color_scheme == config::ColorScheme::Dark {
