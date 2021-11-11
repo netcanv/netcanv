@@ -176,8 +176,8 @@ impl Tool for Selection {
             } else {
                // Check the inside.
                let rect = Rect::new(
-                  rect.position - vector(4.0, 4.0),
-                  rect.size + vector(8.0, 8.0),
+                  rect.position - vector(4.0, 4.0) / viewport.zoom(),
+                  rect.size + vector(8.0, 8.0) / viewport.zoom(),
                );
                if mouse_position.is_in_rect(rect) {
                   self.potential_action = Action::DraggingWhole;

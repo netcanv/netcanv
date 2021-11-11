@@ -1,10 +1,6 @@
 use netcanv_renderer::paws::{Color, Rect, Vector};
 use skulpin::skia_safe;
 
-pub(crate) fn to_vector(vec: Vector) -> skia_safe::Vector {
-   skia_safe::Vector::new(vec.x, vec.y)
-}
-
 pub(crate) fn to_point(vec: Vector) -> skia_safe::Point {
    skia_safe::Point::new(vec.x, vec.y)
 }

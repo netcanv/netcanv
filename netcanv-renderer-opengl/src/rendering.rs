@@ -14,8 +14,7 @@ use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{
-   BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, Image as ImageTrait,
-   RenderBackend,
+   BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
 };
 
 use crate::common::{normalized_color, to_vec2, GlUtilities, VectorMath};

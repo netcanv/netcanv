@@ -1,7 +1,10 @@
 //! Painting tools - brushes, selections, and all the like.
 
+use std::net::SocketAddr;
+
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
+use crate::net::peer::Peer;
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{Input, Ui};
 use crate::viewport::Viewport;
@@ -11,6 +14,7 @@ mod selection;
 
 pub use brush::*;
 pub use selection::*;
+use serde::Serialize;
 
 pub trait Tool {
    /// Returns the name of the tool.
@@ -70,12 +74,57 @@ pub trait Tool {
    /// If there isn't anything to control, the bottom bar can be used as a status bar for displaying
    /// relevant information, eg. selection size.
    fn process_bottom_bar(&mut self, _args: ToolArgs) {}
+
+   /// Called when network packets should be sent.
+   fn network_send(&mut self, _net: Net) -> anyhow::Result<()> {
+      Ok(())
+   }
+
+   /// Called for each incoming packet from a specific `sender`.
+   fn network_receive(
+      &mut self,
+      _renderer: &mut Backend,
+      _net: Net,
+      _paint_canvas: &mut PaintCanvas,
+      _sender: SocketAddr,
+      _payload: Vec<u8>,
+   ) -> anyhow::Result<()> {
+      Ok(())
+   }
+
+   /// Called when a peer has selected this tool.
+   ///
+   /// This can initialize the
+   fn network_peer_selected(&mut self) -> anyhow::Result<()> {
+      Ok(())
+   }
 }
 
+pub struct Net<'peer> {
+   pub peer: &'peer mut Peer,
+}
+
+impl<'peer> Net<'peer> {
+   pub fn send<T>(&self, tool: &impl Tool, payload: T) -> anyhow::Result<()>
+   where
+      T: 'static + Serialize,
+   {
+      let payload = bincode::serialize(&payload)?;
+      self.peer.send_tool(tool.name().to_owned(), payload)?;
+      Ok(())
+   }
+
+   pub fn new(peer: &'peer mut Peer) -> Net {
+      Self { peer }
+   }
+}
+
+#[non_exhaustive]
 pub struct ToolArgs<'ui, 'input, 'state> {
    pub ui: &'ui mut Ui,
    pub input: &'input Input,
    pub assets: &'state Assets,
+   pub net: Net<'state>,
 }
 
 fn _tool_trait_must_be_object_safe(_: Box<dyn Tool>) {}

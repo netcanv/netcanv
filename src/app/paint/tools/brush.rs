@@ -1,16 +1,19 @@
 //! The Brush tool. Allows for painting, as well as erasing pixels from the canvas.
 
+use std::net::SocketAddr;
+
 use netcanv_renderer::paws::{point, vector, Color, Layout, LineCap, Point, Rect, Renderer};
 use netcanv_renderer::{BlendMode, RenderBackend};
+use serde::{Deserialize, Serialize};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
-use crate::backend::Image;
+use crate::backend::{Backend, Image};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{Slider, SliderArgs, SliderStep, UiElements, UiInput};
 use crate::viewport::Viewport;
 
-use super::{Tool, ToolArgs};
+use super::{Net, Tool, ToolArgs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BrushState {
@@ -26,7 +29,8 @@ pub struct Brush {
    thickness_slider: Slider,
    color: Color,
 
-   position: Point,
+   mouse_position: Point,
+   stroke_points: Vec<Stroke>,
 }
 
 impl Brush {
@@ -39,7 +43,8 @@ impl Brush {
          state: BrushState::Idle,
          thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
          color: COLOR_PALETTE[0],
-         position: point(0.0, 0.0),
+         mouse_position: point(0.0, 0.0),
+         stroke_points: Vec::new(),
       }
    }
 
@@ -49,23 +54,45 @@ impl Brush {
    }
 
    /// Returns the coverage rectangle for the provided point.
-   fn point_coverage(&self, p: Point) -> Rect {
-      let half_thickness = self.thickness() / 2.0;
+   fn point_coverage(p: Point, thickness: f32) -> Rect {
+      let half_thickness = thickness / 2.0;
       Rect::new(
          point(p.x - half_thickness, p.y - half_thickness),
-         vector(self.thickness(), self.thickness()),
+         vector(thickness, thickness),
       )
    }
 
    /// Returns the coverage rectangle for the two points.
-   fn coverage(&self, a: Point, b: Point) -> Rect {
-      let a_coverage = self.point_coverage(a);
-      let b_coverage = self.point_coverage(b);
+   fn coverage(a: Point, b: Point, thickness: f32) -> Rect {
+      let a_coverage = Self::point_coverage(a, thickness);
+      let b_coverage = Self::point_coverage(b, thickness);
       let left = a_coverage.left().min(b_coverage.left());
       let top = a_coverage.top().min(b_coverage.top());
       let right = a_coverage.right().max(b_coverage.right());
       let bottom = a_coverage.bottom().max(b_coverage.bottom());
       Rect::new(point(left, top), vector(right - left, bottom - top))
+   }
+
+   fn stroke(
+      &self,
+      renderer: &mut Backend,
+      paint_canvas: &mut PaintCanvas,
+      a: Point,
+      b: Point,
+      color: Option<Color>,
+      thickness: f32,
+   ) {
+      let coverage = Self::coverage(a, b, thickness);
+      paint_canvas.draw(renderer, coverage, |renderer| {
+         let color = match color {
+            Some(color) => color,
+            None => {
+               renderer.set_blend_mode(BlendMode::Clear);
+               Color::BLACK
+            }
+         };
+         renderer.line(a, b, color, LineCap::Round, thickness);
+      });
    }
 }
 
@@ -107,17 +134,32 @@ impl Tool for Brush {
          viewport.to_viewport_space(b, ui.size()),
       );
       if self.state != BrushState::Idle {
-         let coverage = self.coverage(a, b);
-         paint_canvas.draw(ui, coverage, |renderer| {
-            renderer.set_blend_mode(match self.state {
-               BrushState::Idle => unreachable!(),
-               BrushState::Drawing => BlendMode::Alpha,
-               BrushState::Erasing => BlendMode::Clear,
-            });
-            renderer.line(a, b, self.color, LineCap::Round, self.thickness());
+         self.stroke(
+            ui,
+            paint_canvas,
+            a,
+            b,
+            match self.state {
+               BrushState::Drawing => Some(self.color),
+               BrushState::Erasing => None,
+               _ => unreachable!(),
+            },
+            self.thickness(),
+         );
+         self.stroke_points.push(Stroke {
+            color: match self.state {
+               BrushState::Drawing => {
+                  Some((self.color.r, self.color.g, self.color.b, self.color.a))
+               }
+               BrushState::Erasing => None,
+               _ => unreachable!(),
+            },
+            thickness: self.thickness() as u8,
+            a: (a.x, a.y),
+            b: (b.x, b.y),
          });
       }
-      self.position = b;
+      self.mouse_position = b;
    }
 
    /// Draws the guide circle of the brush.
@@ -128,7 +170,7 @@ impl Tool for Brush {
    ) {
       if input.mouse_active() {
          // Draw the guide circle.
-         let position = viewport.to_screen_space(self.position, ui.size());
+         let position = viewport.to_screen_space(self.mouse_position, ui.size());
          let renderer = ui.render();
          renderer.push();
          // The circle is drawn with the Invert blend mode, such that it's visible on all
@@ -148,7 +190,12 @@ impl Tool for Brush {
    }
 
    /// Processes the color picker and brush size slider on the bottom bar.
-   fn process_bottom_bar(&mut self, ToolArgs { ui, input, assets }: ToolArgs) {
+   fn process_bottom_bar(
+      &mut self,
+      ToolArgs {
+         ui, input, assets, ..
+      }: ToolArgs,
+   ) {
       // Draw the palette.
 
       for &color in COLOR_PALETTE {
@@ -214,6 +261,74 @@ impl Tool for Brush {
          Some(ui.height()),
       );
    }
+
+   fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
+      if !self.stroke_points.is_empty() {
+         let packet = Packet::Stroke(self.stroke_points.drain(..).collect());
+         net.send(self, packet)?;
+      }
+      Ok(())
+   }
+
+   fn network_receive(
+      &mut self,
+      renderer: &mut Backend,
+      _net: Net,
+      paint_canvas: &mut PaintCanvas,
+      _sender: SocketAddr,
+      payload: Vec<u8>,
+   ) -> anyhow::Result<()> {
+      let packet: Packet = bincode::deserialize(&payload)?;
+      match packet {
+         Packet::Cursor((x, y)) => todo!(),
+         Packet::Stroke(points) => {
+            for Stroke {
+               color,
+               thickness,
+               a,
+               b,
+            } in points
+            {
+               // Verify that the packet is correct.
+               let thickness = thickness as f32;
+               // With thickness being a float, we allow for a little bit of leeway because
+               // computers are dumb.
+               anyhow::ensure!(thickness <= Self::MAX_THICKNESS + 0.1);
+               // Draw the stroke.
+               let a = {
+                  let (ax, ay) = a;
+                  point(ax, ay)
+               };
+               let b = {
+                  let (bx, by) = b;
+                  point(bx, by)
+               };
+               let color = color.map(|(r, g, b, a)| Color::new(r, g, b, a));
+               self.stroke(renderer, paint_canvas, a, b, color, thickness);
+            }
+         }
+      }
+      Ok(())
+   }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Stroke {
+   color: Option<(u8, u8, u8, u8)>,
+   thickness: u8,
+   a: (f32, f32),
+   b: (f32, f32),
+}
+
+/// A brush packet.
+#[derive(Serialize, Deserialize)]
+enum Packet {
+   Cursor((f32, f32)),
+   Stroke(Vec<Stroke>),
+}
+
+struct PeerBrush {
+   mouse_position: Point,
 }
 
 /// The palette of colors at the bottom of the screen.

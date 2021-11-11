@@ -26,7 +26,7 @@ use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
-use self::tools::{Tool, ToolArgs};
+use self::tools::{Net, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -60,6 +60,7 @@ pub struct State {
 
    paint_canvas: PaintCanvas,
    tools: Rc<RefCell<Vec<Box<dyn Tool>>>>,
+   tools_by_name: HashMap<String, usize>,
    current_tool: usize,
 
    peer: Peer,
@@ -79,9 +80,9 @@ pub struct State {
 }
 
 macro_rules! log {
-    ($log:expr, $($arg:tt)*) => {
-        $log.push((format!($($arg)*), Instant::now()))
-    };
+   ($log:expr, $($arg:tt)*) => {
+      $log.push((format!($($arg)*), Instant::now()))
+   };
 }
 
 impl State {
@@ -102,6 +103,7 @@ impl State {
 
          paint_canvas: PaintCanvas::new(),
          tools: Rc::new(RefCell::new(Vec::new())),
+         tools_by_name: HashMap::new(),
          current_tool: 0,
 
          peer,
@@ -136,13 +138,19 @@ impl State {
       this
    }
 
+   /// Registers a tool.
+   fn register_tool(&mut self, tool: Box<dyn Tool>) {
+      let mut tools = self.tools.borrow_mut();
+      self.tools_by_name.insert(tool.name().to_owned(), tools.len());
+      tools.push(tool);
+   }
+
    /// Registers all the tools.
    fn register_tools(&mut self) {
-      let mut tools = self.tools.borrow_mut();
-      tools.push(Box::new(tools::Selection::new()));
+      self.register_tool(Box::new(tools::Selection::new()));
       // Set the default tool to the brush.
-      self.current_tool = tools.len();
-      tools.push(Box::new(tools::Brush::new()));
+      self.current_tool = self.tools.borrow().len();
+      self.register_tool(Box::new(tools::Brush::new()));
    }
 
    /// Executes the given callback with the currently selected tool.
@@ -253,6 +261,7 @@ impl State {
                ui,
                input,
                assets: &p.assets,
+               net: Net::new(&mut p.peer),
             },
             &mut p.paint_canvas,
             &p.viewport,
@@ -275,23 +284,11 @@ impl State {
          self.paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
          ui.render().pop();
 
-         let color = Color::WHITE.with_alpha(240);
-
          ui.render().push();
          ui.render().set_blend_mode(BlendMode::Invert);
 
          for (_, mate) in self.peer.mates() {
-            let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
-            let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
-            let text_position = cursor + point(brush_radius, brush_radius);
-            ui.render().text(
-               Rect::new(text_position, vector(0.0, 0.0)),
-               &self.assets.sans,
-               &mate.nickname,
-               color,
-               (AlignH::Left, AlignV::Top),
-            );
-            ui.render().outline_circle(cursor, brush_radius, color, 1.0);
+            // TODO: rendering mates
          }
 
          ui.render().pop();
@@ -302,6 +299,7 @@ impl State {
                   ui,
                   input,
                   assets: &p.assets,
+                  net: Net::new(&mut p.peer),
                },
                &p.viewport,
             );
@@ -330,14 +328,12 @@ impl State {
       // Networking
       //
 
-      for _ in self.update_timer.tick() {
-         // Mouse / drawing
-         // if input.previous_mouse_position() != input.mouse_position() {
-         //    catch!(self.peer.send_cursor(to, brush_size));
-         // }
-         // if !self.stroke_buffer.is_empty() {
-         //    catch!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
-         // }
+      self.update_timer.tick();
+      while self.update_timer.update() {
+         // Tool updates
+         self.with_current_tool(|p, tool| {
+            catch!(tool.network_send(tools::Net { peer: &mut p.peer }))
+         });
          // Chunk downloading
          if self.save_to_file.is_some() {
             // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
@@ -376,6 +372,7 @@ impl State {
             ui,
             input,
             assets: &p.assets,
+            net: Net::new(&mut p.peer),
          });
       });
 
@@ -509,9 +506,6 @@ impl State {
          MessageKind::Left(nickname) => {
             log!(self.log, "{} has left", nickname);
          }
-         MessageKind::Stroke(points) => {
-            self.fellow_stroke(ui, &points);
-         }
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
             for chunk_position in positions {
@@ -527,6 +521,19 @@ impl State {
          }
          MessageKind::GetChunks(requester, positions) => {
             self.send_chunks(requester, &positions)?;
+         }
+         MessageKind::Tool(sender, name, payload) => {
+            if let Some(&tool_id) = self.tools_by_name.get(&name) {
+               let mut tools = self.tools.borrow_mut();
+               let tool = &mut tools[tool_id];
+               tool.network_receive(
+                  ui,
+                  Net::new(&mut self.peer),
+                  &mut self.paint_canvas,
+                  sender,
+                  payload.clone(),
+               )?
+            }
          }
       }
       Ok(())
