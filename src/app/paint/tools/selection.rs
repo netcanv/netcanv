@@ -199,13 +199,13 @@ impl Tool for Selection {
       }
       if input.mouse_button_just_released(MouseButton::Left) {
          // After the button is released and the selection's size is close to 0, deselect.
-         if self.action == Action::Selecting {
-            if let Some(rect) = self.selection {
-               if Self::rect_is_smaller_than_a_pixel(rect) {
-                  self.selection = None;
-                  self.capture = None;
-               }
+         if let Some(rect) = self.selection {
+            if Self::rect_is_smaller_than_a_pixel(rect) {
+               self.selection = None;
+               self.capture = None;
             }
+         }
+         if self.action == Action::Selecting {
             // Normalize the stored selection after the user's done marking.
             // This will make sure that before making any other actions mutating the selection, the
             // selection's rectangle satisfies all the expectations, eg. that the corners' names are
