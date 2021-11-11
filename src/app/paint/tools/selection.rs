@@ -104,7 +104,7 @@ impl Selection {
 
    fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
       if let Some(capture) = self.capture.as_ref() {
-         if let Some(rect) = self.selection {
+         if let Some(rect) = self.normalized_selection() {
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
