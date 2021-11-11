@@ -28,7 +28,7 @@ pub trait Tool {
    ///
    /// The paint canvas can be used to finalize ongoing actions, eg. the selection should get
    /// deselected.
-   fn deactivate(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {}
+   fn deactivate(&mut self, _renderer: &mut Backend, _paint_canvas: &mut PaintCanvas) {}
 
    /// Called before the paint canvas is rendered to the screen. Primarily used for drawing to the
    /// paint canvas, or updating related state.
