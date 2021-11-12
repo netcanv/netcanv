@@ -2,7 +2,7 @@
 // NetCanv - online collaborative paint canvas
 // Copyright (C) 2021, liquidev and contributors
 //
-// Licensed under the MIT license. Check LICENSE.txt in the repository root for details.
+// Licensed under the MIT license. Check the LICENSE file in the repository root for details.
 //
 // Welcome to main.rs! You've come this far, and I'm happy to see you here.
 // Here are some points of interest within the codebase:
