@@ -38,7 +38,7 @@ enum Action {
    DraggingWhole,
 }
 
-pub struct Selection {
+pub struct SelectionTool {
    icons: Icons,
    mouse_position: Point,
    /// The "potential" action; that is, the action that can be triggered right now by left-clicking.
@@ -48,7 +48,7 @@ pub struct Selection {
    capture: Option<Framebuffer>,
 }
 
-impl Selection {
+impl SelectionTool {
    const MAX_SIZE: f32 = 1024.0;
    const COLOR: Color = Color::rgb(0x0397fb);
    const HANDLE_RADIUS: f32 = 4.0;
@@ -118,7 +118,7 @@ impl Selection {
    }
 }
 
-impl Tool for Selection {
+impl Tool for SelectionTool {
    fn name(&self) -> &str {
       "Selection"
    }

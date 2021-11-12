@@ -28,7 +28,7 @@ enum BrushState {
    Erasing,
 }
 
-pub struct Brush {
+pub struct BrushTool {
    icon: Image,
 
    state: BrushState,
@@ -42,7 +42,7 @@ pub struct Brush {
    peers: HashMap<SocketAddr, PeerBrush>,
 }
 
-impl Brush {
+impl BrushTool {
    const MAX_THICKNESS: f32 = 64.0;
 
    /// Creates an instance of the brush tool.
@@ -123,7 +123,7 @@ impl Brush {
    }
 }
 
-impl Tool for Brush {
+impl Tool for BrushTool {
    fn name(&self) -> &str {
       "Brush"
    }

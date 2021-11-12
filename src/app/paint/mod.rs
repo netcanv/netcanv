@@ -26,7 +26,7 @@ use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
-use self::tools::{Net, Tool, ToolArgs};
+use self::tools::{BrushTool, Net, SelectionTool, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -147,10 +147,10 @@ impl State {
 
    /// Registers all the tools.
    fn register_tools(&mut self) {
-      self.register_tool(Box::new(tools::Selection::new()));
+      self.register_tool(Box::new(SelectionTool::new()));
       // Set the default tool to the brush.
       self.current_tool = self.tools.borrow().len();
-      self.register_tool(Box::new(tools::Brush::new()));
+      self.register_tool(Box::new(BrushTool::new()));
    }
 
    /// Executes the given callback with the currently selected tool.
