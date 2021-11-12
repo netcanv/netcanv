@@ -161,6 +161,10 @@ impl State {
       callback(self, tool);
    }
 
+   fn clone_tool_name(&self) -> String {
+      self.tools.borrow()[self.current_tool].name().to_owned()
+   }
+
    /// Requests a chunk download from the host.
    fn queue_chunk_download(chunk_position: (i32, i32)) {
       bus::push(RequestChunkDownload(chunk_position));
@@ -173,20 +177,6 @@ impl State {
          created: Instant::now(),
          visible_duration: duration,
       };
-   }
-
-   /// Performs a fellow peer's stroke on the canvas.
-   fn fellow_stroke(&mut self, ui: &mut Ui, points: &[StrokePoint]) {
-      if points.is_empty() {
-         return;
-      } // failsafe
-
-      let mut from = points[0].point;
-      let first_index = if points.len() > 1 { 1 } else { 0 };
-      for point in &points[first_index..] {
-         self.paint_canvas.stroke(ui.render(), from, point.point, &point.brush);
-         from = point.point;
-      }
    }
 
    /// Decodes canvas data to the given chunk.
@@ -287,8 +277,23 @@ impl State {
          ui.render().push();
          ui.render().set_blend_mode(BlendMode::Invert);
 
-         for (_, mate) in self.peer.mates() {
-            // TODO: rendering mates
+         for (&address, mate) in self.peer.mates() {
+            if let Some(tool_name) = &mate.tool {
+               if let Some(&tool_id) = self.tools_by_name.get(tool_name) {
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.process_paint_canvas_peer(
+                     ToolArgs {
+                        ui,
+                        input,
+                        assets: &self.assets,
+                        net: Net::new(&self.peer),
+                     },
+                     &self.viewport,
+                     address,
+                  );
+               }
+            }
          }
 
          ui.render().pop();
@@ -485,6 +490,7 @@ impl State {
       if let Some(selected_tool) = selected_tool {
          tools[previous_tool].deactivate(ui, &mut self.paint_canvas);
          tools[selected_tool].activate();
+         catch!(self.peer.send_select_tool(tools[selected_tool].name().to_owned()));
       }
 
       ui.pop();
@@ -502,6 +508,7 @@ impl State {
                let positions = self.paint_canvas.chunk_positions();
                self.peer.send_chunk_positions(address, positions)?;
             }
+            self.peer.send_select_tool(self.clone_tool_name())?;
          }
          MessageKind::Left(nickname) => {
             log!(self.log, "{} has left", nickname);
@@ -511,6 +518,10 @@ impl State {
             for chunk_position in positions {
                self.chunk_downloads.insert(chunk_position, ChunkDownload::NotDownloaded);
             }
+            // Make sure we send the tool _after_ adding the requested chunks.
+            // This way if something goes wrong here and the function returns Err, at least we
+            // will have queued up some chunk downloads at this point.
+            self.peer.send_select_tool(self.clone_tool_name())?;
          }
          MessageKind::Chunks(chunks) => {
             eprintln!("received {} chunks", chunks.len());
@@ -532,7 +543,16 @@ impl State {
                   &mut self.paint_canvas,
                   sender,
                   payload.clone(),
-               )?
+               )?;
+            }
+         }
+         MessageKind::SelectTool(sender, name) => {
+            eprintln!("{} selected tool {}", sender, name);
+            if let Some(&tool_id) = self.tools_by_name.get(&name) {
+               eprintln!(" - valid tool with ID {}", tool_id);
+               let mut tools = self.tools.borrow_mut();
+               let tool = &mut tools[tool_id];
+               tool.network_peer_activate(Net::new(&mut self.peer), sender)?;
             }
          }
       }

@@ -1,6 +1,6 @@
 //! Various assorted utilities.
 
-use netcanv_renderer::paws::{point, vector, Point, Rect, Vector};
+use netcanv_renderer::paws::{point, vector, Color, Point, Rect, Vector};
 
 //
 // Math
@@ -19,6 +19,24 @@ pub fn lerp(v0: f32, v1: f32, t: f32) -> f32 {
 /// Performs linear interpolation between two points.
 pub fn lerp_point(p0: Point, p1: Point, t: f32) -> Point {
    point(lerp(p0.x, p1.x, t), lerp(p0.y, p1.y, t))
+}
+
+pub trait ColorMath {
+   /// Returns the brightness (luma) of the color.
+   fn brightness(self) -> f32;
+}
+
+impl ColorMath for Color {
+   fn brightness(self) -> f32 {
+      let Color { r, g, b, a } = self;
+      let (r, g, b, a) = (
+         r as f32 / 255.0,
+         g as f32 / 255.0,
+         b as f32 / 255.0,
+         a as f32 / 255.0,
+      );
+      a * (0.2126 * r + 0.7152 * g + 0.0772 * b)
+   }
 }
 
 pub trait VectorMath {

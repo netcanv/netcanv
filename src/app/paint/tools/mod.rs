@@ -1,6 +1,8 @@
 //! Painting tools - brushes, selections, and all the like.
 
+use std::any::Any;
 use std::net::SocketAddr;
+use std::ops::Deref;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
@@ -66,6 +68,15 @@ pub trait Tool {
    /// for things like drawing the brush cursor.
    fn process_paint_canvas_overlays(&mut self, _args: ToolArgs, _viewport: &Viewport) {}
 
+   /// Called to render a peer on the paint canvas.
+   fn process_paint_canvas_peer(
+      &mut self,
+      _args: ToolArgs,
+      _viewport: &Viewport,
+      _address: SocketAddr,
+   ) {
+   }
+
    /// Called to draw widgets on the bottom bar.
    ///
    /// Each tool can have its own set of widgets for controlling how the tool is used.
@@ -94,17 +105,23 @@ pub trait Tool {
 
    /// Called when a peer has selected this tool.
    ///
-   /// This can initialize the
-   fn network_peer_selected(&mut self) -> anyhow::Result<()> {
+   /// This can be used to initialize the tool's state for the peer.
+   fn network_peer_activate(&mut self, _net: Net, _address: SocketAddr) -> anyhow::Result<()> {
       Ok(())
    }
 }
 
 pub struct Net<'peer> {
-   pub peer: &'peer mut Peer,
+   pub peer: &'peer Peer,
 }
 
 impl<'peer> Net<'peer> {
+   /// Creates a new `Net` for the given peer.
+   pub fn new(peer: &'peer Peer) -> Net {
+      Self { peer }
+   }
+
+   /// Sends a tool packet.
    pub fn send<T>(&self, tool: &impl Tool, payload: T) -> anyhow::Result<()>
    where
       T: 'static + Serialize,
@@ -114,8 +131,9 @@ impl<'peer> Net<'peer> {
       Ok(())
    }
 
-   pub fn new(peer: &'peer mut Peer) -> Net {
-      Self { peer }
+   /// Returns the name of the given peer, if the peer is present.
+   pub fn peer_name(&self, address: SocketAddr) -> Option<&str> {
+      self.peer.mates().get(&address).map(|mate| mate.nickname.deref())
    }
 }
 

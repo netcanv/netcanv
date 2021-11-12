@@ -1,7 +1,7 @@
 //! NetCanv's infinite paint canvas.
 
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -11,29 +11,12 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
-use netcanv_renderer::paws::{vector, Color, LineCap, Point, Rect, Renderer, Vector};
-use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
+use netcanv_renderer::paws::{vector, Point, Rect, Renderer, Vector};
+use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
-
-/// A brush used for painting strokes.
-#[derive(Clone, Debug)]
-pub enum Brush {
-   /// A drawing brush, blending pixels with the given color.
-   Draw { color: Color, stroke_width: f32 },
-   /// An erasing brush, setting pixels to full transparency.
-   Erase { stroke_width: f32 },
-}
-
-/// A point on a stroke. This pairs a point with a brush used for drawing the stroke between this
-/// point and the one after it.
-#[derive(Debug)]
-pub struct StrokePoint {
-   pub point: Point,
-   pub brush: Brush,
-}
 
 /// A chunk on the infinite canvas.
 pub struct Chunk {
@@ -314,9 +297,6 @@ impl Chunk {
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
-   /// This set contains chunk positions that have already been rendered to in the current
-   /// `stroke()` call.
-   stroked_chunks: HashSet<(i32, i32)>,
    /// The path to the `.netcanv` directory this paint canvas was saved to.
    filename: Option<PathBuf>,
 }
@@ -336,7 +316,6 @@ impl PaintCanvas {
    pub fn new() -> Self {
       Self {
          chunks: HashMap::new(),
-         stroked_chunks: HashSet::new(),
          filename: None,
       }
    }
@@ -390,77 +369,8 @@ impl PaintCanvas {
                callback(renderer);
             });
             renderer.pop();
-         }
-      }
-   }
-
-   /// Draws a stroke from `from` to `to`, using the given brush.
-   ///
-   /// `canvas` is used for allocating new chunks when they don't already exist.
-   pub fn stroke(
-      &mut self,
-      renderer: &mut Backend,
-      from: impl Into<Point>,
-      to: impl Into<Point>,
-      brush: &Brush,
-   ) {
-      let a = from.into();
-      let b = to.into();
-      let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
-      let (color, stroke_width) = match brush {
-         Brush::Draw {
-            color,
-            stroke_width,
-         } => (*color, *stroke_width),
-         Brush::Erase { stroke_width } => (Color::BLACK, *stroke_width),
-      };
-      let half_stroke_width = stroke_width / 2.0;
-
-      let mut delta = b - a;
-      delta.x /= step_count as f32;
-      delta.y /= step_count as f32;
-      let mut p = a;
-
-      self.stroked_chunks.clear();
-      for _ in 1..=step_count {
-         let top_left = p - Point::new(half_stroke_width, half_stroke_width);
-         let bottom_right = p + Point::new(half_stroke_width, half_stroke_width);
-         let top_left_chunk = (
-            (top_left.x / Chunk::SIZE.0 as f32).floor() as i32,
-            (top_left.y / Chunk::SIZE.0 as f32).floor() as i32,
-         );
-         let bottom_right_chunk = (
-            (bottom_right.x / Chunk::SIZE.1 as f32).ceil() as i32,
-            (bottom_right.y / Chunk::SIZE.1 as f32).ceil() as i32,
-         );
-
-         for y in top_left_chunk.1..bottom_right_chunk.1 {
-            for x in top_left_chunk.0..bottom_right_chunk.0 {
-               let chunk_position = (x, y);
-               let master = Chunk::master(chunk_position);
-               let sub = Chunk::sub(chunk_position);
-               if !self.stroked_chunks.contains(&master) {
-                  self.ensure_chunk_exists(renderer, master);
-                  let chunk = self.chunks.get_mut(&master).unwrap();
-                  let screen_position = Chunk::screen_position(master);
-                  renderer.draw_to(&chunk.framebuffer, |renderer| {
-                     renderer.push();
-                     if matches!(brush, Brush::Erase { .. }) {
-                        renderer.set_blend_mode(BlendMode::Clear);
-                     }
-                     renderer.line(
-                        a - screen_position,
-                        b - screen_position,
-                        color,
-                        LineCap::Round,
-                        stroke_width,
-                     );
-                     renderer.pop();
-                  });
-                  chunk.mark_dirty(sub);
-               }
-               self.stroked_chunks.insert(master);
-               p += delta;
+            for i in 0..Chunk::SUB_COUNT {
+               chunk.mark_dirty(i);
             }
          }
       }

@@ -1,14 +1,20 @@
 //! The Brush tool. Allows for painting, as well as erasing pixels from the canvas.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::Instant;
 
-use netcanv_renderer::paws::{point, vector, Color, Layout, LineCap, Point, Rect, Renderer};
-use netcanv_renderer::{BlendMode, RenderBackend};
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
+};
+use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use serde::{Deserialize, Serialize};
 use winit::event::MouseButton;
 
+use crate::app::paint;
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
+use crate::common::{lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{Slider, SliderArgs, SliderStep, UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -30,7 +36,10 @@ pub struct Brush {
    color: Color,
 
    mouse_position: Point,
+   previous_mouse_position: Point,
    stroke_points: Vec<Stroke>,
+
+   peers: HashMap<SocketAddr, PeerBrush>,
 }
 
 impl Brush {
@@ -44,7 +53,9 @@ impl Brush {
          thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
          color: COLOR_PALETTE[0],
          mouse_position: point(0.0, 0.0),
+         previous_mouse_position: point(0.0, 0.0),
          stroke_points: Vec::new(),
+         peers: HashMap::new(),
       }
    }
 
@@ -93,6 +104,22 @@ impl Brush {
          };
          renderer.line(a, b, color, LineCap::Round, thickness);
       });
+   }
+
+   fn ensure_peer(&mut self, address: SocketAddr) -> &mut PeerBrush {
+      if !self.peers.contains_key(&address) {
+         self.peers.insert(
+            address,
+            PeerBrush {
+               mouse_position: point(0.0, 0.0),
+               previous_mouse_position: point(0.0, 0.0),
+               last_cursor_packet: Instant::now(),
+               thickness: 4.0,
+               color: COLOR_PALETTE[0],
+            },
+         );
+      }
+      self.peers.get_mut(&address).unwrap()
    }
 }
 
@@ -159,6 +186,7 @@ impl Tool for Brush {
             b: (b.x, b.y),
          });
       }
+      self.previous_mouse_position = self.mouse_position;
       self.mouse_position = b;
    }
 
@@ -177,15 +205,61 @@ impl Tool for Brush {
          // (well, most) backgrounds.
          // This doesn't work on 50% gray but this is the best we can do.
          renderer.set_blend_mode(BlendMode::Invert);
-         let thickness = self.thickness() * viewport.zoom();
-         let thickness_offset = vector(thickness, thickness) / 2.0;
-         renderer.outline(
-            Rect::new(position - thickness_offset, thickness_offset * 2.0),
+         renderer.outline_circle(
+            position,
+            self.thickness() / 2.0,
             Color::WHITE.with_alpha(240),
-            thickness / 2.0,
             1.0,
          );
          renderer.pop();
+      }
+   }
+
+   /// Processes the guide circle of a peer.
+   fn process_paint_canvas_peer(
+      &mut self,
+      ToolArgs {
+         ui, net, assets, ..
+      }: ToolArgs,
+      viewport: &Viewport,
+      address: SocketAddr,
+   ) {
+      if let Some(peer) = self.peers.get(&address) {
+         let position = viewport.to_screen_space(peer.lerp_mouse_position(), ui.size());
+         let renderer = ui.render();
+         // Render their guide circle.
+         renderer.push();
+         renderer.set_blend_mode(BlendMode::Invert);
+         renderer.outline_circle(
+            position,
+            peer.thickness / 2.0,
+            Color::WHITE.with_alpha(240),
+            1.0,
+         );
+         renderer.pop();
+         // Render their nickname.
+         let nickname = net.peer_name(address).unwrap();
+         let text_color = if peer.color.brightness() > 0.5 {
+            Color::BLACK
+         } else {
+            Color::WHITE
+         };
+         let thickness = vector(peer.thickness, peer.thickness) / 2.0;
+         let text_rect = Rect::new(
+            position + thickness,
+            vector(assets.sans.text_width(nickname), assets.sans.height()),
+         );
+         let padding = vector(4.0, 4.0);
+         let text_rect = Rect::new(text_rect.position, text_rect.size + padding * 2.0);
+         renderer.set_blend_mode(BlendMode::Alpha);
+         renderer.fill(text_rect, peer.color, 2.0);
+         renderer.text(
+            text_rect,
+            &assets.sans,
+            nickname,
+            text_color,
+            (AlignH::Center, AlignV::Middle),
+         );
       }
    }
 
@@ -267,6 +341,18 @@ impl Tool for Brush {
          let packet = Packet::Stroke(self.stroke_points.drain(..).collect());
          net.send(self, packet)?;
       }
+      if self.mouse_position != self.previous_mouse_position {
+         let Point { x, y } = self.mouse_position;
+         let Color { r, g, b, a } = self.color;
+         net.send(
+            self,
+            Packet::Cursor {
+               position: (x, y),
+               thickness: self.thickness() as u8,
+               color: (r, g, b, a),
+            },
+         )?;
+      }
       Ok(())
    }
 
@@ -275,12 +361,23 @@ impl Tool for Brush {
       renderer: &mut Backend,
       _net: Net,
       paint_canvas: &mut PaintCanvas,
-      _sender: SocketAddr,
+      sender: SocketAddr,
       payload: Vec<u8>,
    ) -> anyhow::Result<()> {
       let packet: Packet = bincode::deserialize(&payload)?;
       match packet {
-         Packet::Cursor((x, y)) => todo!(),
+         Packet::Cursor {
+            position: (x, y),
+            thickness,
+            color: (r, g, b, a),
+         } => {
+            let peer = self.ensure_peer(sender);
+            peer.previous_mouse_position = peer.mouse_position;
+            peer.mouse_position = point(x, y);
+            peer.last_cursor_packet = Instant::now();
+            peer.thickness = thickness as f32;
+            peer.color = Color::new(r, g, b, a);
+         }
          Packet::Stroke(points) => {
             for Stroke {
                color,
@@ -310,6 +407,11 @@ impl Tool for Brush {
       }
       Ok(())
    }
+
+   fn network_peer_activate(&mut self, _net: Net, address: SocketAddr) -> anyhow::Result<()> {
+      self.ensure_peer(address);
+      Ok(())
+   }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -323,12 +425,28 @@ struct Stroke {
 /// A brush packet.
 #[derive(Serialize, Deserialize)]
 enum Packet {
-   Cursor((f32, f32)),
+   Cursor {
+      position: (f32, f32),
+      thickness: u8,
+      color: (u8, u8, u8, u8),
+   },
    Stroke(Vec<Stroke>),
 }
 
 struct PeerBrush {
    mouse_position: Point,
+   previous_mouse_position: Point,
+   last_cursor_packet: Instant,
+   thickness: f32,
+   color: Color,
+}
+
+impl PeerBrush {
+   fn lerp_mouse_position(&self) -> Point {
+      let elapsed_ms = self.last_cursor_packet.elapsed().as_millis() as f32;
+      let t = (elapsed_ms / paint::State::TIME_PER_UPDATE.as_millis() as f32).min(1.0);
+      lerp_point(self.previous_mouse_position, self.mouse_position, t)
+   }
 }
 
 /// The palette of colors at the bottom of the screen.

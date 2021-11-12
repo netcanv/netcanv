@@ -32,14 +32,16 @@ pub enum MessageKind {
    Joined(String, SocketAddr),
    /// Another peer has left the room.
    Left(String),
-   /// A tool packet was received from an address.
-   Tool(SocketAddr, String, Vec<u8>),
    /// The host sent us the chunk positions for the room.
    ChunkPositions(Vec<(i32, i32)>),
    /// Somebody requested chunk positions from the host.
    GetChunks(SocketAddr, Vec<(i32, i32)>),
    /// Somebody sent us chunk image data.
    Chunks(Vec<((i32, i32), Vec<u8>)>),
+   /// A tool packet was received from an address.
+   Tool(SocketAddr, String, Vec<u8>),
+   /// The client selected a tool.
+   SelectTool(SocketAddr, String),
 }
 
 /// The state of a Peer connection.
@@ -304,7 +306,12 @@ impl Peer {
          cl::Packet::Tool(name, payload) => {
             self.send_message(MessageKind::Tool(author, name, payload))
          }
-         cl::Packet::SelectTool(name) => todo!(),
+         cl::Packet::SelectTool(name) => {
+            self.send_message(MessageKind::SelectTool(author, name.clone()));
+            if let Some(mate) = self.mates.get_mut(&author) {
+               mate.tool = Some(name);
+            }
+         }
       }
 
       Ok(())
@@ -358,6 +365,11 @@ impl Peer {
       self.send_to_client(None, cl::Packet::Tool(name, payload))
    }
 
+   /// Sends a tool selection packet.
+   pub fn send_select_tool(&self, name: String) -> anyhow::Result<()> {
+      self.send_to_client(None, cl::Packet::SelectTool(name))
+   }
+
    /// Returns the peer's unique token.
    pub fn token(&self) -> PeerToken {
       self.token
@@ -382,5 +394,5 @@ impl Peer {
 /// Another person in the same room.
 pub struct Mate {
    pub nickname: String,
-   pub tool: Option<(String, Box<dyn Any>)>,
+   pub tool: Option<String>,
 }
