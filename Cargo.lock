@@ -1572,9 +1572,9 @@ dependencies = [
 
 [[package]]
 name = "paws"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24bfa572b249c2ab45d63ee48caf75e087f3265c92b2b230b10740655260aa5f"
+checksum = "5b0165a920a978bb60816401d173877f6b48cfa1a7e6c6c69424319f1d455bc9"
 
 [[package]]
 name = "peeking_take_while"
