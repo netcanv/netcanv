@@ -1,14 +1,16 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::Instant;
 
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 use winit::event::MouseButton;
 
+use crate::app::paint;
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Framebuffer, Image};
-use crate::common::{RectMath, VectorMath};
+use crate::common::{lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -49,7 +51,7 @@ pub struct SelectionTool {
    potential_action: Action,
    action: Action,
    selection: Selection,
-   peer_selections: HashMap<SocketAddr, Selection>,
+   peer_selections: HashMap<SocketAddr, PeerSelection>,
 }
 
 impl SelectionTool {
@@ -96,9 +98,16 @@ impl SelectionTool {
 
    /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
    /// said selection.
-   fn ensure_peer(&mut self, address: SocketAddr) -> &mut Selection {
+   fn ensure_peer(&mut self, address: SocketAddr) -> &mut PeerSelection {
       if !self.peer_selections.contains_key(&address) {
-         self.peer_selections.insert(address, Selection::new());
+         self.peer_selections.insert(
+            address,
+            PeerSelection {
+               selection: Selection::new(),
+               previous_normalized_rect: None,
+               last_rect_packet: Instant::now(),
+            },
+         );
       }
       self.peer_selections.get_mut(&address).unwrap()
    }
@@ -304,8 +313,8 @@ impl Tool for SelectionTool {
       viewport: &Viewport,
       address: SocketAddr,
    ) {
-      if let Some(selection) = self.peer_selections.get(&address) {
-         if let Some(rect) = selection.normalized_rect() {
+      if let Some(peer) = self.peer_selections.get(&address) {
+         if let Some(rect) = peer.lerp_normalized_rect() {
             if !Self::rect_is_smaller_than_a_pixel(rect) {
                ui.draw(|ui| {
                   let top_left = viewport.to_screen_space(rect.top_left(), ui.size());
@@ -332,7 +341,7 @@ impl Tool for SelectionTool {
                         (AlignH::Center, AlignV::Middle),
                      );
                   }
-                  if let Some(framebuffer) = selection.capture.as_ref() {
+                  if let Some(framebuffer) = peer.selection.capture.as_ref() {
                      renderer.framebuffer(rect, framebuffer);
                   }
                });
@@ -398,10 +407,14 @@ impl Tool for SelectionTool {
          Packet::Rect {
             position: (x, y),
             size: (width, height),
-         } => peer.rect = Some(Rect::new(point(x, y), vector(width, height))),
-         Packet::Capture => peer.capture(renderer, paint_canvas),
-         Packet::Cancel => peer.cancel(),
-         Packet::Deselect => peer.deselect(renderer, paint_canvas),
+         } => {
+            peer.previous_normalized_rect = peer.selection.normalized_rect();
+            peer.selection.rect = Some(Rect::new(point(x, y), vector(width, height)));
+            peer.last_rect_packet = Instant::now();
+         }
+         Packet::Capture => peer.selection.capture(renderer, paint_canvas),
+         Packet::Cancel => peer.selection.cancel(),
+         Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
       }
       Ok(())
    }
@@ -421,8 +434,8 @@ impl Tool for SelectionTool {
       address: SocketAddr,
    ) -> anyhow::Result<()> {
       println!("selection {} deactivate", address);
-      if let Some(selection) = self.peer_selections.get_mut(&address) {
-         selection.deselect(renderer, paint_canvas);
+      if let Some(peer) = self.peer_selections.get_mut(&address) {
+         peer.selection.deselect(renderer, paint_canvas);
       }
       Ok(())
    }
@@ -508,6 +521,26 @@ impl Selection {
    /// Normalizes the selection rectangle, such that the corner names match their visual positions.
    fn normalize(&mut self) {
       self.rect = self.normalized_rect().map(|rect| rect.sort());
+   }
+}
+
+/// A peer's selection data.
+struct PeerSelection {
+   selection: Selection,
+   previous_normalized_rect: Option<Rect>,
+   last_rect_packet: Instant,
+}
+
+impl PeerSelection {
+   fn lerp_normalized_rect(&self) -> Option<Rect> {
+      let elapsed = self.last_rect_packet.elapsed().as_millis() as f32;
+      let t = (elapsed / paint::State::TIME_PER_UPDATE.as_millis() as f32).clamp(0.0, 1.0);
+      self.selection.normalized_rect().map(|mut rect| {
+         let previous_rect = self.previous_normalized_rect.unwrap_or(rect);
+         rect.position = lerp_point(previous_rect.position, rect.position, t);
+         rect.size = lerp_point(previous_rect.size, rect.size, t);
+         rect
+      })
    }
 }
 
