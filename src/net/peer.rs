@@ -30,7 +30,11 @@ pub enum MessageKind {
    /// Another peer has joined the room.
    Joined(String, SocketAddr),
    /// Another peer has left the room.
-   Left(String),
+   Left {
+      address: SocketAddr,
+      nickname: String,
+      last_tool: Option<String>,
+   },
    /// The host sent us the chunk positions for the room.
    ChunkPositions(Vec<(i32, i32)>),
    /// Somebody requested chunk positions from the host.
@@ -40,7 +44,11 @@ pub enum MessageKind {
    /// A tool packet was received from an address.
    Tool(SocketAddr, String, Vec<u8>),
    /// The client selected a tool.
-   SelectTool(SocketAddr, String),
+   SelectTool {
+      address: SocketAddr,
+      previous_tool: Option<String>,
+      tool: String,
+   },
 }
 
 /// The state of a Peer connection.
@@ -244,7 +252,11 @@ impl Peer {
          }
          mm::Packet::Disconnected(address) => {
             if let Some(mate) = self.mates.remove(&address) {
-               self.send_message(MessageKind::Left(mate.nickname));
+               self.send_message(MessageKind::Left {
+                  address,
+                  nickname: mate.nickname,
+                  last_tool: mate.tool,
+               });
             }
          }
          mm::Packet::Error(message) => anyhow::bail!(message),
@@ -305,11 +317,16 @@ impl Peer {
          cl::Packet::Tool(name, payload) => {
             self.send_message(MessageKind::Tool(author, name, payload))
          }
-         cl::Packet::SelectTool(name) => {
-            self.send_message(MessageKind::SelectTool(author, name.clone()));
+         cl::Packet::SelectTool(tool) => {
+            let mut old_tool = None;
             if let Some(mate) = self.mates.get_mut(&author) {
-               mate.tool = Some(name);
+               old_tool = std::mem::replace(&mut mate.tool, Some(tool.clone()));
             }
+            self.send_message(MessageKind::SelectTool {
+               address: author,
+               previous_tool: old_tool,
+               tool,
+            });
          }
       }
 

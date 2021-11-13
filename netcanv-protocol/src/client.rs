@@ -36,7 +36,7 @@ pub enum Packet {
    //
    // Tools
    // --------
-   // These packets are sent 20 times per second, and are used for exchanging tool-specific
+   // These packets are sent up to 20 times per second, and are used for exchanging tool-specific
    // information. Each tool can define its own packet for communication.
    //
    /// Carries a payload with a tool-specific packet.

@@ -1,5 +1,9 @@
-use netcanv_renderer::paws::{point, vector, Color, Point, Rect, Renderer, Vector};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+
+use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
+use serde::{Deserialize, Serialize};
 use winit::event::MouseButton;
 
 use crate::assets::Assets;
@@ -9,7 +13,7 @@ use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
 use crate::viewport::Viewport;
 
-use super::{Tool, ToolArgs};
+use super::{Net, Tool, ToolArgs};
 
 struct Icons {
    tool: Image,
@@ -45,10 +49,13 @@ pub struct SelectionTool {
    potential_action: Action,
    action: Action,
    selection: Selection,
+   peer_selections: HashMap<SocketAddr, Selection>,
 }
 
 impl SelectionTool {
+   /// The color of the selection.
    const COLOR: Color = Color::rgb(0x0397fb);
+   /// The radius of handles for resizing the selection contents.
    const HANDLE_RADIUS: f32 = 4.0;
 
    pub fn new() -> Self {
@@ -66,10 +73,8 @@ impl SelectionTool {
          mouse_position: point(0.0, 0.0),
          potential_action: Action::None,
          action: Action::None,
-         selection: Selection {
-            rect: None,
-            capture: None,
-         },
+         selection: Selection::new(),
+         peer_selections: HashMap::new(),
       }
    }
 
@@ -84,8 +89,34 @@ impl SelectionTool {
       renderer.fill_circle(position, radius, Self::COLOR);
    }
 
+   /// Returns whether a rect is smaller than a pixel.
    fn rect_is_smaller_than_a_pixel(rect: Rect) -> bool {
       rect.width().trunc().abs() < 1.0 || rect.height().trunc().abs() < 1.0
+   }
+
+   /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
+   /// said selection.
+   fn ensure_peer(&mut self, address: SocketAddr) -> &mut Selection {
+      if !self.peer_selections.contains_key(&address) {
+         self.peer_selections.insert(address, Selection::new());
+      }
+      self.peer_selections.get_mut(&address).unwrap()
+   }
+
+   /// Sends a `Rect` packet containing the current selection rectangle.
+   /// This is sometimes needed before important actions, where the rectangle may not have been
+   /// synchronized yet due to the lower network tick rate.
+   fn send_rect_packet(&self, net: &Net) -> anyhow::Result<()> {
+      if let Some(rect) = self.selection.normalized_rect() {
+         net.send(
+            self,
+            Packet::Rect {
+               position: (rect.x(), rect.y()),
+               size: (rect.width(), rect.height()),
+            },
+         )?;
+      }
+      Ok(())
    }
 }
 
@@ -98,13 +129,15 @@ impl Tool for SelectionTool {
       &self.icons.tool
    }
 
+   /// When the tool is deactivated, the selection should be deselected.
    fn deactivate(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
       self.selection.deselect(renderer, paint_canvas);
    }
 
+   /// Processes mouse input.
    fn process_paint_canvas_input(
       &mut self,
-      ToolArgs { ui, input, .. }: ToolArgs,
+      ToolArgs { ui, input, net, .. }: ToolArgs,
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) {
@@ -161,8 +194,11 @@ impl Tool for SelectionTool {
          if self.potential_action == Action::Selecting {
             // Before we erase the old data, draw the capture back onto the canvas.
             self.selection.deselect(ui, paint_canvas);
+            catch!(self.send_rect_packet(&net));
+            catch!(net.send(self, Packet::Deselect));
             // Anchor the selection to the mouse position.
             self.selection.begin(mouse_position);
+            catch!(self.send_rect_packet(&net));
          }
          self.action = self.potential_action;
       }
@@ -171,6 +207,7 @@ impl Tool for SelectionTool {
          if let Some(rect) = self.selection.rect {
             if Self::rect_is_smaller_than_a_pixel(rect) {
                self.selection.cancel();
+               catch!(net.send(self, Packet::Cancel));
             }
          }
          if self.action == Action::Selecting {
@@ -179,9 +216,11 @@ impl Tool for SelectionTool {
             // selection's rectangle satisfies all the expectations, eg. that the corners' names are
             // what they are visually.
             self.selection.normalize();
+            catch!(self.send_rect_packet(&net));
             // If there's still a selection after all of this, capture the paint canvas into an
             // image.
             self.selection.capture(ui, paint_canvas);
+            catch!(net.send(self, Packet::Capture));
          }
          self.action = Action::None;
       }
@@ -256,6 +295,53 @@ impl Tool for SelectionTool {
       }
    }
 
+   /// Processes peers' selection overlays.
+   fn process_paint_canvas_peer(
+      &mut self,
+      ToolArgs {
+         ui, net, assets, ..
+      }: ToolArgs,
+      viewport: &Viewport,
+      address: SocketAddr,
+   ) {
+      if let Some(selection) = self.peer_selections.get(&address) {
+         if let Some(rect) = selection.normalized_rect() {
+            if !Self::rect_is_smaller_than_a_pixel(rect) {
+               ui.draw(|ui| {
+                  let top_left = viewport.to_screen_space(rect.top_left(), ui.size());
+                  let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size());
+                  let rect = Rect::new(top_left, bottom_right - top_left);
+
+                  let nickname = net.peer_name(address).unwrap();
+                  let text_width = assets.sans.text_width(nickname);
+                  let padding = vector(4.0, 4.0);
+                  let text_rect = Rect::new(
+                     top_left,
+                     vector(text_width, assets.sans.height()) + padding * 2.0,
+                  );
+
+                  let renderer = ui.render();
+                  renderer.outline(rect, Self::COLOR, 0.0, 2.0);
+                  if rect.width() > text_rect.width() && rect.height() > text_rect.height() {
+                     renderer.fill(text_rect, Self::COLOR, 2.0);
+                     renderer.text(
+                        text_rect,
+                        &assets.sans,
+                        nickname,
+                        Color::WHITE,
+                        (AlignH::Center, AlignV::Middle),
+                     );
+                  }
+                  if let Some(framebuffer) = selection.capture.as_ref() {
+                     renderer.framebuffer(rect, framebuffer);
+                  }
+               });
+            }
+         }
+      }
+   }
+
+   /// Processes the bottom bar stats.
    fn process_bottom_bar(&mut self, ToolArgs { ui, assets, .. }: ToolArgs) {
       let icon_size = vector(ui.height(), ui.height());
 
@@ -290,6 +376,56 @@ impl Tool for SelectionTool {
          );
       }
    }
+
+   /// Sends out packets containing the selection rectangle.
+   fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
+      self.send_rect_packet(&net)?;
+      Ok(())
+   }
+
+   /// Interprets an incoming packet.
+   fn network_receive(
+      &mut self,
+      renderer: &mut Backend,
+      _net: Net,
+      paint_canvas: &mut PaintCanvas,
+      sender: SocketAddr,
+      payload: Vec<u8>,
+   ) -> anyhow::Result<()> {
+      let packet = bincode::deserialize(&payload)?;
+      let peer = self.ensure_peer(sender);
+      match packet {
+         Packet::Rect {
+            position: (x, y),
+            size: (width, height),
+         } => peer.rect = Some(Rect::new(point(x, y), vector(width, height))),
+         Packet::Capture => peer.capture(renderer, paint_canvas),
+         Packet::Cancel => peer.cancel(),
+         Packet::Deselect => peer.deselect(renderer, paint_canvas),
+      }
+      Ok(())
+   }
+
+   /// Ensures the peer's selection is initialized.
+   fn network_peer_activate(&mut self, _net: Net, address: SocketAddr) -> anyhow::Result<()> {
+      self.ensure_peer(address);
+      Ok(())
+   }
+
+   /// Ensures the peer's selection has been transferred to the paint canvas.
+   fn network_peer_deactivate(
+      &mut self,
+      renderer: &mut Backend,
+      _net: Net,
+      paint_canvas: &mut PaintCanvas,
+      address: SocketAddr,
+   ) -> anyhow::Result<()> {
+      println!("selection {} deactivate", address);
+      if let Some(selection) = self.peer_selections.get_mut(&address) {
+         selection.deselect(renderer, paint_canvas);
+      }
+      Ok(())
+   }
 }
 
 struct Selection {
@@ -299,6 +435,13 @@ struct Selection {
 
 impl Selection {
    const MAX_SIZE: f32 = 1024.0;
+
+   fn new() -> Self {
+      Self {
+         rect: None,
+         capture: None,
+      }
+   }
 
    /// Begins the selection at the given anchor.
    fn begin(&mut self, anchor: Point) {
@@ -344,7 +487,7 @@ impl Selection {
       self.capture = None;
    }
 
-   /// Returns a sorted, rounded, limited, squared version of the selection rectangle.
+   /// Returns a rounded, limited version of the selection rectangle.
    fn normalized_rect(&self) -> Option<Rect> {
       self.rect.map(|rect| {
          let rect = Rect::new(
@@ -366,6 +509,18 @@ impl Selection {
    fn normalize(&mut self) {
       self.rect = self.normalized_rect().map(|rect| rect.sort());
    }
+}
+
+/// A network packet for the selection tool.
+#[derive(Serialize, Deserialize)]
+enum Packet {
+   Rect {
+      position: (f32, f32),
+      size: (f32, f32),
+   },
+   Capture,
+   Cancel,
+   Deselect,
 }
 
 fn format_vector(vector: Vector) -> String {

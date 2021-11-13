@@ -251,7 +251,6 @@ impl Tool for BrushTool {
          );
          let padding = vector(4.0, 4.0);
          let text_rect = Rect::new(text_rect.position, text_rect.size + padding * 2.0);
-         renderer.set_blend_mode(BlendMode::Alpha);
          renderer.fill(text_rect, peer.color, 2.0);
          renderer.text(
             text_rect,

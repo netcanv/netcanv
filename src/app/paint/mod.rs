@@ -275,8 +275,6 @@ impl State {
          ui.render().pop();
 
          ui.render().push();
-         ui.render().set_blend_mode(BlendMode::Invert);
-
          for (&address, mate) in self.peer.mates() {
             if let Some(tool_name) = &mate.tool {
                if let Some(&tool_id) = self.tools_by_name.get(tool_name) {
@@ -295,7 +293,6 @@ impl State {
                }
             }
          }
-
          ui.render().pop();
 
          self.with_current_tool(|p, tool| {
@@ -510,8 +507,25 @@ impl State {
             }
             self.peer.send_select_tool(self.clone_tool_name())?;
          }
-         MessageKind::Left(nickname) => {
+         MessageKind::Left {
+            address,
+            nickname,
+            last_tool,
+         } => {
             log!(self.log, "{} has left", nickname);
+            // Make sure the tool they were last using is properly deinitialized.
+            if let Some(tool) = last_tool {
+               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.network_peer_deactivate(
+                     ui,
+                     Net::new(&mut self.peer),
+                     &mut self.paint_canvas,
+                     address,
+                  )?;
+               }
+            }
          }
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
@@ -546,13 +560,32 @@ impl State {
                )?;
             }
          }
-         MessageKind::SelectTool(sender, name) => {
-            eprintln!("{} selected tool {}", sender, name);
-            if let Some(&tool_id) = self.tools_by_name.get(&name) {
+         MessageKind::SelectTool {
+            address,
+            previous_tool,
+            tool,
+         } => {
+            eprintln!("{} selected tool {}", address, tool);
+            // Deselect the old tool.
+            if let Some(tool) = previous_tool {
+               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+                  // ↑ still waiting for if_let_chains to get stabilized.
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.network_peer_deactivate(
+                     ui,
+                     Net::new(&mut self.peer),
+                     &mut self.paint_canvas,
+                     address,
+                  )?;
+               }
+            }
+            // Select the new tool.
+            if let Some(&tool_id) = self.tools_by_name.get(&tool) {
                eprintln!(" - valid tool with ID {}", tool_id);
                let mut tools = self.tools.borrow_mut();
                let tool = &mut tools[tool_id];
-               tool.network_peer_activate(Net::new(&mut self.peer), sender)?;
+               tool.network_peer_activate(Net::new(&mut self.peer), address)?;
             }
          }
       }

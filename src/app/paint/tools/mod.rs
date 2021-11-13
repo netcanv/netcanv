@@ -108,6 +108,20 @@ pub trait Tool {
    fn network_peer_activate(&mut self, _net: Net, _address: SocketAddr) -> anyhow::Result<()> {
       Ok(())
    }
+
+   /// Called when a peer has selected this tool.
+   ///
+   /// This can be used to write back the changes a peer was in the middle of doing, but didn't
+   /// finish before switching to another tool.
+   fn network_peer_deactivate(
+      &mut self,
+      _renderer: &mut Backend,
+      _net: Net,
+      _paint_canvas: &mut PaintCanvas,
+      _address: SocketAddr,
+   ) -> anyhow::Result<()> {
+      Ok(())
+   }
 }
 
 pub struct Net<'peer> {
