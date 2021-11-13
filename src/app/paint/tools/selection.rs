@@ -410,7 +410,13 @@ impl Tool for SelectionTool {
             size: (width, height),
          } => {
             peer.previous_normalized_rect = peer.selection.normalized_rect();
-            peer.selection.rect = Some(Rect::new(point(x, y), vector(width, height)));
+            peer.selection.rect = Some(Rect::new(
+               point(x, y),
+               vector(
+                  width.min(Selection::MAX_SIZE),
+                  height.min(Selection::MAX_SIZE),
+               ),
+            ));
             peer.last_rect_packet = Instant::now();
          }
          Packet::Capture => peer.selection.capture(renderer, paint_canvas),
