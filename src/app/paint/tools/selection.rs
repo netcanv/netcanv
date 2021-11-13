@@ -19,7 +19,7 @@ struct Icons {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Corner {
+enum Handle {
    TopLeft,
    Top,
    TopRight,
@@ -34,7 +34,7 @@ enum Corner {
 enum Action {
    None,
    Selecting,
-   DraggingCorner(Corner),
+   DraggingHandle(Handle),
    DraggingWhole,
 }
 
@@ -74,8 +74,8 @@ impl SelectionTool {
    }
 
    /// Draws a resize handle.
-   fn draw_handle(&self, renderer: &mut Backend, position: Point, corner: Corner) {
-      let radius = if self.potential_action == Action::DraggingCorner(corner) {
+   fn draw_handle(&self, renderer: &mut Backend, position: Point, handle: Handle) {
+      let radius = if self.potential_action == Action::DraggingHandle(handle) {
          Self::HANDLE_RADIUS * 2.0
       } else {
          Self::HANDLE_RADIUS
@@ -120,29 +120,29 @@ impl Tool for SelectionTool {
       // Only let the user resize or drag the selection if they aren't doing anything at the moment.
       if matches!(self.action, Action::None | Action::DraggingWhole) {
          if let Some(rect) = self.selection.rect {
-            // Check the corners.
+            // Check the handles.
             let handle_radius = Self::HANDLE_RADIUS * 3.0 / viewport.zoom();
-            let corner = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
-               Some(Corner::TopLeft)
+            let handle = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
+               Some(Handle::TopLeft)
             } else if mouse_position.is_in_circle(rect.top_center(), handle_radius) {
-               Some(Corner::Top)
+               Some(Handle::Top)
             } else if mouse_position.is_in_circle(rect.top_right(), handle_radius) {
-               Some(Corner::TopRight)
+               Some(Handle::TopRight)
             } else if mouse_position.is_in_circle(rect.right_center(), handle_radius) {
-               Some(Corner::Right)
+               Some(Handle::Right)
             } else if mouse_position.is_in_circle(rect.bottom_right(), handle_radius) {
-               Some(Corner::BottomRight)
+               Some(Handle::BottomRight)
             } else if mouse_position.is_in_circle(rect.bottom_center(), handle_radius) {
-               Some(Corner::Bottom)
+               Some(Handle::Bottom)
             } else if mouse_position.is_in_circle(rect.bottom_left(), handle_radius) {
-               Some(Corner::BottomLeft)
+               Some(Handle::BottomLeft)
             } else if mouse_position.is_in_circle(rect.left_center(), handle_radius) {
-               Some(Corner::Left)
+               Some(Handle::Left)
             } else {
                None
             };
-            if let Some(corner) = corner {
-               self.potential_action = Action::DraggingCorner(corner);
+            if let Some(handle) = handle {
+               self.potential_action = Action::DraggingHandle(handle);
             } else {
                // Check the inside.
                let rect = Rect::new(
@@ -193,16 +193,16 @@ impl Tool for SelectionTool {
             Action::Selecting => {
                rect.size = mouse_position - rect.position;
             }
-            Action::DraggingCorner(corner) => {
-               match corner {
-                  Corner::TopLeft => *rect = rect.with_top_left(mouse_position),
-                  Corner::Top => *rect = rect.with_top(mouse_position.y),
-                  Corner::TopRight => *rect = rect.with_top_right(mouse_position),
-                  Corner::Right => *rect = rect.with_right(mouse_position.x),
-                  Corner::BottomRight => *rect = rect.with_bottom_right(mouse_position),
-                  Corner::Bottom => *rect = rect.with_bottom(mouse_position.y),
-                  Corner::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
-                  Corner::Left => *rect = rect.with_left(mouse_position.x),
+            Action::DraggingHandle(handle) => {
+               match handle {
+                  Handle::TopLeft => *rect = rect.with_top_left(mouse_position),
+                  Handle::Top => *rect = rect.with_top(mouse_position.y),
+                  Handle::TopRight => *rect = rect.with_top_right(mouse_position),
+                  Handle::Right => *rect = rect.with_right(mouse_position.x),
+                  Handle::BottomRight => *rect = rect.with_bottom_right(mouse_position),
+                  Handle::Bottom => *rect = rect.with_bottom(mouse_position.y),
+                  Handle::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
+                  Handle::Left => *rect = rect.with_left(mouse_position.x),
                }
                self.selection.rect = self.selection.normalized_rect();
             }
@@ -214,10 +214,12 @@ impl Tool for SelectionTool {
       }
    }
 
+   /// Processes the selection overlay.
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
       if let Some(rect) = self.selection.normalized_rect() {
          if !Self::rect_is_smaller_than_a_pixel(rect) {
             ui.draw(|ui| {
+               // Oh my.
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
                let top = viewport.to_screen_space(rect.top_center(), ui.size()).floor();
                let top_right = viewport.to_screen_space(rect.top_right(), ui.size()).floor();
@@ -241,14 +243,14 @@ impl Tool for SelectionTool {
                      2.0
                   },
                );
-               self.draw_handle(renderer, top_left, Corner::TopLeft);
-               self.draw_handle(renderer, top, Corner::Top);
-               self.draw_handle(renderer, top_right, Corner::TopRight);
-               self.draw_handle(renderer, right, Corner::Right);
-               self.draw_handle(renderer, bottom_right, Corner::BottomRight);
-               self.draw_handle(renderer, bottom, Corner::Bottom);
-               self.draw_handle(renderer, bottom_left, Corner::BottomLeft);
-               self.draw_handle(renderer, left, Corner::Left);
+               self.draw_handle(renderer, top_left, Handle::TopLeft);
+               self.draw_handle(renderer, top, Handle::Top);
+               self.draw_handle(renderer, top_right, Handle::TopRight);
+               self.draw_handle(renderer, right, Handle::Right);
+               self.draw_handle(renderer, bottom_right, Handle::BottomRight);
+               self.draw_handle(renderer, bottom, Handle::Bottom);
+               self.draw_handle(renderer, bottom_left, Handle::BottomLeft);
+               self.draw_handle(renderer, left, Handle::Left);
             });
          }
       }
