@@ -207,7 +207,7 @@ impl Tool for BrushTool {
          renderer.set_blend_mode(BlendMode::Invert);
          renderer.outline_circle(
             position,
-            self.thickness() / 2.0,
+            self.thickness() / 2.0 * viewport.zoom(),
             Color::WHITE.with_alpha(240),
             1.0,
          );
@@ -226,16 +226,12 @@ impl Tool for BrushTool {
    ) {
       if let Some(peer) = self.peers.get(&address) {
          let position = viewport.to_screen_space(peer.lerp_mouse_position(), ui.size());
+         let radius = peer.thickness / 2.0 * viewport.zoom();
          let renderer = ui.render();
          // Render their guide circle.
          renderer.push();
          renderer.set_blend_mode(BlendMode::Invert);
-         renderer.outline_circle(
-            position,
-            peer.thickness / 2.0,
-            Color::WHITE.with_alpha(240),
-            1.0,
-         );
+         renderer.outline_circle(position, radius, Color::WHITE.with_alpha(240), 1.0);
          renderer.pop();
          // Render their nickname.
          let nickname = net.peer_name(address).unwrap();
@@ -244,7 +240,7 @@ impl Tool for BrushTool {
          } else {
             Color::WHITE
          };
-         let thickness = vector(peer.thickness, peer.thickness) / 2.0;
+         let thickness = vector(radius, radius);
          let text_rect = Rect::new(
             position + thickness,
             vector(assets.sans.text_width(nickname), assets.sans.height()),
