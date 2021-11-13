@@ -5,7 +5,7 @@ use std::time::Instant;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
-use winit::event::MouseButton;
+use winit::event::{MouseButton, VirtualKeyCode};
 
 use crate::app::paint;
 use crate::assets::Assets;
@@ -259,6 +259,17 @@ impl Tool for SelectionTool {
                let delta_position = mouse_position - previous_mouse_position;
                rect.position += delta_position;
             }
+         }
+      }
+
+      //
+      // Keyboard shortcuts
+      //
+
+      if input.key_just_typed(VirtualKeyCode::Delete) {
+         if self.selection.rect.is_some() {
+            self.selection.cancel();
+            catch!(net.send(self, Packet::Cancel));
          }
       }
    }
