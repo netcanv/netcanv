@@ -1,6 +1,5 @@
 //! Painting tools - brushes, selections, and all the like.
 
-use std::any::Any;
 use std::net::SocketAddr;
 use std::ops::Deref;
 
