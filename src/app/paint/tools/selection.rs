@@ -44,12 +44,10 @@ pub struct SelectionTool {
    /// The "potential" action; that is, the action that can be triggered right now by left-clicking.
    potential_action: Action,
    action: Action,
-   selection: Option<Rect>,
-   capture: Option<Framebuffer>,
+   selection: Selection,
 }
 
 impl SelectionTool {
-   const MAX_SIZE: f32 = 1024.0;
    const COLOR: Color = Color::rgb(0x0397fb);
    const HANDLE_RADIUS: f32 = 4.0;
 
@@ -68,27 +66,11 @@ impl SelectionTool {
          mouse_position: point(0.0, 0.0),
          potential_action: Action::None,
          action: Action::None,
-         selection: None,
-         capture: None,
+         selection: Selection {
+            rect: None,
+            capture: None,
+         },
       }
-   }
-
-   /// Returns a sorted, rounded, limited, squared version of the selection rectangle.
-   fn normalized_selection(&self) -> Option<Rect> {
-      self.selection.map(|rect| {
-         let rect = Rect::new(
-            rect.position,
-            vector(
-               rect.width().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
-               rect.height().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
-            ),
-         );
-         let rect = Rect::new(
-            point(rect.x().floor(), rect.y().floor()),
-            vector(rect.width().ceil(), rect.height().ceil()),
-         );
-         rect
-      })
    }
 
    /// Draws a resize handle.
@@ -100,17 +82,6 @@ impl SelectionTool {
       };
       renderer.fill_circle(position, radius + 2.0, Color::WHITE);
       renderer.fill_circle(position, radius, Self::COLOR);
-   }
-
-   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      if let Some(capture) = self.capture.as_ref() {
-         if let Some(rect) = self.normalized_selection() {
-            paint_canvas.draw(renderer, rect, |renderer| {
-               renderer.framebuffer(rect, capture);
-            });
-         }
-      }
-      self.capture = None;
    }
 
    fn rect_is_smaller_than_a_pixel(rect: Rect) -> bool {
@@ -128,8 +99,7 @@ impl Tool for SelectionTool {
    }
 
    fn deactivate(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      self.deselect(renderer, paint_canvas);
-      self.selection = None;
+      self.selection.deselect(renderer, paint_canvas);
    }
 
    fn process_paint_canvas_input(
@@ -149,7 +119,7 @@ impl Tool for SelectionTool {
       self.potential_action = Action::Selecting;
       // Only let the user resize or drag the selection if they aren't doing anything at the moment.
       if matches!(self.action, Action::None | Action::DraggingWhole) {
-         if let Some(rect) = self.selection {
+         if let Some(rect) = self.selection.rect {
             // Check the corners.
             let handle_radius = Self::HANDLE_RADIUS * 3.0 / viewport.zoom();
             let corner = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
@@ -190,19 +160,17 @@ impl Tool for SelectionTool {
       if input.mouse_button_just_pressed(MouseButton::Left) {
          if self.potential_action == Action::Selecting {
             // Before we erase the old data, draw the capture back onto the canvas.
-            self.deselect(ui, paint_canvas);
+            self.selection.deselect(ui, paint_canvas);
             // Anchor the selection to the mouse position.
-            self.selection = Some(Rect::new(mouse_position, vector(0.0, 0.0)));
-            self.selection = self.normalized_selection();
+            self.selection.begin(mouse_position);
          }
          self.action = self.potential_action;
       }
       if input.mouse_button_just_released(MouseButton::Left) {
          // After the button is released and the selection's size is close to 0, deselect.
-         if let Some(rect) = self.selection {
+         if let Some(rect) = self.selection.rect {
             if Self::rect_is_smaller_than_a_pixel(rect) {
-               self.selection = None;
-               self.capture = None;
+               self.selection.cancel();
             }
          }
          if self.action == Action::Selecting {
@@ -210,30 +178,16 @@ impl Tool for SelectionTool {
             // This will make sure that before making any other actions mutating the selection, the
             // selection's rectangle satisfies all the expectations, eg. that the corners' names are
             // what they are visually.
-            self.selection = self.normalized_selection().map(|rect| rect.sort());
+            self.selection.normalize();
             // If there's still a selection after all of this, capture the paint canvas into an
             // image.
-            if let Some(rect) = self.selection {
-               let viewport = Viewport::from_top_left(rect);
-               let renderer = ui.render();
-               let capture = renderer.create_framebuffer(rect.width() as u32, rect.height() as u32);
-               renderer.push();
-               renderer.translate(-rect.position);
-               paint_canvas.capture(renderer, &capture, &viewport);
-               renderer.pop();
-               self.capture = Some(capture);
-               // After the capture is taken, erase the rectangle from the paint canvas.
-               paint_canvas.draw(renderer, rect, |renderer| {
-                  renderer.set_blend_mode(BlendMode::Clear);
-                  renderer.fill(rect, Color::BLACK, 0.0);
-               });
-            }
+            self.selection.capture(ui, paint_canvas);
          }
          self.action = Action::None;
       }
 
       // Perform all the actions.
-      if let Some(rect) = self.selection.as_mut() {
+      if let Some(rect) = self.selection.rect.as_mut() {
          match self.action {
             Action::None => (),
             Action::Selecting => {
@@ -250,7 +204,7 @@ impl Tool for SelectionTool {
                   Corner::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
                   Corner::Left => *rect = rect.with_left(mouse_position.x),
                }
-               self.selection = self.normalized_selection();
+               self.selection.rect = self.selection.normalized_rect();
             }
             Action::DraggingWhole => {
                let delta_position = mouse_position - previous_mouse_position;
@@ -261,7 +215,7 @@ impl Tool for SelectionTool {
    }
 
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
-      if let Some(rect) = self.normalized_selection() {
+      if let Some(rect) = self.selection.normalized_rect() {
          if !Self::rect_is_smaller_than_a_pixel(rect) {
             ui.draw(|ui| {
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
@@ -274,7 +228,7 @@ impl Tool for SelectionTool {
                let left = viewport.to_screen_space(rect.left_center(), ui.size()).floor();
                let rect = Rect::new(top_left, bottom_right - top_left);
                let renderer = ui.render();
-               if let Some(capture) = self.capture.as_ref() {
+               if let Some(capture) = self.selection.capture.as_ref() {
                   renderer.framebuffer(rect, &capture);
                }
                renderer.outline(
@@ -313,7 +267,7 @@ impl Tool for SelectionTool {
          Some(label_width(&assets.sans, &mouse_position)),
       );
 
-      if let Some(rect) = self.normalized_selection() {
+      if let Some(rect) = self.selection.normalized_rect() {
          let rect = rect.sort();
          // Show the selection anchor.
          let anchor = format_vector(rect.position);
@@ -333,6 +287,82 @@ impl Tool for SelectionTool {
             Some(label_width(&assets.sans, &size)),
          );
       }
+   }
+}
+
+struct Selection {
+   rect: Option<Rect>,
+   capture: Option<Framebuffer>,
+}
+
+impl Selection {
+   const MAX_SIZE: f32 = 1024.0;
+
+   /// Begins the selection at the given anchor.
+   fn begin(&mut self, anchor: Point) {
+      self.rect = Some(Rect::new(anchor, vector(0.0, 0.0)));
+      self.rect = self.normalized_rect();
+   }
+
+   /// Captures the selection into a framebuffer. Clears the captured part of the selection from the
+   /// paint canvas.
+   fn capture(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      if let Some(rect) = self.rect {
+         let viewport = Viewport::from_top_left(rect);
+         let capture = renderer.create_framebuffer(rect.width() as u32, rect.height() as u32);
+         renderer.push();
+         renderer.translate(-rect.position);
+         paint_canvas.capture(renderer, &capture, &viewport);
+         renderer.pop();
+         self.capture = Some(capture);
+         // After the capture is taken, erase the rectangle from the paint canvas.
+         paint_canvas.draw(renderer, rect, |renderer| {
+            renderer.set_blend_mode(BlendMode::Clear);
+            renderer.fill(rect, Color::BLACK, 0.0);
+         });
+      }
+   }
+
+   /// Cancels the selection, without transferring it to a paint canvas.
+   fn cancel(&mut self) {
+      self.rect = None;
+      self.capture = None;
+   }
+
+   /// Finishes the selection, transferring the old rectangle to the given paint canvas.
+   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      if let Some(capture) = self.capture.as_ref() {
+         if let Some(rect) = self.normalized_rect() {
+            paint_canvas.draw(renderer, rect, |renderer| {
+               renderer.framebuffer(rect, capture);
+            });
+         }
+      }
+      self.rect = None;
+      self.capture = None;
+   }
+
+   /// Returns a sorted, rounded, limited, squared version of the selection rectangle.
+   fn normalized_rect(&self) -> Option<Rect> {
+      self.rect.map(|rect| {
+         let rect = Rect::new(
+            rect.position,
+            vector(
+               rect.width().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
+               rect.height().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
+            ),
+         );
+         let rect = Rect::new(
+            point(rect.x().floor(), rect.y().floor()),
+            vector(rect.width().ceil(), rect.height().ceil()),
+         );
+         rect
+      })
+   }
+
+   /// Normalizes the selection rectangle, such that the corner names match their visual positions.
+   fn normalize(&mut self) {
+      self.rect = self.normalized_rect().map(|rect| rect.sort());
    }
 }
 
