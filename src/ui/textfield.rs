@@ -6,7 +6,8 @@ use copypasta::{ClipboardContext, ClipboardProvider};
 use netcanv_renderer::Font as FontTrait;
 use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
-use crate::{backend::Font, ui::*};
+use crate::backend::Font;
+use crate::ui::*;
 
 /// A text field's state.
 pub struct TextField {
@@ -180,6 +181,7 @@ impl TextField {
       if self.selection.len() > 0 {
          let mut bytes = [0; 4];
          self.text.replace_range(self.selection.normalize(), ch.encode_utf8(&mut bytes));
+         self.selection.move_to(TextPosition(self.selection.start()));
          self.selection.move_right(&self.text, false);
       } else {
          self.text.insert(self.selection.cursor(), ch);
