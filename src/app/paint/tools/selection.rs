@@ -190,7 +190,8 @@ impl Tool for SelectionTool {
                let rect = Rect::new(
                   rect.position - vector(4.0, 4.0) / viewport.zoom(),
                   rect.size + vector(8.0, 8.0) / viewport.zoom(),
-               );
+               )
+               .sort();
                if mouse_position.is_in_rect(rect) {
                   self.potential_action = Action::DraggingWhole;
                }
