@@ -3,10 +3,8 @@
 use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout};
 use netcanv_renderer::Font as FontTrait;
 
-use crate::{
-   backend::{Font, Image},
-   ui::*,
-};
+use crate::backend::{Font, Image};
+use crate::ui::*;
 
 use super::input::Input;
 
@@ -16,6 +14,7 @@ pub struct Button;
 /// The color scheme of a button.
 #[derive(Clone)]
 pub struct ButtonColors {
+   pub fill: Color,
    pub outline: Color,
    pub text: Color,
    pub hover: Color,
@@ -24,10 +23,10 @@ pub struct ButtonColors {
 
 /// The layout and color scheme arguments for processing the button.
 #[derive(Clone, Copy)]
-pub struct ButtonArgs<'a, 'b> {
-   pub font: &'a Font,
+pub struct ButtonArgs<'colors> {
    pub height: f32,
-   pub colors: &'b ButtonColors,
+   pub colors: &'colors ButtonColors,
+   pub corner_radius: f32,
 }
 
 /// The result of button interaction computed after processing it.
@@ -45,25 +44,30 @@ impl Button {
    pub fn process(
       ui: &mut Ui,
       input: &Input,
-      ButtonArgs { height, colors, .. }: ButtonArgs,
+      ButtonArgs {
+         height,
+         colors,
+         corner_radius,
+      }: ButtonArgs,
       width_hint: Option<f32>,
       extra: impl FnOnce(&mut Ui),
    ) -> ButtonProcessResult {
       // horizontal because we need to fit() later
       ui.push((width_hint.unwrap_or(0.0), height), Layout::Horizontal);
+      ui.fill_rounded(colors.fill, corner_radius);
 
       extra(ui);
       ui.fit();
 
       let mut clicked = false;
-      ui.outline(colors.outline, 1.0);
+      ui.outline_rounded(colors.outline, corner_radius, 1.0);
       if ui.has_mouse(input) {
          let fill_color = if input.mouse_button_is_down(MouseButton::Left) {
             colors.pressed
          } else {
             colors.hover
          };
-         ui.fill(fill_color);
+         ui.fill_rounded(fill_color, corner_radius);
          clicked = input.mouse_button_just_released(MouseButton::Left);
       }
 
@@ -77,14 +81,15 @@ impl Button {
       ui: &mut Ui,
       input: &Input,
       args: ButtonArgs,
+      font: &Font,
       text: &str,
    ) -> ButtonProcessResult {
       Self::process(ui, input, args, None, |ui| {
-         let text_width = args.font.text_width(text);
+         let text_width = font.text_width(text);
          let padding = args.height;
          ui.push((text_width + padding, ui.height()), Layout::Freeform);
          ui.text(
-            args.font,
+            font,
             text,
             args.colors.text,
             (AlignH::Center, AlignV::Middle),

@@ -1,6 +1,12 @@
+//! The paint state. This is the screen where you paint on the canvas with other people.
+
+mod tools;
+
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
@@ -20,16 +26,7 @@ use crate::paint_canvas::*;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
-/// The current mode of painting.
-///
-/// This is either `Paint` or `Erase` when the mouse buttons are held, and `None` when it's
-/// released.
-#[derive(PartialEq, Eq)]
-enum PaintMode {
-   None,
-   Paint,
-   Erase,
-}
+use self::tools::{BrushTool, Net, SelectionTool, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -62,14 +59,12 @@ pub struct State {
    config: UserConfig,
 
    paint_canvas: PaintCanvas,
+   tools: Rc<RefCell<Vec<Box<dyn Tool>>>>,
+   tools_by_name: HashMap<String, usize>,
+   current_tool: usize,
+
    peer: Peer,
    update_timer: Timer,
-
-   paint_mode: PaintMode,
-   paint_color: Color,
-   brush_size_slider: Slider,
-   stroke_buffer: Vec<StrokePoint>,
-
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
 
    load_from_file: Option<PathBuf>,
@@ -84,31 +79,19 @@ pub struct State {
    viewport: Viewport,
 }
 
-/// The palette of colors at the bottom of the screen.
-#[rustfmt::skip]
-const COLOR_PALETTE: &'static [Color] = &[
-   Color::rgb(0x100820), // black
-   Color::rgb(0xff003e), // red
-   Color::rgb(0xff7b00), // orange
-   Color::rgb(0xffff00), // yellow
-   Color::rgb(0x2dd70e), // green
-   Color::rgb(0x03cbfb), // aqua
-   Color::rgb(0x0868eb), // blue
-   Color::rgb(0xa315d7), // purple
-   Color::rgb(0xffffff), // white
-];
-
 macro_rules! log {
-    ($log:expr, $($arg:tt)*) => {
-        $log.push((format!($($arg)*), Instant::now()))
-    };
+   ($log:expr, $($arg:tt)*) => {
+      $log.push((format!($($arg)*), Instant::now()))
+   };
 }
 
 impl State {
    /// The interval of automatic saving.
    const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
    /// The height of the bottom bar.
-   const BAR_SIZE: f32 = 32.0;
+   const BOTTOM_BAR_SIZE: f32 = 32.0;
+   /// The width of the toolbar.
+   const TOOLBAR_SIZE: f32 = 40.0;
    /// The network communication tick interval.
    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
@@ -119,14 +102,12 @@ impl State {
          config,
 
          paint_canvas: PaintCanvas::new(),
+         tools: Rc::new(RefCell::new(Vec::new())),
+         tools_by_name: HashMap::new(),
+         current_tool: 0,
+
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
-
-         paint_mode: PaintMode::None,
-         paint_color: COLOR_PALETTE[0],
-         brush_size_slider: Slider::new(4.0, 1.0, 64.0, SliderStep::Discrete(1.0)),
-         stroke_buffer: Vec::new(),
-
          chunk_downloads: HashMap::new(),
 
          load_from_file: image_path,
@@ -144,6 +125,8 @@ impl State {
          panning: false,
          viewport: Viewport::new(),
       };
+      this.register_tools();
+
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
          log!(
@@ -151,7 +134,35 @@ impl State {
             "To invite friends, send them the room ID shown in the bottom right corner of your screen."
          );
       }
+
       this
+   }
+
+   /// Registers a tool.
+   fn register_tool(&mut self, tool: Box<dyn Tool>) {
+      let mut tools = self.tools.borrow_mut();
+      self.tools_by_name.insert(tool.name().to_owned(), tools.len());
+      tools.push(tool);
+   }
+
+   /// Registers all the tools.
+   fn register_tools(&mut self) {
+      self.register_tool(Box::new(SelectionTool::new()));
+      // Set the default tool to the brush.
+      self.current_tool = self.tools.borrow().len();
+      self.register_tool(Box::new(BrushTool::new()));
+   }
+
+   /// Executes the given callback with the currently selected tool.
+   fn with_current_tool(&mut self, mut callback: impl FnMut(&mut Self, &mut Box<dyn Tool>)) {
+      let tools = Rc::clone(&self.tools);
+      let mut tools = tools.borrow_mut();
+      let tool = &mut tools[self.current_tool];
+      callback(self, tool);
+   }
+
+   fn clone_tool_name(&self) -> String {
+      self.tools.borrow()[self.current_tool].name().to_owned()
    }
 
    /// Requests a chunk download from the host.
@@ -166,20 +177,6 @@ impl State {
          created: Instant::now(),
          visible_duration: duration,
       };
-   }
-
-   /// Performs a fellow peer's stroke on the canvas.
-   fn fellow_stroke(&mut self, ui: &mut Ui, points: &[StrokePoint]) {
-      if points.is_empty() {
-         return;
-      } // failsafe
-
-      let mut from = points[0].point;
-      let first_index = if points.len() > 1 { 1 } else { 0 };
-      for point in &points[first_index..] {
-         self.paint_canvas.stroke(ui.render(), from, point.point, &point.brush);
-         from = point.point;
-      }
    }
 
    /// Decodes canvas data to the given chunk.
@@ -210,56 +207,17 @@ impl State {
    }
 
    /// Processes the paint canvas.
-   fn process_canvas(&mut self, ui: &mut Ui, input: &Input) {
-      ui.push((ui.width(), ui.height() - Self::BAR_SIZE), Layout::Freeform);
+   fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
+      ui.push(
+         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
+         Layout::Freeform,
+      );
+      input.set_mouse_area(mouse_areas::CANVAS, ui.has_mouse(input));
       let canvas_size = ui.size();
 
       //
       // Input
       //
-
-      // Drawing
-
-      if ui.has_mouse(input) {
-         if input.mouse_button_just_pressed(MouseButton::Left) {
-            self.paint_mode = PaintMode::Paint;
-         } else if input.mouse_button_just_pressed(MouseButton::Right) {
-            self.paint_mode = PaintMode::Erase;
-         }
-      }
-      if input.mouse_button_just_released(MouseButton::Left)
-         || input.mouse_button_just_released(MouseButton::Right)
-      {
-         self.paint_mode = PaintMode::None;
-      }
-
-      let brush_size = self.brush_size_slider.value();
-      let from = self.viewport.to_viewport_space(input.previous_mouse_position(), canvas_size);
-      let mouse_position = input.mouse_position();
-      let to = self.viewport.to_viewport_space(mouse_position, canvas_size);
-      loop {
-         // Give me back my labelled blocks.
-         let brush = match self.paint_mode {
-            PaintMode::None => break,
-            PaintMode::Paint => Brush::Draw {
-               color: self.paint_color.clone(),
-               stroke_width: brush_size,
-            },
-            PaintMode::Erase => Brush::Erase {
-               stroke_width: brush_size,
-            },
-         };
-         self.paint_canvas.stroke(ui.render(), from, to, &brush);
-         if self.stroke_buffer.is_empty() {
-            self.stroke_buffer.push(StrokePoint {
-               point: from,
-               brush: brush.clone(),
-            });
-         } else if to != self.stroke_buffer.last().unwrap().point {
-            self.stroke_buffer.push(StrokePoint { point: to, brush });
-         }
-         break;
-      }
 
       // Panning and zooming
 
@@ -285,11 +243,25 @@ impl State {
          );
       }
 
+      // Drawing
+
+      self.with_current_tool(|p, tool| {
+         tool.process_paint_canvas_input(
+            ToolArgs {
+               ui,
+               input,
+               assets: &p.assets,
+               net: Net::new(&mut p.peer),
+            },
+            &mut p.paint_canvas,
+            &p.viewport,
+         )
+      });
+
       //
       // Rendering
       //
 
-      let paint_canvas = &self.paint_canvas;
       ui.draw(|ui| {
          ui.render().push();
          let Vector {
@@ -299,31 +271,41 @@ impl State {
          ui.render().translate(vector(width / 2.0, height / 2.0));
          ui.render().scale(vector(self.viewport.zoom(), self.viewport.zoom()));
          ui.render().translate(-self.viewport.pan());
-         paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
+         self.paint_canvas.draw_to(ui.render(), &self.viewport, canvas_size);
          ui.render().pop();
-
-         let color = Color::WHITE.with_alpha(240);
 
          ui.render().push();
-         ui.render().set_blend_mode(BlendMode::Invert);
-
-         for (_, mate) in self.peer.mates() {
-            let cursor = self.viewport.to_screen_space(mate.lerp_cursor(), canvas_size);
-            let brush_radius = mate.brush_size * self.viewport.zoom() * 0.5;
-            let text_position = cursor + point(brush_radius, brush_radius);
-            ui.render().text(
-               Rect::new(text_position, vector(0.0, 0.0)),
-               &self.assets.sans,
-               &mate.nickname,
-               color,
-               (AlignH::Left, AlignV::Top),
-            );
-            ui.render().outline_circle(cursor, brush_radius, color, 1.0);
+         for (&address, mate) in self.peer.mates() {
+            if let Some(tool_name) = &mate.tool {
+               if let Some(&tool_id) = self.tools_by_name.get(tool_name) {
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.process_paint_canvas_peer(
+                     ToolArgs {
+                        ui,
+                        input,
+                        assets: &self.assets,
+                        net: Net::new(&self.peer),
+                     },
+                     &self.viewport,
+                     address,
+                  );
+               }
+            }
          }
-
-         let zoomed_brush_size = brush_size * self.viewport.zoom();
-         ui.render().outline_circle(mouse_position, zoomed_brush_size * 0.5, color, 1.0);
          ui.render().pop();
+
+         self.with_current_tool(|p, tool| {
+            tool.process_paint_canvas_overlays(
+               ToolArgs {
+                  ui,
+                  input,
+                  assets: &p.assets,
+                  net: Net::new(&mut p.peer),
+               },
+               &p.viewport,
+            );
+         });
       });
       if self.tip.created.elapsed() < self.tip.visible_duration {
          ui.push(ui.size(), Layout::Freeform);
@@ -348,14 +330,12 @@ impl State {
       // Networking
       //
 
-      for _ in self.update_timer.tick() {
-         // Mouse / drawing
-         if input.previous_mouse_position() != input.mouse_position() {
-            catch!(self.peer.send_cursor(to, brush_size));
-         }
-         if !self.stroke_buffer.is_empty() {
-            catch!(self.peer.send_stroke(self.stroke_buffer.drain(..)));
-         }
+      self.update_timer.tick();
+      while self.update_timer.update() {
+         // Tool updates
+         self.with_current_tool(|p, tool| {
+            catch!(tool.network_send(tools::Net { peer: &mut p.peer }))
+         });
          // Chunk downloading
          if self.save_to_file.is_some() {
             // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
@@ -381,85 +361,38 @@ impl State {
 
    /// Processes the bottom bar.
    fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
-      if self.paint_mode != PaintMode::None {
-         input.lock_mouse_buttons();
-      }
-
-      ui.push((ui.width(), ui.remaining_height()), Layout::Horizontal);
+      ui.push((ui.width(), Self::BOTTOM_BAR_SIZE), Layout::Horizontal);
+      ui.align((AlignH::Left, AlignV::Bottom));
+      input.set_mouse_area(mouse_areas::BOTTOM_BAR, ui.has_mouse(input));
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
 
-      // Color palette
+      // Tool
 
-      for &color in COLOR_PALETTE {
-         ui.push((16.0, ui.height()), Layout::Freeform);
-         let y_offset = ui.height()
-            * if self.paint_color == color {
-               0.5
-            } else if ui.has_mouse(&input) {
-               0.7
-            } else {
-               0.8
-            };
-         let y_offset = y_offset.round();
-         if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-            self.paint_color = color.clone();
-         }
-         ui.draw(|ui| {
-            let rect = Rect::new(point(0.0, y_offset), ui.size());
-            ui.render().fill(rect, color, 4.0);
+      self.with_current_tool(|p, tool| {
+         tool.process_bottom_bar(ToolArgs {
+            ui,
+            input,
+            assets: &p.assets,
+            net: Net::new(&mut p.peer),
          });
-         ui.pop();
-      }
-      ui.space(16.0);
-
-      // Brush size
-
-      ui.push((80.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         "Brush size",
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
-
-      ui.space(8.0);
-      self.brush_size_slider.process(
-         ui,
-         input,
-         SliderArgs {
-            width: 192.0,
-            color: self.assets.colors.slider,
-         },
-      );
-      ui.space(8.0);
-
-      let brush_size_string = self.brush_size_slider.value().to_string();
-      ui.push((ui.height(), ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         &brush_size_string,
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
+      });
 
       //
       // Right side
+      // Note that elements in HorizontalRev go from right to left rather than left to right.
       //
 
       // Room ID display
 
-      // Note that elements in HorizontalRev go from right to left rather than left to right.
       ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
       if Button::with_icon(
          ui,
          input,
          ButtonArgs {
-            font: &self.assets.sans,
             height: 32.0,
-            colors: &self.assets.colors.tool_button,
+            colors: &self.assets.colors.action_button,
+            corner_radius: 0.0,
          },
          &self.assets.icons.file.save,
       )
@@ -503,8 +436,63 @@ impl State {
       ui.pop();
 
       ui.pop();
+   }
 
-      input.unlock_mouse_buttons();
+   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
+      // The outer group, to add some padding.
+      ui.push(
+         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
+         Layout::Freeform,
+      );
+      ui.pad(8.0);
+
+      // The inner group, that actually contains the bar.
+      let tool_size = Self::TOOLBAR_SIZE - 8.0;
+      let height = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
+      ui.push((Self::TOOLBAR_SIZE, height), Layout::Vertical);
+      ui.align((AlignH::Left, AlignV::Middle));
+      input.set_mouse_area(mouse_areas::TOOLBAR, ui.has_mouse(input));
+      ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
+      ui.pad(4.0);
+
+      let mut tools = self.tools.borrow_mut();
+
+      let previous_tool = self.current_tool;
+      let mut selected_tool = None;
+      for (i, tool) in tools.iter().enumerate() {
+         ui.push((tool_size, tool_size), Layout::Freeform);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: tool_size,
+               colors: if self.current_tool == i {
+                  &self.assets.colors.selected_toolbar_button
+               } else {
+                  &self.assets.colors.toolbar_button
+               },
+               corner_radius: ui.width() / 2.0,
+            },
+            tool.icon(),
+         )
+         .clicked()
+         {
+            self.current_tool = i;
+            selected_tool = Some(i);
+         }
+         ui.pop();
+         ui.space(4.0);
+      }
+
+      if let Some(selected_tool) = selected_tool {
+         tools[previous_tool].deactivate(ui, &mut self.paint_canvas);
+         tools[selected_tool].activate();
+         catch!(self.peer.send_select_tool(tools[selected_tool].name().to_owned()));
+      }
+
+      ui.pop();
+
+      ui.pop();
    }
 
    fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
@@ -517,18 +505,37 @@ impl State {
                let positions = self.paint_canvas.chunk_positions();
                self.peer.send_chunk_positions(address, positions)?;
             }
+            self.peer.send_select_tool(self.clone_tool_name())?;
          }
-         MessageKind::Left(nickname) => {
+         MessageKind::Left {
+            address,
+            nickname,
+            last_tool,
+         } => {
             log!(self.log, "{} has left", nickname);
-         }
-         MessageKind::Stroke(points) => {
-            self.fellow_stroke(ui, &points);
+            // Make sure the tool they were last using is properly deinitialized.
+            if let Some(tool) = last_tool {
+               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.network_peer_deactivate(
+                     ui,
+                     Net::new(&mut self.peer),
+                     &mut self.paint_canvas,
+                     address,
+                  )?;
+               }
+            }
          }
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
             for chunk_position in positions {
                self.chunk_downloads.insert(chunk_position, ChunkDownload::NotDownloaded);
             }
+            // Make sure we send the tool _after_ adding the requested chunks.
+            // This way if something goes wrong here and the function returns Err, at least we
+            // will have queued up some chunk downloads at this point.
+            self.peer.send_select_tool(self.clone_tool_name())?;
          }
          MessageKind::Chunks(chunks) => {
             eprintln!("received {} chunks", chunks.len());
@@ -539,6 +546,47 @@ impl State {
          }
          MessageKind::GetChunks(requester, positions) => {
             self.send_chunks(requester, &positions)?;
+         }
+         MessageKind::Tool(sender, name, payload) => {
+            if let Some(&tool_id) = self.tools_by_name.get(&name) {
+               let mut tools = self.tools.borrow_mut();
+               let tool = &mut tools[tool_id];
+               tool.network_receive(
+                  ui,
+                  Net::new(&mut self.peer),
+                  &mut self.paint_canvas,
+                  sender,
+                  payload.clone(),
+               )?;
+            }
+         }
+         MessageKind::SelectTool {
+            address,
+            previous_tool,
+            tool,
+         } => {
+            eprintln!("{} selected tool {}", address, tool);
+            // Deselect the old tool.
+            if let Some(tool) = previous_tool {
+               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+                  // ↑ still waiting for if_let_chains to get stabilized.
+                  let mut tools = self.tools.borrow_mut();
+                  let tool = &mut tools[tool_id];
+                  tool.network_peer_deactivate(
+                     ui,
+                     Net::new(&mut self.peer),
+                     &mut self.paint_canvas,
+                     address,
+                  )?;
+               }
+            }
+            // Select the new tool.
+            if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+               eprintln!(" - valid tool with ID {}", tool_id);
+               let mut tools = self.tools.borrow_mut();
+               let tool = &mut tools[tool_id];
+               tool.network_peer_activate(Net::new(&mut self.peer), address)?;
+            }
          }
       }
       Ok(())
@@ -621,7 +669,8 @@ impl AppState for State {
       // Paint canvas
       self.process_canvas(ui, input);
 
-      // Bar
+      // Bars
+      self.process_toolbar(ui, input);
       self.process_bar(ui, input);
    }
 
@@ -632,4 +681,10 @@ impl AppState for State {
          self
       }
    }
+}
+
+mod mouse_areas {
+   pub const CANVAS: u32 = 0;
+   pub const BOTTOM_BAR: u32 = 1;
+   pub const TOOLBAR: u32 = 2;
 }

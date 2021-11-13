@@ -2,19 +2,12 @@ use std::collections::HashMap;
 use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Instant;
 
-use netcanv_protocol::client as cl;
-use netcanv_protocol::matchmaker as mm;
-use netcanv_renderer::paws::{Color, Point};
+use netcanv_protocol::{client as cl, matchmaker as mm};
 use nysa::global as bus;
 
-use super::socket::ConnectionToken;
-use super::socket::SocketSystem;
-use super::socket::{self, Socket};
-use crate::common;
+use super::socket::{self, ConnectionToken, Socket, SocketSystem};
 use crate::common::Fatal;
-use crate::paint_canvas::{Brush, StrokePoint};
 use crate::token::Token;
 
 /// A unique token identifying a peer connection.
@@ -37,15 +30,25 @@ pub enum MessageKind {
    /// Another peer has joined the room.
    Joined(String, SocketAddr),
    /// Another peer has left the room.
-   Left(String),
-   /// Somebody drew something on the canvas.
-   Stroke(Vec<StrokePoint>),
+   Left {
+      address: SocketAddr,
+      nickname: String,
+      last_tool: Option<String>,
+   },
    /// The host sent us the chunk positions for the room.
    ChunkPositions(Vec<(i32, i32)>),
    /// Somebody requested chunk positions from the host.
    GetChunks(SocketAddr, Vec<(i32, i32)>),
    /// Somebody sent us chunk image data.
    Chunks(Vec<((i32, i32), Vec<u8>)>),
+   /// A tool packet was received from an address.
+   Tool(SocketAddr, String, Vec<u8>),
+   /// The client selected a tool.
+   SelectTool {
+      address: SocketAddr,
+      previous_tool: Option<String>,
+      tool: String,
+   },
 }
 
 /// The state of a Peer connection.
@@ -249,7 +252,11 @@ impl Peer {
          }
          mm::Packet::Disconnected(address) => {
             if let Some(mate) = self.mates.remove(&address) {
-               self.send_message(MessageKind::Left(mate.nickname));
+               self.send_message(MessageKind::Left {
+                  address,
+                  nickname: mate.nickname,
+                  last_tool: mate.tool,
+               });
             }
          }
          mm::Packet::Error(message) => anyhow::bail!(message),
@@ -275,7 +282,7 @@ impl Peer {
    /// Decodes a client packet.
    fn client_packet(&mut self, author: SocketAddr, packet: cl::Packet) -> anyhow::Result<()> {
       match packet {
-         //
+         // -----
          // 0.1.0
          // -----
          cl::Packet::Hello(nickname) => {
@@ -289,44 +296,8 @@ impl Peer {
             eprintln!("{} ({}) is in the room", nickname, author);
             self.add_mate(author, nickname);
          }
-         cl::Packet::Cursor(x, y, brush_size) => {
-            if let Some(mate) = self.mates.get_mut(&author) {
-               mate.cursor_prev = mate.cursor;
-               mate.cursor = Point::new(cl::from_fixed29p3(x), cl::from_fixed29p3(y));
-               mate.last_cursor = Instant::now();
-               mate.brush_size = cl::from_fixed15p1(brush_size);
-            } else {
-               eprintln!("{} sus", author);
-            }
-         }
-         cl::Packet::Stroke(points) => {
-            let points: Vec<StrokePoint> = points
-               .iter()
-               .map(|p| StrokePoint {
-                  point: Point::new(cl::from_fixed29p3(p.x), cl::from_fixed29p3(p.y)),
-                  brush: if p.color == 0 {
-                     Brush::Erase {
-                        stroke_width: cl::from_fixed15p1(p.brush_size),
-                     }
-                  } else {
-                     Brush::Draw {
-                        color: Color::argb(p.color),
-                        stroke_width: cl::from_fixed15p1(p.brush_size),
-                     }
-                  },
-               })
-               .collect();
-            if points.len() > 0 {
-               if let Some(mate) = self.mates.get_mut(&author) {
-                  mate.cursor_prev = points[0].point;
-                  mate.cursor = points.last().unwrap().point;
-                  mate.last_cursor = Instant::now();
-               }
-            }
-            self.send_message(MessageKind::Stroke(points));
-         }
-         cl::Packet::Reserved => (),
-         //
+         cl::Packet::Reserved1 => (),
+         // -----
          // 0.2.0
          // -----
          cl::Packet::Version(version) if !cl::compatible_with(version) => {
@@ -340,6 +311,23 @@ impl Peer {
             self.send_message(MessageKind::GetChunks(author, positions))
          }
          cl::Packet::Chunks(chunks) => self.send_message(MessageKind::Chunks(chunks)),
+         // -----
+         // 0.3.0
+         // -----
+         cl::Packet::Tool(name, payload) => {
+            self.send_message(MessageKind::Tool(author, name, payload))
+         }
+         cl::Packet::SelectTool(tool) => {
+            let mut old_tool = None;
+            if let Some(mate) = self.mates.get_mut(&author) {
+               old_tool = std::mem::replace(&mut mate.tool, Some(tool.clone()));
+            }
+            self.send_message(MessageKind::SelectTool {
+               address: author,
+               previous_tool: old_tool,
+               tool,
+            });
+         }
       }
 
       Ok(())
@@ -357,54 +345,10 @@ impl Peer {
       self.mates.insert(
          addr,
          Mate {
-            cursor: Point::new(0.0, 0.0),
-            cursor_prev: Point::new(0.0, 0.0),
-            last_cursor: Instant::now(),
             nickname,
-            brush_size: 4.0,
+            tool: None,
          },
       );
-   }
-
-   /// Sends a cursor packet.
-   pub fn send_cursor(&self, cursor: Point, brush_size: f32) -> anyhow::Result<()> {
-      self.send_to_client(
-         None,
-         cl::Packet::Cursor(
-            cl::to_fixed29p3(cursor.x),
-            cl::to_fixed29p3(cursor.y),
-            cl::to_fixed15p1(brush_size),
-         ),
-      )
-   }
-
-   /// Sends a brush stroke packet.
-   pub fn send_stroke(&self, iterator: impl Iterator<Item = StrokePoint>) -> anyhow::Result<()> {
-      self.send_to_client(
-         None,
-         cl::Packet::Stroke(
-            iterator
-               .map(|p| cl::StrokePoint {
-                  x: cl::to_fixed29p3(p.point.x),
-                  y: cl::to_fixed29p3(p.point.y),
-                  color: match p.brush {
-                     Brush::Draw { ref color, .. } => {
-                        ((color.a as u32) << 24)
-                           | ((color.r as u32) << 16)
-                           | ((color.g as u32) << 8)
-                           | color.b as u32
-                     }
-                     Brush::Erase { .. } => 0,
-                  },
-                  brush_size: cl::to_fixed15p1(match p.brush {
-                     Brush::Draw { stroke_width, .. } | Brush::Erase { stroke_width } => {
-                        stroke_width
-                     }
-                  }),
-               })
-               .collect(),
-         ),
-      )
    }
 
    /// Sends a chunk positions packet.
@@ -432,6 +376,16 @@ impl Peer {
       self.send_to_client(Some(to), cl::Packet::Chunks(chunks))
    }
 
+   /// Sends a tool-specific packet.
+   pub fn send_tool(&self, name: String, payload: Vec<u8>) -> anyhow::Result<()> {
+      self.send_to_client(None, cl::Packet::Tool(name, payload))
+   }
+
+   /// Sends a tool selection packet.
+   pub fn send_select_tool(&self, name: String) -> anyhow::Result<()> {
+      self.send_to_client(None, cl::Packet::SelectTool(name))
+   }
+
    /// Returns the peer's unique token.
    pub fn token(&self) -> PeerToken {
       self.token
@@ -455,19 +409,6 @@ impl Peer {
 
 /// Another person in the same room.
 pub struct Mate {
-   pub cursor: Point,
-   pub cursor_prev: Point,
-   pub last_cursor: Instant,
    pub nickname: String,
-   pub brush_size: f32,
-}
-
-impl Mate {
-   /// Returns the interpolated cursor position of this mate.
-   pub fn lerp_cursor(&self) -> Point {
-      use crate::app::paint::State;
-      let elapsed_ms = self.last_cursor.elapsed().as_millis() as f32;
-      let t = (elapsed_ms / State::TIME_PER_UPDATE.as_millis() as f32).min(1.0);
-      common::lerp_point(self.cursor_prev, self.cursor, t)
-   }
+   pub tool: Option<String>,
 }

@@ -1,6 +1,7 @@
 //! NetCanv's infinite paint canvas.
 
-use std::collections::{HashMap, HashSet};
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -10,29 +11,12 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
-use netcanv_renderer::paws::{Color, LineCap, Point, Renderer, Vector};
-use netcanv_renderer::{BlendMode, Framebuffer as FramebufferTrait, RenderBackend};
+use netcanv_renderer::paws::{vector, Point, Rect, Renderer, Vector};
+use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
-
-/// A brush used for painting strokes.
-#[derive(Clone, Debug)]
-pub enum Brush {
-   /// A drawing brush, blending pixels with the given color.
-   Draw { color: Color, stroke_width: f32 },
-   /// An erasing brush, setting pixels to full transparency.
-   Erase { stroke_width: f32 },
-}
-
-/// A point on a stroke. This pairs a point with a brush used for drawing the stroke between this
-/// point and the one after it.
-#[derive(Debug)]
-pub struct StrokePoint {
-   pub point: Point,
-   pub brush: Brush,
-}
 
 /// A chunk on the infinite canvas.
 pub struct Chunk {
@@ -40,6 +24,7 @@ pub struct Chunk {
    // at once. Maybe it'll become less terrible if issue #29 ever gets implemented.
    // https://github.com/liquidev/netcanv/issues/29
    framebuffer: Framebuffer,
+   image_data: Cell<Option<RgbaImage>>,
    png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    webp_data: [Option<Vec<u8>>; Self::SUB_COUNT],
    non_empty_subs: [bool; Self::SUB_COUNT],
@@ -73,6 +58,7 @@ impl Chunk {
    fn new(renderer: &mut Backend) -> Self {
       Self {
          framebuffer: renderer.create_framebuffer(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1),
+         image_data: Cell::new(None),
          png_data: Default::default(),
          webp_data: Default::default(),
          non_empty_subs: [false; Self::SUB_COUNT],
@@ -90,13 +76,20 @@ impl Chunk {
 
    /// Downloads the image of the chunk from the graphics card.
    fn download_image(&self) -> RgbaImage {
-      let mut image_buffer = ImageBuffer::from_pixel(
-         Self::SURFACE_SIZE.0,
-         Self::SURFACE_SIZE.1,
-         Rgba([0, 0, 0, 0]),
-      );
-      self.framebuffer.download_rgba(&mut image_buffer);
-      image_buffer
+      if let Some(image_data) = self.image_data.take() {
+         let clone = image_data.clone();
+         self.image_data.set(Some(image_data));
+         clone
+      } else {
+         let mut image_buffer = ImageBuffer::from_pixel(
+            Self::SURFACE_SIZE.0,
+            Self::SURFACE_SIZE.1,
+            Rgba([0, 0, 0, 0]),
+         );
+         self.framebuffer.download_rgba(&mut image_buffer);
+         self.image_data.set(Some(image_buffer.clone()));
+         image_buffer
+      }
    }
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
@@ -304,9 +297,6 @@ impl Chunk {
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
-   /// This set contains chunk positions that have already been rendered to in the current
-   /// `stroke()` call.
-   stroked_chunks: HashSet<(i32, i32)>,
    /// The path to the `.netcanv` directory this paint canvas was saved to.
    filename: Option<PathBuf>,
 }
@@ -326,7 +316,6 @@ impl PaintCanvas {
    pub fn new() -> Self {
       Self {
          chunks: HashMap::new(),
-         stroked_chunks: HashSet::new(),
          filename: None,
       }
    }
@@ -338,77 +327,64 @@ impl PaintCanvas {
       }
    }
 
-   /// Draws a stroke from `from` to `to`, using the given brush.
+   /// Returns the left, top, bottom, right sides covered by the rectangle, in master chunk
+   /// coordinates.
+   fn chunk_coverage(coverage: Rect) -> (i32, i32, i32, i32) {
+      let coverage = coverage.sort();
+      (
+         (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
+         (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
+         (coverage.bottom() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
+         (coverage.right() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
+      )
+   }
+
+   /// Draws to the paint canvas's chunks.
    ///
-   /// `canvas` is used for allocating new chunks when they don't already exist.
-   pub fn stroke(
+   /// The provided `coverage` rectangle is used to determine which chunks should be drawn to, and
+   /// thus should cover the entire area of the thing being drawn. Note that the coordinates here
+   /// are expressed in _pixels_ rather than _chunks_.
+   ///
+   /// The callback may be called multiple times, once for each chunk being drawn to.
+   pub fn draw(
       &mut self,
       renderer: &mut Backend,
-      from: impl Into<Point>,
-      to: impl Into<Point>,
-      brush: &Brush,
+      coverage: Rect,
+      mut callback: impl FnMut(&mut Backend),
    ) {
-      let a = from.into();
-      let b = to.into();
-      let step_count = i32::max((Point::distance(a, b) / 4.0) as _, 2);
-      // let stroke_width = paint.stroke_width();
-      let (color, stroke_width) = match brush {
-         Brush::Draw {
-            color,
-            stroke_width,
-         } => (*color, *stroke_width),
-         Brush::Erase { stroke_width } => (Color::BLACK, *stroke_width),
-      };
-      let half_stroke_width = stroke_width / 2.0;
-
-      let mut delta = b - a;
-      delta.x /= step_count as f32;
-      delta.y /= step_count as f32;
-      let mut p = a;
-
-      self.stroked_chunks.clear();
-      for _ in 1..=step_count {
-         let top_left = p - Point::new(half_stroke_width, half_stroke_width);
-         let bottom_right = p + Point::new(half_stroke_width, half_stroke_width);
-         let top_left_chunk = (
-            (top_left.x / Chunk::SIZE.0 as f32).floor() as i32,
-            (top_left.y / Chunk::SIZE.0 as f32).floor() as i32,
-         );
-         let bottom_right_chunk = (
-            (bottom_right.x / Chunk::SIZE.1 as f32).ceil() as i32,
-            (bottom_right.y / Chunk::SIZE.1 as f32).ceil() as i32,
-         );
-
-         for y in top_left_chunk.1..bottom_right_chunk.1 {
-            for x in top_left_chunk.0..bottom_right_chunk.0 {
-               let chunk_position = (x, y);
-               let master = Chunk::master(chunk_position);
-               let sub = Chunk::sub(chunk_position);
-               if !self.stroked_chunks.contains(&master) {
-                  self.ensure_chunk_exists(renderer, master);
-                  let chunk = self.chunks.get_mut(&master).unwrap();
-                  let screen_position = Chunk::screen_position(master);
-                  renderer.draw_to(&chunk.framebuffer, |renderer| {
-                     renderer.push();
-                     if matches!(brush, Brush::Erase { .. }) {
-                        renderer.set_blend_mode(BlendMode::Clear);
-                     }
-                     renderer.line(
-                        a - screen_position,
-                        b - screen_position,
-                        color,
-                        LineCap::Round,
-                        stroke_width,
-                     );
-                     renderer.pop();
-                  });
-                  chunk.mark_dirty(sub);
-               }
-               self.stroked_chunks.insert(master);
-               p += delta;
+      let (left, top, bottom, right) = Self::chunk_coverage(coverage);
+      assert!(left <= right);
+      assert!(top <= bottom);
+      for y in top..=bottom {
+         for x in left..=right {
+            let master_chunk = (x, y);
+            self.ensure_chunk_exists(renderer, master_chunk);
+            let chunk = self.chunks.get_mut(&master_chunk).unwrap();
+            renderer.push();
+            renderer.translate(vector(
+               -x as f32 * Chunk::SURFACE_SIZE.0 as f32,
+               -y as f32 * Chunk::SURFACE_SIZE.0 as f32,
+            ));
+            renderer.draw_to(&chunk.framebuffer, |renderer| {
+               callback(renderer);
+            });
+            renderer.pop();
+            for i in 0..Chunk::SUB_COUNT {
+               chunk.mark_dirty(i);
             }
          }
       }
+   }
+
+   /// Captures a fragment of the paint canvas onto a framebuffer.
+   pub fn capture(&self, renderer: &mut Backend, framebuffer: &Framebuffer, viewport: &Viewport) {
+      renderer.draw_to(framebuffer, |renderer| {
+         self.draw_to(
+            renderer,
+            viewport,
+            vector(framebuffer.width() as f32, framebuffer.height() as f32),
+         );
+      });
    }
 
    /// Draws the paint canvas onto the given Skia canvas.
@@ -419,7 +395,7 @@ impl PaintCanvas {
       for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
          if let Some(chunk) = self.chunks.get(&chunk_position) {
             let screen_position = Chunk::screen_position(chunk_position);
-            renderer.framebuffer(screen_position, &chunk.framebuffer);
+            renderer.framebuffer(chunk.framebuffer.rect(screen_position), &chunk.framebuffer);
          }
       }
    }

@@ -49,6 +49,11 @@ pub trait Image {
    fn height(&self) -> u32 {
       self.size().1
    }
+
+   /// Returns a rectangle sized as the image, with the provided position.
+   fn rect(&self, position: Vector) -> Rect {
+      Rect::new(position, vector(self.width() as f32, self.height() as f32))
+   }
 }
 
 /// A framebuffer that can be rendered to.
@@ -64,6 +69,11 @@ pub trait Framebuffer {
    /// Returns the height of the framebuffer.
    fn height(&self) -> u32 {
       self.size().1
+   }
+
+   /// Returns a rectangle sized as the framebuffer, with the provided position.
+   fn rect(&self, position: Vector) -> Rect {
+      Rect::new(position, vector(self.width() as f32, self.height() as f32))
    }
 
    /// Uploads RGBA pixels to the framebuffer.
@@ -104,13 +114,13 @@ pub trait RenderBackend: Renderer {
    /// Clears the framebuffer with a solid color.
    fn clear(&mut self, color: Color);
 
-   /// Draws an image at the given position (top left corner).
-   fn image(&mut self, position: Point, image: &Self::Image);
+   /// Draws an image such that it fills the given rectangle.
+   fn image(&mut self, rect: Rect, image: &Self::Image);
 
-   /// Draws a framebuffer at the given position (top left corner).
+   /// Draws a framebuffer such that it fills the given rectangle.
    ///
    /// Drawing the framebuffer that is currently being rendered to is undefined behavior.
-   fn framebuffer(&mut self, position: Point, framebuffer: &Self::Framebuffer);
+   fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer);
 
    /// Scales the transform matrix by the given factor.
    fn scale(&mut self, scale: Vector);

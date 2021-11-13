@@ -20,7 +20,9 @@ pub struct Input {
    mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
-   mouse_buttons_locked: bool,
+   active_mouse_area: u32,
+   processed_mouse_area: u32,
+   frame_mouse_area: u32,
 
    // keyboard input
    char_buffer: Vec<char>,
@@ -43,7 +45,9 @@ impl Input {
          mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
          mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
          mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
-         mouse_buttons_locked: false,
+         active_mouse_area: 0,
+         processed_mouse_area: 0,
+         frame_mouse_area: 0,
 
          char_buffer: Vec::new(),
          key_just_typed: [false; KEY_CODE_COUNT],
@@ -68,9 +72,19 @@ impl Input {
       self.mouse_scroll
    }
 
+   /// Returns whether mouse clicks are locked.
+   fn mouse_buttons_locked(&self) -> bool {
+      self.active_mouse_area != self.frame_mouse_area
+   }
+
+   /// Returns whether mouse events will be received.
+   pub fn mouse_active(&self) -> bool {
+      !self.mouse_buttons_locked()
+   }
+
    /// Returns whether the given mouse button is being held down.
    pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked {
+      if self.mouse_buttons_locked() {
          return false;
       }
       if let Some(i) = Self::mouse_button_index(button) {
@@ -82,7 +96,7 @@ impl Input {
 
    /// Returns whether the given mouse button has just been clicked.
    pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked {
+      if self.mouse_buttons_locked() {
          return false;
       }
       if let Some(i) = Self::mouse_button_index(button) {
@@ -94,9 +108,6 @@ impl Input {
 
    /// Returns whether the given mouse button has just been released.
    pub fn mouse_button_just_released(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked {
-         return false;
-      }
       if let Some(i) = Self::mouse_button_index(button) {
          self.mouse_button_just_released[i]
       } else {
@@ -104,16 +115,15 @@ impl Input {
       }
    }
 
-   /// Locks interaction with mouse buttons. Any calls to `mouse_button_is_down`,
-   /// `mouse_button_just_pressed`, and `mouse_button_just_released` will return false until
-   /// `unlock_mouse_buttons` is called.
-   pub fn lock_mouse_buttons(&mut self) {
-      self.mouse_buttons_locked = true;
-   }
-
-   /// Unlocks mouse button interaction.
-   pub fn unlock_mouse_buttons(&mut self) {
-      self.mouse_buttons_locked = false;
+   /// Sets the _active mouse area_ for the current frame.
+   ///
+   /// Mouse events are only received if the mouse area at the end of the previous frame was the
+   /// same as the mouse area that's currently active.
+   pub fn set_mouse_area(&mut self, area: u32, active: bool) {
+      self.active_mouse_area = area;
+      if active {
+         self.processed_mouse_area = area;
+      }
    }
 
    /// Returns the characters that were typed during this frame.
@@ -191,6 +201,7 @@ impl Input {
       }
       self.previous_mouse_position = self.mouse_position;
       self.mouse_scroll = vector(0.0, 0.0);
+      self.frame_mouse_area = self.processed_mouse_area;
       for state in &mut self.key_just_typed {
          *state = false;
       }

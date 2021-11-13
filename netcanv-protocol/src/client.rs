@@ -1,10 +1,9 @@
-// client (p2p) packets
-
+///! Client communication packets.
 use serde::{Deserialize, Serialize};
 
-// the version constant. increased by 100 every minor client version, and by 10000 every major
-// version. eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
-// if two versions' hundreds places differ, the versions are incompatible.
+/// The version constant. Increased by 100 every minor client version, and by 10000 every major
+/// version. eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
+/// If two versions' hundreds places differ, the versions are incompatible.
 pub const PROTOCOL_VERSION: u32 = 300;
 
 pub fn versions_compatible(v1: u32, v2: u32) -> bool {
@@ -15,19 +14,7 @@ pub fn compatible_with(v: u32) -> bool {
    versions_compatible(PROTOCOL_VERSION, v)
 }
 
-// stroke packet information
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct StrokePoint {
-   // 29.3 fixed-point coordinates of the point
-   pub x: i32,
-   pub y: i32,
-   // hex-encoded color
-   // a value of 0 is special and means eraser mode
-   pub color: u32,
-   // 15.1 fixed-point brush size
-   pub brush_size: i16,
-}
-
+/// A client communication packet.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
    // ---
@@ -35,68 +22,53 @@ pub enum Packet {
    // ---
 
    //
-   // introduction protocol
+   // Introduction protocol
    //
-
-   // introduction to other clients. the string contains the nickname
+   /// Introduction to other clients. The string contains the nickname.
    Hello(String),
 
-   // response from the other clients with their nicknames
+   /// Response from the other clients with their nicknames.
    HiThere(String),
 
-   // reserved, formerly CanvasData
-   Reserved,
+   /// Reserved, formerly `CanvasData`.
+   Reserved1,
 
    //
-   // painting
+   // Tools
    // --------
-   // these packets are sent 20 times per second
+   // These packets are sent up to 20 times per second, and are used for exchanging tool-specific
+   // information. Each tool can define its own packet for communication.
    //
+   /// Carries a payload with a tool-specific packet.
+   Tool(String, Vec<u8>),
 
-   // cursor packet containing fixed-point 29.3 coordinates and a fixed-point 31.1 brush size
-   Cursor(i32, i32, i16),
-
-   // a paint stroke
-   Stroke(Vec<StrokePoint>),
+   /// Notifies that a different tool was selected.
+   SelectTool(String),
 
    // ---
    // VERSION 0.2.0 (protocol 200)
    // ---
-
-   // version packet. this is sent as part of a response to Hello
+   /// Version packet. This is sent as part of a response to Hello.
    Version(u32),
 
-   // sent by the host to a client upon connection
+   /// Sent by the host to a client upon connection.
    ChunkPositions(Vec<(i32, i32)>),
 
-   // request from the client to download chunks
+   /// Request from the client to download chunks.
    GetChunks(Vec<(i32, i32)>),
 
-   // response from the other peer with the chunks encoded as PNG images.
+   /// Response from the other peer with the chunks encoded as PNG images.
    Chunks(Vec<((i32, i32), Vec<u8>)>),
    /* ---
     * VERSION 0.3.0 (protocol 300)
     * ---
     * No changes in available packets, but chunks may now be sent in webp which makes hosts using
-    * this version incompatible with older clients. */
-}
-
-/// converts a float to a fixed-point 29.3
-pub fn to_fixed29p3(x: f32) -> i32 {
-   (x * 8.0).round() as i32
-}
-
-/// converts a float to a fixed-point 15.1
-pub fn to_fixed15p1(x: f32) -> i16 {
-   (x * 2.0).round() as i16
-}
-
-/// converts a fixed-point 29.3 to a float
-pub fn from_fixed29p3(x: i32) -> f32 {
-   x as f32 / 8.0
-}
-
-/// converts a fixed-point 15.1 to a float
-pub fn from_fixed15p1(x: i16) -> f32 {
-   x as f32 / 2.0
+    * this version incompatible with older clients.
+    *
+    * ---
+    * VERSION 0.4.0 (protocol 400)
+    * ---
+    * Cursor and Stroke packets were removed in favor of the generic Tool packet.
+    * Each tool is responsible for decoding its own packets now.
+    */
 }

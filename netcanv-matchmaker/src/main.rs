@@ -308,7 +308,7 @@ impl Matchmaker {
                   break;
                }
             }
-            let _ = bincode::deserialize_from(&mut *stream.reader.lock().unwrap()) // what
+            let _ = bincode::deserialize_from(&stream.stream) // what
                .map_err(|error| {
                   running = false;
                   Error::Serialize(error)

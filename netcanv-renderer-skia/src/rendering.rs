@@ -4,10 +4,10 @@ use netcanv_renderer::paws::{
    vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
+use skulpin::skia_safe::paint::{Cap, Style};
 use skulpin::skia_safe::{
-   self, color_filters, image_filters,
-   paint::{Cap, Style},
-   ClipOp, Data, IPoint, IRect, Paint, Pixmap, SamplingOptions, Surface, Typeface,
+   self, color_filters, image_filters, ClipOp, Data, IPoint, IRect, Paint, Pixmap, SamplingOptions,
+   Surface, Typeface,
 };
 
 use crate::conversions::*;
@@ -282,19 +282,26 @@ impl RenderBackend for SkiaBackend {
       self.canvas().clear(to_color(color));
    }
 
-   fn image(&mut self, point: Point, image: &Image) {
-      self.canvas().draw_image(&image.image, to_point(point), None);
+   fn image(&mut self, rect: Rect, image: &Image) {
+      self.canvas().draw_image_rect(
+         &image.image,
+         None,
+         &skia_safe::Rect::from_xywh(rect.x(), rect.y(), rect.width(), rect.height()),
+         &Paint::new(skia_safe::Color4f::new(1.0, 1.0, 1.0, 1.0), None),
+      );
    }
 
-   fn framebuffer(&mut self, position: Point, framebuffer: &Framebuffer) {
+   fn framebuffer(&mut self, rect: Rect, framebuffer: &Framebuffer) {
       // The skia_safe devs were out of their fucking mind when they pulled that one.
       // Drawing a surface to a canvas requires the surface to be mutable.
       // I'm speechless.
       let mut surface_outer = framebuffer.surface.take();
       let surface = surface_outer.as_mut().unwrap();
+      // Also, no way for me to stretch the surface without doing some transformation magic.
+      // Cool. Screw that. Just use the OpenGL backend.
       surface.draw(
          self.canvas(),
-         to_point(position),
+         to_point(rect.top_left()),
          SamplingOptions::default(),
          None,
       );

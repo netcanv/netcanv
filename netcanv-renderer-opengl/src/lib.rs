@@ -18,7 +18,9 @@ use netcanv_renderer::paws::Ui;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-pub use crate::{font::Font, framebuffer::Framebuffer, image::Image};
+pub use crate::font::Font;
+pub use crate::framebuffer::Framebuffer;
+pub use crate::image::Image;
 use rendering::RenderState;
 
 pub struct OpenGlBackend {
@@ -49,7 +51,7 @@ impl OpenGlBackend {
             .with_gl(GlRequest::Latest)
             .with_gl_profile(GlProfile::Core)
             .with_vsync(true)
-            .with_multisampling(8);
+            .with_multisampling(msaa);
          if msaa > 0 {
             msaa /= 2;
             context = context.with_multisampling(msaa);

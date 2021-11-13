@@ -20,13 +20,23 @@ pub use textfield::*;
 pub type Ui = paws::Ui<Backend>;
 
 pub trait UiInput {
+   /// Returns the mouse position relative to the current group.
    fn mouse_position(&self, input: &Input) -> Point;
+
+   /// Returns the previous mouse position relative to the current group.
+   fn previous_mouse_position(&self, input: &Input) -> Point;
+
+   /// Returns whether the mouse position is in the current group's rectangle.
    fn has_mouse(&self, input: &Input) -> bool;
 }
 
 impl UiInput for Ui {
    fn mouse_position(&self, input: &Input) -> Point {
       input.mouse_position() - self.position()
+   }
+
+   fn previous_mouse_position(&self, input: &Input) -> Point {
+      input.previous_mouse_position() - self.position()
    }
 
    fn has_mouse(&self, input: &Input) -> bool {
@@ -40,7 +50,15 @@ impl UiInput for Ui {
 }
 
 pub trait UiElements {
+   /// Draws a colorized image centered in a new group.
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
+
+   /// Draws text in a new group.
+   ///
+   /// Intended for use with horizontal layouts. Will not work all that well with vertical.
+   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
+
+   /// Draws a paragraph of text. Each string in `text` is treated as a new group.
    fn paragraph(
       &mut self,
       font: &Font,
@@ -55,10 +73,18 @@ impl UiElements for Ui {
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>) {
       let size = size.unwrap_or_else(|| vector(image.width() as f32, image.height() as f32));
       let icon = image.colorized(color);
-      let position =
-         self.position() + size / 2.0 - vector(image.width() as f32, image.height() as f32) / 2.0;
+      let position = size / 2.0 - vector(image.width() as f32, image.height() as f32) / 2.0;
       self.push(size, Layout::Freeform);
-      self.render().image(position, &icon);
+      self.draw(|ui| {
+         ui.render().image(icon.rect(position), &icon);
+      });
+      self.pop();
+   }
+
+   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
+      let width = width.unwrap_or_else(|| font.text_width(text));
+      self.push((width, self.height()), Layout::Freeform);
+      self.text(font, text, color, (AlignH::Center, AlignV::Middle));
       self.pop();
    }
 
