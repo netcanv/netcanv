@@ -416,6 +416,9 @@ impl Tool for SelectionTool {
                   );
 
                   let renderer = ui.render();
+                  if let Some(framebuffer) = peer.selection.capture.as_ref() {
+                     renderer.framebuffer(rect, framebuffer);
+                  }
                   renderer.outline(rect, Self::COLOR, 0.0, 2.0);
                   if rect.width() > text_rect.width() && rect.height() > text_rect.height() {
                      renderer.fill(text_rect, Self::COLOR, 2.0);
@@ -426,9 +429,6 @@ impl Tool for SelectionTool {
                         Color::WHITE,
                         (AlignH::Center, AlignV::Middle),
                      );
-                  }
-                  if let Some(framebuffer) = peer.selection.capture.as_ref() {
-                     renderer.framebuffer(rect, framebuffer);
                   }
                });
             }
