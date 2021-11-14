@@ -583,7 +583,6 @@ impl Selection {
 
    /// Cancels the selection, without transferring it to a paint canvas.
    fn cancel(&mut self) {
-      println!("cancelling selection");
       self.rect = None;
       self.capture = None;
    }
@@ -617,13 +616,22 @@ impl Selection {
 
    /// Uploads a new selection with a capture.
    fn upload_rgba(&mut self, renderer: &mut Backend, position: Point, image: &RgbaImage) {
-      self.rect = Some(Rect::new(
+      let rect = Rect::new(
          position,
          vector(image.width() as f32, image.height() as f32),
-      ));
+      );
+      // Limit the rectangle to a maximum width (or height) of 1024.
+      // These calculations are performed in order to make the shorter dimension scaled
+      // proportionally to the shorter one.
+      let long_side = rect.width().max(rect.height());
+      let scale = long_side.min(Self::MAX_SIZE) / long_side;
+      let rect = Rect::new(rect.position, rect.size * scale);
+      self.rect = Some(rect);
+
       let mut capture = renderer.create_framebuffer(image.width(), image.height());
       capture.upload_rgba((0, 0), (image.width(), image.height()), &image);
       self.capture = Some(capture);
+      self.normalize();
    }
 
    /// Returns a rounded, limited version of the selection rectangle.
