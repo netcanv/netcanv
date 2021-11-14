@@ -19,10 +19,20 @@ pub enum ColorScheme {
    Dark,
 }
 
+/// The position of the toolbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum ToolbarPosition {
+   Left,
+   Top,
+   Bottom,
+   Right,
+}
+
 /// UI-related configuration options.
 #[derive(Deserialize, Serialize)]
 pub struct UiConfig {
    pub color_scheme: ColorScheme,
+   pub toolbar_position: ToolbarPosition,
 }
 
 /// A user `config.toml` file.
@@ -64,7 +74,10 @@ impl UserConfig {
             Err(error) => {
                eprintln!("error while deserializing config file: {}", error);
                eprintln!("falling back to default config");
-               Self::default()
+               let config = Self::default();
+               eprintln!("the user config will be overwritten with a fresh one");
+               config.save()?;
+               config
             }
          };
          Ok(config)
@@ -89,6 +102,7 @@ impl Default for UserConfig {
          },
          ui: UiConfig {
             color_scheme: ColorScheme::Light,
+            toolbar_position: ToolbarPosition::Left,
          },
       }
    }

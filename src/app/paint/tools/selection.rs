@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::time::Instant;
 
 use image::io::Reader;
-use image::png::{PngDecoder, PngEncoder};
+use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
@@ -24,6 +24,7 @@ use crate::viewport::Viewport;
 
 use super::{KeyShortcutAction, Net, Tool, ToolArgs};
 
+/// The icon set for the selection tool.
 struct Icons {
    tool: Image,
    cursor: Image,
@@ -31,6 +32,7 @@ struct Icons {
    rectangle: Image,
 }
 
+/// Resizing handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Handle {
    TopLeft,
@@ -43,6 +45,7 @@ enum Handle {
    Left,
 }
 
+/// An (inter)action that can be performed on the selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
    None,
@@ -51,6 +54,7 @@ enum Action {
    DraggingWhole,
 }
 
+/// The selection tool.
 pub struct SelectionTool {
    icons: Icons,
    mouse_position: Point,

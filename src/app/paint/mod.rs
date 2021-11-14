@@ -21,7 +21,7 @@ use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
 use crate::common::*;
-use crate::config::UserConfig;
+use crate::config::{ToolbarPosition, UserConfig};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
@@ -505,6 +505,7 @@ impl State {
       ui.pop();
    }
 
+   /// Processes the toolbar.
    fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
       // The outer group, to add some padding.
       ui.push(
@@ -515,11 +516,25 @@ impl State {
 
       // The inner group, that actually contains the bar.
       let tool_size = Self::TOOLBAR_SIZE - 8.0;
-      let height = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
-      ui.push((Self::TOOLBAR_SIZE, height), Layout::Vertical);
-      ui.align((AlignH::Left, AlignV::Middle));
+      let length = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
+      ui.push(
+         match self.config.ui.toolbar_position {
+            ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
+            ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
+         },
+         match self.config.ui.toolbar_position {
+            ToolbarPosition::Left | ToolbarPosition::Right => Layout::Vertical,
+            ToolbarPosition::Top | ToolbarPosition::Bottom => Layout::Horizontal,
+         },
+      );
+      ui.align(match self.config.ui.toolbar_position {
+         ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
+         ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
+         ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
+         ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
+      });
       input.set_mouse_area(mouse_areas::TOOLBAR, ui.has_mouse(input));
-      ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
+      ui.fill_rounded(self.assets.colors.panel, ui.width().min(ui.height()) / 2.0);
       ui.pad(4.0);
 
       let tools = self.tools.borrow_mut();
