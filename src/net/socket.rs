@@ -202,7 +202,7 @@ where
 
       // Reading and writing is buffered so as not to slow down performance when big packets are sent.
 
-      let mut reader = BufReader::with_capacity(64 * KILOBYTE, stream.try_clone()?);
+      let reader = stream.try_clone()?; // BufReader::with_capacity(64 * KILOBYTE, stream.try_clone()?);
       let receiving_thread =
          thread::Builder::new().name("network receiving thread".into()).spawn(move || loop {
             // Quit when the owning socket's dropped.
@@ -213,7 +213,7 @@ where
                }
             }
             // Read packets from the stream. `deserialize_from` will block until a packet is read successfully.
-            let data: T = catch!(bincode::deserialize_from(&mut reader));
+            let data: T = catch!(bincode::deserialize_from(&reader));
             bus::push(IncomingPacket { token, data });
          })?;
 

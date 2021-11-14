@@ -222,6 +222,53 @@ impl State {
       });
    }
 
+   fn process_tool_key_shortcuts(&mut self, ui: &mut Ui, input: &mut Input) {
+      let mut tools = self.tools.borrow_mut();
+
+      match tools[self.current_tool].active_key_shortcuts(
+         ToolArgs {
+            ui,
+            input,
+            assets: &mut self.assets,
+            net: Net::new(&self.peer),
+         },
+         &mut self.paint_canvas,
+         &self.viewport,
+      ) {
+         KeyShortcutAction::None => (),
+         KeyShortcutAction::Success => return,
+         KeyShortcutAction::SwitchToThisTool => (),
+      }
+
+      let mut switch_tool = None;
+      'tools: for (i, tool) in tools.iter_mut().enumerate() {
+         match tool.global_key_shortcuts(
+            ToolArgs {
+               ui,
+               input,
+               assets: &mut self.assets,
+               net: Net::new(&self.peer),
+            },
+            &mut self.paint_canvas,
+            &self.viewport,
+         ) {
+            KeyShortcutAction::None => (),
+            KeyShortcutAction::Success => return,
+            KeyShortcutAction::SwitchToThisTool => {
+               switch_tool = Some(i);
+               break 'tools;
+            }
+         }
+      }
+
+      drop(tools);
+      if let Some(tool) = switch_tool {
+         self.set_current_tool(ui, tool);
+      }
+
+      return;
+   }
+
    /// Processes the paint canvas.
    fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
       ui.push(
@@ -261,54 +308,7 @@ impl State {
 
       // Drawing & key shortcuts
 
-      // There is no loop here btw.
-      // It's a workaround because labelled blocks are not stable yet.
-      'key_shortcuts: loop {
-         let mut tools = self.tools.borrow_mut();
-
-         match tools[self.current_tool].active_key_shortcuts(
-            ToolArgs {
-               ui,
-               input,
-               assets: &mut self.assets,
-               net: Net::new(&self.peer),
-            },
-            &mut self.paint_canvas,
-            &self.viewport,
-         ) {
-            KeyShortcutAction::None => (),
-            KeyShortcutAction::Success => break 'key_shortcuts,
-            KeyShortcutAction::SwitchToThisTool => (),
-         }
-
-         let mut switch_tool = None;
-         'tools: for (i, tool) in tools.iter_mut().enumerate() {
-            match tool.global_key_shortcuts(
-               ToolArgs {
-                  ui,
-                  input,
-                  assets: &mut self.assets,
-                  net: Net::new(&self.peer),
-               },
-               &mut self.paint_canvas,
-               &self.viewport,
-            ) {
-               KeyShortcutAction::None => (),
-               KeyShortcutAction::Success => break 'key_shortcuts,
-               KeyShortcutAction::SwitchToThisTool => {
-                  switch_tool = Some(i);
-                  break 'tools;
-               }
-            }
-         }
-
-         drop(tools);
-         if let Some(tool) = switch_tool {
-            self.set_current_tool(ui, tool);
-         }
-
-         break 'key_shortcuts;
-      }
+      self.process_tool_key_shortcuts(ui, input);
 
       self.with_current_tool(|p, tool| {
          tool.process_paint_canvas_input(
