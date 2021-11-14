@@ -35,6 +35,30 @@ pub trait Tool {
    /// deselected.
    fn deactivate(&mut self, _renderer: &mut Backend, _paint_canvas: &mut PaintCanvas) {}
 
+   /// Called each frame when this tool is active, to poll for keyboard shortcuts.
+   ///
+   /// The returned value signifies what action should be taken after the function is done running.
+   fn active_key_shortcuts(
+      &mut self,
+      _args: ToolArgs,
+      _paint_canvas: &mut PaintCanvas,
+      _viewport: &Viewport,
+   ) -> KeyShortcutAction {
+      KeyShortcutAction::None
+   }
+
+   /// Called each frame on each tool to poll for keyboard shortcuts.
+   ///
+   /// The returned value signifies what action should be taken after the function is done running.
+   fn global_key_shortcuts(
+      &mut self,
+      _args: ToolArgs,
+      _paint_canvas: &mut PaintCanvas,
+      _viewport: &Viewport,
+   ) -> KeyShortcutAction {
+      KeyShortcutAction::None
+   }
+
    /// Called before the paint canvas is rendered to the screen. Primarily used for drawing to the
    /// paint canvas, or updating related state.
    ///
@@ -124,6 +148,8 @@ pub trait Tool {
    }
 }
 
+fn _tool_trait_must_be_object_safe(_: Box<dyn Tool>) {}
+
 pub struct Net<'peer> {
    pub peer: &'peer Peer,
 }
@@ -158,4 +184,15 @@ pub struct ToolArgs<'ui, 'input, 'state> {
    pub net: Net<'state>,
 }
 
-fn _tool_trait_must_be_object_safe(_: Box<dyn Tool>) {}
+/// The action that should be taken after [`Tool::global_key_shortcut`] is called.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyShortcutAction {
+   /// No action.
+   None,
+   /// The key shortcut was executed successfully and `global_key_shortcuts` should not be run.
+   /// Has no effect in `global_key_shortcuts`.
+   Success,
+   /// The current tool should be switched to the tool executing `global_key_shortcuts`.
+   /// Has no effect in `active_key_shortcuts`.
+   SwitchToThisTool,
+}

@@ -16,8 +16,10 @@ use netcanv_renderer::paws::{
 use netcanv_renderer::{BlendMode, RenderBackend};
 use nysa::global as bus;
 
+use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
+use crate::backend::Backend;
 use crate::common::*;
 use crate::config::UserConfig;
 use crate::net::peer::{self, Peer};
@@ -46,6 +48,7 @@ struct Tip {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChunkDownload {
    NotDownloaded,
+   Queued,
    Requested,
    Downloaded,
 }
@@ -161,6 +164,19 @@ impl State {
       callback(self, tool);
    }
 
+   /// Sets the current tool to the one with the provided ID.
+   fn set_current_tool(&mut self, renderer: &mut Backend, tool: usize) {
+      let previous_tool = self.current_tool;
+      let mut tools = self.tools.borrow_mut();
+      if tool != previous_tool {
+         tools[previous_tool].deactivate(renderer, &mut self.paint_canvas);
+         catch!(self.peer.send_select_tool(tools[tool].name().to_owned()));
+      }
+      tools[tool].activate();
+      self.current_tool = tool;
+   }
+
+   /// Clones the current tool's name into a String.
    fn clone_tool_name(&self) -> String {
       self.tools.borrow()[self.current_tool].name().to_owned()
    }
@@ -243,7 +259,56 @@ impl State {
          );
       }
 
-      // Drawing
+      // Drawing & key shortcuts
+
+      // There is no loop here btw.
+      // It's a workaround because labelled blocks are not stable yet.
+      'key_shortcuts: loop {
+         let mut tools = self.tools.borrow_mut();
+
+         match tools[self.current_tool].active_key_shortcuts(
+            ToolArgs {
+               ui,
+               input,
+               assets: &mut self.assets,
+               net: Net::new(&self.peer),
+            },
+            &mut self.paint_canvas,
+            &self.viewport,
+         ) {
+            KeyShortcutAction::None => (),
+            KeyShortcutAction::Success => break 'key_shortcuts,
+            KeyShortcutAction::SwitchToThisTool => (),
+         }
+
+         let mut switch_tool = None;
+         'tools: for (i, tool) in tools.iter_mut().enumerate() {
+            match tool.global_key_shortcuts(
+               ToolArgs {
+                  ui,
+                  input,
+                  assets: &mut self.assets,
+                  net: Net::new(&self.peer),
+               },
+               &mut self.paint_canvas,
+               &self.viewport,
+            ) {
+               KeyShortcutAction::None => (),
+               KeyShortcutAction::Success => break 'key_shortcuts,
+               KeyShortcutAction::SwitchToThisTool => {
+                  switch_tool = Some(i);
+                  break 'tools;
+               }
+            }
+         }
+
+         drop(tools);
+         if let Some(tool) = switch_tool {
+            self.set_current_tool(ui, tool);
+         }
+
+         break 'key_shortcuts;
+      }
 
       self.with_current_tool(|p, tool| {
          tool.process_paint_canvas_input(
@@ -350,9 +415,11 @@ impl State {
             self.save_to_file = None;
          } else {
             for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-               if let Some(ChunkDownload::NotDownloaded) = self.chunk_downloads.get(&chunk_position)
-               {
-                  Self::queue_chunk_download(chunk_position);
+               if let Some(state) = self.chunk_downloads.get_mut(&chunk_position) {
+                  if *state == ChunkDownload::NotDownloaded {
+                     Self::queue_chunk_download(chunk_position);
+                     *state = ChunkDownload::Queued;
+                  }
                }
             }
          }
@@ -455,9 +522,8 @@ impl State {
       ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
       ui.pad(4.0);
 
-      let mut tools = self.tools.borrow_mut();
+      let tools = self.tools.borrow_mut();
 
-      let previous_tool = self.current_tool;
       let mut selected_tool = None;
       for (i, tool) in tools.iter().enumerate() {
          ui.push((tool_size, tool_size), Layout::Freeform);
@@ -477,17 +543,15 @@ impl State {
          )
          .clicked()
          {
-            self.current_tool = i;
             selected_tool = Some(i);
          }
          ui.pop();
          ui.space(4.0);
       }
 
+      drop(tools);
       if let Some(selected_tool) = selected_tool {
-         tools[previous_tool].deactivate(ui, &mut self.paint_canvas);
-         tools[selected_tool].activate();
-         catch!(self.peer.send_select_tool(tools[selected_tool].name().to_owned()));
+         self.set_current_tool(ui, selected_tool);
       }
 
       ui.pop();

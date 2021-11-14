@@ -3,8 +3,9 @@ use std::io::Cursor;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use image::png::PngEncoder;
-use image::{ColorType, RgbaImage};
+use image::io::Reader;
+use image::png::{PngDecoder, PngEncoder};
+use image::{ColorType, ImageFormat, RgbaImage};
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
@@ -21,7 +22,7 @@ use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
 use crate::viewport::Viewport;
 
-use super::{Net, Tool, ToolArgs};
+use super::{KeyShortcutAction, Net, Tool, ToolArgs};
 
 struct Icons {
    tool: Image,
@@ -142,9 +143,27 @@ impl SelectionTool {
    }
 
    /// Pastes the clipboard image into a new selection.
-   fn paste_from_clipboard(&mut self, renderer: &mut Backend, position: Point) {
+   fn paste_from_clipboard(
+      &mut self,
+      renderer: &mut Backend,
+      paint_canvas: &mut PaintCanvas,
+      net: &Net,
+      position: Point,
+   ) {
       let image = catch!(clipboard::paste_image());
-      self.selection.upload_rgba(renderer, position, image);
+      self.selection.deselect(renderer, paint_canvas);
+      self.selection.upload_rgba(renderer, position, &image);
+
+      let mut bytes = Vec::new();
+      catch!(PngEncoder::new(Cursor::new(&mut bytes)).encode(
+         &image,
+         image.width(),
+         image.height(),
+         ColorType::Rgba8,
+      ));
+      let Point { x, y } = position;
+      catch!(net.send(self, Packet::Paste((x, y), bytes)));
+      catch!(self.send_rect_packet(net));
    }
 }
 
@@ -160,6 +179,53 @@ impl Tool for SelectionTool {
    /// When the tool is deactivated, the selection should be deselected.
    fn deactivate(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
       self.selection.deselect(renderer, paint_canvas);
+   }
+
+   /// Processes key shortcuts when the selection is active.
+   fn active_key_shortcuts(
+      &mut self,
+      ToolArgs { input, net, .. }: ToolArgs,
+      _paint_canvas: &mut PaintCanvas,
+      _viewport: &Viewport,
+   ) -> KeyShortcutAction {
+      if input.key_just_typed(VirtualKeyCode::Delete) {
+         if self.selection.rect.is_some() {
+            self.selection.cancel();
+            catch!(
+               net.send(self, Packet::Cancel),
+               return KeyShortcutAction::None
+            );
+         }
+         return KeyShortcutAction::Success;
+      }
+
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
+         self.copy_to_clipboard();
+         return KeyShortcutAction::Success;
+      }
+
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
+         self.copy_to_clipboard();
+         self.selection.cancel();
+         return KeyShortcutAction::Success;
+      }
+
+      KeyShortcutAction::None
+   }
+
+   /// Processes the global key shortcuts for the selection.
+   fn global_key_shortcuts(
+      &mut self,
+      ToolArgs { ui, input, net, .. }: ToolArgs,
+      paint_canvas: &mut PaintCanvas,
+      viewport: &Viewport,
+   ) -> KeyShortcutAction {
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
+         self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
+         return KeyShortcutAction::SwitchToThisTool;
+      }
+
+      KeyShortcutAction::None
    }
 
    /// Processes mouse input.
@@ -279,30 +345,6 @@ impl Tool for SelectionTool {
                rect.position += delta_position;
             }
          }
-      }
-
-      //
-      // Keyboard shortcuts
-      //
-
-      if input.key_just_typed(VirtualKeyCode::Delete) {
-         if self.selection.rect.is_some() {
-            self.selection.cancel();
-            catch!(net.send(self, Packet::Cancel));
-         }
-      }
-
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
-         self.copy_to_clipboard();
-      }
-
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
-         self.copy_to_clipboard();
-         self.selection.cancel();
-      }
-
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
-         self.paste_from_clipboard(ui, viewport.pan());
       }
    }
 
@@ -465,6 +507,14 @@ impl Tool for SelectionTool {
          Packet::Capture => peer.selection.capture(renderer, paint_canvas),
          Packet::Cancel => peer.selection.cancel(),
          Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
+         Packet::Paste((x, y), data) => {
+            peer.selection.deselect(renderer, paint_canvas);
+            peer.selection.upload_rgba(
+               renderer,
+               point(x, y),
+               &Reader::with_format(Cursor::new(data), ImageFormat::Png).decode()?.to_rgba8(),
+            );
+         }
       }
       Ok(())
    }
@@ -533,6 +583,7 @@ impl Selection {
 
    /// Cancels the selection, without transferring it to a paint canvas.
    fn cancel(&mut self) {
+      println!("cancelling selection");
       self.rect = None;
       self.capture = None;
    }
@@ -546,8 +597,7 @@ impl Selection {
             });
          }
       }
-      self.rect = None;
-      self.capture = None;
+      self.cancel();
    }
 
    /// Downloads a captured selection off the graphics card, into an RGBA image.
@@ -566,7 +616,7 @@ impl Selection {
    }
 
    /// Uploads a new selection with a capture.
-   fn upload_rgba(&mut self, renderer: &mut Backend, position: Point, image: RgbaImage) {
+   fn upload_rgba(&mut self, renderer: &mut Backend, position: Point, image: &RgbaImage) {
       self.rect = Some(Rect::new(
          position,
          vector(image.width() as f32, image.height() as f32),
@@ -630,6 +680,7 @@ enum Packet {
    Capture,
    Cancel,
    Deselect,
+   Paste((f32, f32), Vec<u8>),
 }
 
 fn format_vector(vector: Vector) -> String {
