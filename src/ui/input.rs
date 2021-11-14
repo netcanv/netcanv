@@ -2,10 +2,10 @@
 
 use std::time::Instant;
 
+use crate::backend::winit::dpi::PhysicalPosition;
+pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
+use crate::backend::winit::event::{KeyboardInput, WindowEvent};
 use netcanv_renderer::paws::{vector, Point, Vector};
-use winit::dpi::PhysicalPosition;
-pub use winit::event::{ElementState, MouseButton, VirtualKeyCode};
-use winit::event::{KeyboardInput, WindowEvent};
 
 const MOUSE_BUTTON_COUNT: usize = 8;
 const KEY_CODE_COUNT: usize = 256;
@@ -176,7 +176,7 @@ impl Input {
          WindowEvent::MouseInput { button, state, .. } => self.process_mouse_input(*button, *state),
 
          WindowEvent::MouseWheel { delta, .. } => {
-            use winit::event::MouseScrollDelta::*;
+            use crate::backend::winit::event::MouseScrollDelta::*;
             self.mouse_scroll = match *delta {
                LineDelta(x, y) => Vector::new(x, y),
                PixelDelta(PhysicalPosition { x, y }) => Vector::new(x as f32, y as f32),

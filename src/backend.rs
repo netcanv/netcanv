@@ -9,6 +9,8 @@ use netcanv_renderer_skia::{self as the_backend, SkiaBackend as TheBackend};
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::{self as the_backend, OpenGlBackend as TheBackend};
 
+pub use the_backend::winit;
+
 pub type Backend = TheBackend;
 pub type Image = the_backend::Image;
 pub type Font = the_backend::Font;

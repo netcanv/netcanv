@@ -3,6 +3,7 @@ use std::io::Cursor;
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use crate::backend::winit::event::{MouseButton, VirtualKeyCode};
 use image::io::Reader;
 use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
@@ -11,7 +12,6 @@ use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
 };
 use serde::{Deserialize, Serialize};
-use winit::event::{MouseButton, VirtualKeyCode};
 
 use crate::app::paint;
 use crate::assets::Assets;

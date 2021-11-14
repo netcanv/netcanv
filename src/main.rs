@@ -27,17 +27,17 @@
 
 use std::fmt::Write;
 
+use crate::backend::winit::dpi::LogicalSize;
+use crate::backend::winit::event::{Event, WindowEvent};
+use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
+#[cfg(target_family = "unix")]
+use crate::backend::winit::platform::unix::*;
+use crate::backend::winit::window::WindowBuilder;
 use backend::Backend;
 use config::UserConfig;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
-use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_family = "unix")]
-use winit::platform::unix::*;
-use winit::window::WindowBuilder;
 
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::UiRenderFrame;

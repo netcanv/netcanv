@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use serde::{Deserialize, Serialize};
-use winit::event::MouseButton;
 
 use crate::app::paint;
 use crate::assets::Assets;

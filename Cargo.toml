@@ -26,7 +26,6 @@ heapless = { version = "0.7.7", default-features = false }
 lazy_static = "1.4.0"
 
 # Windowing and graphics
-winit = "0.24.0"
 native-dialog = "0.5.5"
 image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }

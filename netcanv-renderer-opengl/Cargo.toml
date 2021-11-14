@@ -5,8 +5,8 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.40"
-winit = "0.24.0"
-glutin = "0.26.0"
+winit = "0.25.0"
+glutin = "0.27.0"
 glow = "0.11.0"
 memoffset = "0.6.4"
 lazy_static = "1.4.0"
