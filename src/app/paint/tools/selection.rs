@@ -1,15 +1,21 @@
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use image::png::PngEncoder;
+use image::{ColorType, RgbaImage};
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
-use netcanv_renderer::{BlendMode, Font as FontTrait, RenderBackend};
+use netcanv_renderer::{
+   BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
+};
 use serde::{Deserialize, Serialize};
 use winit::event::{MouseButton, VirtualKeyCode};
 
 use crate::app::paint;
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Framebuffer, Image};
+use crate::clipboard;
 use crate::common::{lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{UiElements, UiInput};
@@ -126,6 +132,19 @@ impl SelectionTool {
          )?;
       }
       Ok(())
+   }
+
+   /// Copies the current selection to the system clipboard.
+   fn copy_to_clipboard(&self) {
+      if let Some(image) = self.selection.download_rgba() {
+         catch!(clipboard::copy_image(image));
+      }
+   }
+
+   /// Pastes the clipboard image into a new selection.
+   fn paste_from_clipboard(&mut self, renderer: &mut Backend, position: Point) {
+      let image = catch!(clipboard::paste_image());
+      self.selection.upload_rgba(renderer, position, image);
    }
 }
 
@@ -271,6 +290,19 @@ impl Tool for SelectionTool {
             self.selection.cancel();
             catch!(net.send(self, Packet::Cancel));
          }
+      }
+
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
+         self.copy_to_clipboard();
+      }
+
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
+         self.copy_to_clipboard();
+         self.selection.cancel();
+      }
+
+      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
+         self.paste_from_clipboard(ui, viewport.pan());
       }
    }
 
@@ -516,6 +548,32 @@ impl Selection {
       }
       self.rect = None;
       self.capture = None;
+   }
+
+   /// Downloads a captured selection off the graphics card, into an RGBA image.
+   ///
+   /// Returns `None` if there's no _captured_ selection.
+   fn download_rgba(&self) -> Option<RgbaImage> {
+      if let Some(rect) = self.normalized_rect() {
+         let rect = rect.sort();
+         if let Some(capture) = self.capture.as_ref() {
+            let mut image = RgbaImage::new(rect.width() as u32, rect.height() as u32);
+            capture.download_rgba(&mut image);
+            return Some(image);
+         }
+      }
+      None
+   }
+
+   /// Uploads a new selection with a capture.
+   fn upload_rgba(&mut self, renderer: &mut Backend, position: Point, image: RgbaImage) {
+      self.rect = Some(Rect::new(
+         position,
+         vector(image.width() as f32, image.height() as f32),
+      ));
+      let mut capture = renderer.create_framebuffer(image.width(), image.height());
+      capture.upload_rgba((0, 0), (image.width(), image.height()), &image);
+      self.capture = Some(capture);
    }
 
    /// Returns a rounded, limited version of the selection rectangle.

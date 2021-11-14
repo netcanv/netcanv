@@ -23,6 +23,7 @@ renderer-opengl = ["netcanv-renderer-opengl"]
 # Common things
 anyhow = "1.0.40"
 heapless = { version = "0.7.7", default-features = false }
+lazy_static = "1.4.0"
 
 # Windowing and graphics
 winit = "0.24.0"
@@ -45,7 +46,7 @@ directories = "3.0.2"
 toml = "0.5.8"
 
 # Clipboard
-copypasta = "0.7.1"
+arboard = "2.0.1"
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }

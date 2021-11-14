@@ -2,11 +2,11 @@
 
 use std::ops::Range;
 
-use copypasta::{ClipboardContext, ClipboardProvider};
 use netcanv_renderer::Font as FontTrait;
 use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
 use crate::backend::Font;
+use crate::clipboard;
 use crate::ui::*;
 
 /// A text field's state.
@@ -15,7 +15,6 @@ pub struct TextField {
 
    focused: bool,
    selection: Selection,
-   clipboard_context: ClipboardContext,
 
    blink_start: f32,
    scroll_x: f32,
@@ -62,7 +61,6 @@ impl TextField {
             anchor: TextPosition(length),
          },
 
-         clipboard_context: ClipboardContext::new().unwrap(),
          scroll_x: 0.0,
       }
    }
@@ -210,16 +208,6 @@ impl TextField {
       }
    }
 
-   /// Returns whether the Ctrl key is being held.
-   fn ctrl_is_down(&self, input: &Input) -> bool {
-      input.key_is_down(VirtualKeyCode::LControl) || input.key_is_down(VirtualKeyCode::RControl)
-   }
-
-   /// Returns whether the Shift key is being held.
-   fn shift_is_down(&self, input: &Input) -> bool {
-      input.key_is_down(VirtualKeyCode::LShift) || input.key_is_down(VirtualKeyCode::RShift)
-   }
-
    /// Moves the cursor to the left as long as the given condition is satisfied.
    ///
    /// The condition receives the current character under the cursor on each iteration.
@@ -289,20 +277,20 @@ impl TextField {
          if input.key_just_typed(VirtualKeyCode::Left) {
             self.reset_blink(input);
 
-            if self.ctrl_is_down(input) {
-               self.skip_word(ArrowKey::Left, self.shift_is_down(input));
+            if input.ctrl_is_down() {
+               self.skip_word(ArrowKey::Left, input.shift_is_down());
             } else {
-               self.selection.move_left(&self.text, self.shift_is_down(input));
+               self.selection.move_left(&self.text, input.shift_is_down());
             }
          }
 
          if input.key_just_typed(VirtualKeyCode::Right) {
             self.reset_blink(input);
 
-            if self.ctrl_is_down(input) {
-               self.skip_word(ArrowKey::Right, self.shift_is_down(input));
+            if input.ctrl_is_down() {
+               self.skip_word(ArrowKey::Right, input.shift_is_down());
             } else if self.selection.cursor() < self.text.len() {
-               self.selection.move_right(&self.text, self.shift_is_down(input));
+               self.selection.move_right(&self.text, input.shift_is_down());
             }
          }
 
@@ -316,30 +304,30 @@ impl TextField {
             self.reset_blink(input);
          }
 
-         if self.ctrl_is_down(input) && input.key_just_typed(VirtualKeyCode::A) {
+         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::A) {
             self.selection.anchor = TextPosition(0);
             self.selection.cursor = TextPosition(self.text.len());
          }
 
-         if self.ctrl_is_down(input) && input.key_just_typed(VirtualKeyCode::C) {
-            self.clipboard_context.set_contents(self.selection_text().to_owned()).unwrap();
+         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
+            catch!(clipboard::copy_string(self.selection_text().to_owned()));
          }
 
-         if self.ctrl_is_down(input) && input.key_just_typed(VirtualKeyCode::V) {
-            if let Ok(clipboard) = self.clipboard_context.get_contents() {
+         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
+            if let Ok(clipboard) = clipboard::paste_string() {
                let cursor = self.selection.cursor();
                self.text.replace_range(self.selection.normalize(), &clipboard);
                self.selection.move_to(TextPosition(cursor + clipboard.len()));
             }
          }
 
-         if self.ctrl_is_down(input) && input.key_just_typed(VirtualKeyCode::X) {
-            let _ = self.clipboard_context.set_contents(self.selection_text().to_owned());
+         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
+            catch!(clipboard::copy_string(self.selection_text().to_owned()));
             self.backspace();
          }
 
          if input.key_just_typed(VirtualKeyCode::Back) {
-            if self.ctrl_is_down(input) {
+            if input.ctrl_is_down() {
                // Simulate the shift key being held down while moving to the word on the left, so as
                // to select the word to the left and then backspace it.
                self.skip_word(ArrowKey::Left, true);
@@ -348,7 +336,7 @@ impl TextField {
          }
 
          if input.key_just_typed(VirtualKeyCode::Delete) {
-            if self.ctrl_is_down(input) {
+            if input.ctrl_is_down() {
                // Similar to backspace, simulate the shift key being held down, but this time
                // while moving over to the right.
                self.skip_word(ArrowKey::Right, true);

@@ -149,6 +149,16 @@ impl Input {
       }
    }
 
+   /// Returns whether the Ctrl key is being held down.
+   pub fn ctrl_is_down(&self) -> bool {
+      self.key_is_down(VirtualKeyCode::LControl) || self.key_is_down(VirtualKeyCode::RControl)
+   }
+
+   /// Returns whether the Shift key is being held down.
+   pub fn shift_is_down(&self) -> bool {
+      self.key_is_down(VirtualKeyCode::LShift) || self.key_is_down(VirtualKeyCode::RShift)
+   }
+
    /// Returns the time elapsed since this `Input` was created, in seconds.
    pub fn time_in_seconds(&self) -> f32 {
       let now = self.time_origin.elapsed();

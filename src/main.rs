@@ -49,6 +49,7 @@ mod common;
 mod app;
 mod assets;
 mod backend;
+mod clipboard;
 mod config;
 mod net;
 mod paint_canvas;
@@ -82,6 +83,8 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Build the render backend.
    let renderer = Backend::new(window_builder, &event_loop)?;
+   // Also, initialize the clipboard because we now have a window handle.
+   clipboard::init()?;
 
    // On Wayland, winit draws its own set of decorations, which can be customized.
    // We customize them to fit our color scheme.
