@@ -86,7 +86,10 @@ impl Expand {
       // visible area
       ui.push((width, ui.height()), Layout::Freeform);
       if ui.has_mouse(input) {
-         let pressed = input.mouse_button_is_down(MouseButton::Left);
+         let pressed = matches!(
+            input.action(MouseButton::Left),
+            (true, ButtonState::Pressed | ButtonState::Down)
+         );
          // underline
          ui.draw(|ui| {
             let underline_color: Color = if pressed {
@@ -105,7 +108,7 @@ impl Expand {
             );
          });
          // events
-         if input.mouse_button_just_released(MouseButton::Left) {
+         if input.action(MouseButton::Left) == (true, ButtonState::Released) {
             self.expanded = !self.expanded;
             result.just_clicked = true;
          }

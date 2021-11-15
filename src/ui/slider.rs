@@ -54,11 +54,10 @@ impl Slider {
    pub fn process(&mut self, ui: &mut Ui, input: &Input, SliderArgs { width, color }: SliderArgs) {
       ui.push((width, ui.height()), Layout::Freeform);
 
-      if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Left) {
-         self.sliding = true;
-      }
-      if input.mouse_button_just_released(MouseButton::Left) {
-         self.sliding = false;
+      match input.action(MouseButton::Left) {
+         (true, ButtonState::Pressed) if ui.has_mouse(input) => self.sliding = true,
+         (_, ButtonState::Released) => self.sliding = false,
+         _ => (),
       }
 
       if self.sliding {
@@ -66,11 +65,13 @@ impl Slider {
       }
 
       if ui.has_mouse(input) {
-         let scroll_amount = match self.step {
-            SliderStep::Discrete(increment) => increment / self.step_count() as f32 * 2.0,
-            SliderStep::Smooth => 8.0 / width,
-         };
-         self.value += input.mouse_scroll().y * scroll_amount;
+         if let (true, Some(scroll)) = input.action(MouseScroll) {
+            let scroll_amount = match self.step {
+               SliderStep::Discrete(increment) => increment / self.step_count() as f32 * 2.0,
+               SliderStep::Smooth => 8.0 / width,
+            };
+            self.value += scroll.y * scroll_amount;
+         }
       }
 
       self.value = self.value.clamp(0.0, 1.0);
@@ -121,7 +122,7 @@ impl Slider {
       }
    }
 
-   /// Returns whether the slider is currently being slided.
+   /// Returns whether the slider is currently being slid around.
    pub fn is_sliding(&self) -> bool {
       self.sliding
    }

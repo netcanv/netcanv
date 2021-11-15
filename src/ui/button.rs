@@ -62,13 +62,12 @@ impl Button {
       let mut clicked = false;
       ui.outline_rounded(colors.outline, corner_radius, 1.0);
       if ui.has_mouse(input) {
-         let fill_color = if input.mouse_button_is_down(MouseButton::Left) {
-            colors.pressed
-         } else {
-            colors.hover
+         let fill_color = match input.action(MouseButton::Left) {
+            (true, ButtonState::Pressed | ButtonState::Down) => colors.pressed,
+            _ => colors.hover,
          };
          ui.fill_rounded(fill_color, corner_radius);
-         clicked = input.mouse_button_just_released(MouseButton::Left);
+         clicked = input.action(MouseButton::Left) == (true, ButtonState::Released);
       }
 
       ui.pop();
