@@ -157,11 +157,14 @@ impl State {
    }
 
    /// Executes the given callback with the currently selected tool.
-   fn with_current_tool(&mut self, mut callback: impl FnMut(&mut Self, &mut Box<dyn Tool>)) {
+   fn with_current_tool<R>(
+      &mut self,
+      mut callback: impl FnMut(&mut Self, &mut Box<dyn Tool>) -> R,
+   ) -> R {
       let tools = Rc::clone(&self.tools);
       let mut tools = tools.borrow_mut();
       let tool = &mut tools[self.current_tool];
-      callback(self, tool);
+      callback(self, tool)
    }
 
    /// Sets the current tool to the one with the provided ID.
@@ -583,7 +586,10 @@ impl State {
                let positions = self.paint_canvas.chunk_positions();
                self.peer.send_chunk_positions(address, positions)?;
             }
+            // Order matters here! The tool selection packet must arrive before the packets sent
+            // from the tool's `network_peer_join` event.
             self.peer.send_select_tool(self.clone_tool_name())?;
+            self.with_current_tool(|p, tool| tool.network_peer_join(Net::new(&p.peer), address))?;
          }
          MessageKind::Left {
             address,

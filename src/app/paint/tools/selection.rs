@@ -130,6 +130,7 @@ impl SelectionTool {
       if let Some(rect) = self.selection.normalized_rect() {
          net.send(
             self,
+            None,
             Packet::Rect {
                position: (rect.x(), rect.y()),
                size: (rect.width(), rect.height()),
@@ -156,18 +157,29 @@ impl SelectionTool {
    ) {
       let image = catch!(clipboard::paste_image());
       self.selection.deselect(renderer, paint_canvas);
-      self.selection.upload_rgba(renderer, position, &image);
+      self.selection.paste(renderer, position, &image);
 
+      let bytes = catch!(Self::encode_image(image));
+      let Point { x, y } = position;
+      catch!(net.send(self, None, Packet::Paste((x, y), bytes)));
+      catch!(self.send_rect_packet(net));
+   }
+
+   /// Encodes an image to PNG.
+   fn encode_image(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
       let mut bytes = Vec::new();
-      catch!(PngEncoder::new(Cursor::new(&mut bytes)).encode(
+      PngEncoder::new(Cursor::new(&mut bytes)).encode(
          &image,
          image.width(),
          image.height(),
          ColorType::Rgba8,
-      ));
-      let Point { x, y } = position;
-      catch!(net.send(self, Packet::Paste((x, y), bytes)));
-      catch!(self.send_rect_packet(net));
+      )?;
+      Ok(bytes)
+   }
+
+   /// Decodes a PNG image.
+   fn decode_image(data: &[u8]) -> anyhow::Result<RgbaImage> {
+      Ok(Reader::with_format(Cursor::new(data), ImageFormat::Png).decode()?.to_rgba8())
    }
 }
 
@@ -196,7 +208,7 @@ impl Tool for SelectionTool {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
-               net.send(self, Packet::Cancel),
+               net.send(self, None, Packet::Cancel),
                return KeyShortcutAction::None
             );
          }
@@ -295,7 +307,7 @@ impl Tool for SelectionTool {
                // Before we erase the old data, draw the capture back onto the canvas.
                self.selection.deselect(ui, paint_canvas);
                catch!(self.send_rect_packet(&net));
-               catch!(net.send(self, Packet::Deselect));
+               catch!(net.send(self, None, Packet::Deselect));
                // Anchor the selection to the mouse position.
                self.selection.begin(mouse_position);
                catch!(self.send_rect_packet(&net));
@@ -307,7 +319,7 @@ impl Tool for SelectionTool {
             if let Some(rect) = self.selection.rect {
                if Self::rect_is_smaller_than_a_pixel(rect) {
                   self.selection.cancel();
-                  catch!(net.send(self, Packet::Cancel));
+                  catch!(net.send(self, None, Packet::Cancel));
                }
             }
             if self.action == Action::Selecting {
@@ -320,7 +332,7 @@ impl Tool for SelectionTool {
                // If there's still a selection after all of this, capture the paint canvas into an
                // image.
                self.selection.capture(ui, paint_canvas);
-               catch!(net.send(self, Packet::Capture));
+               catch!(net.send(self, None, Packet::Capture));
             }
             self.action = Action::None;
          }
@@ -516,12 +528,22 @@ impl Tool for SelectionTool {
          Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
          Packet::Paste((x, y), data) => {
             peer.selection.deselect(renderer, paint_canvas);
-            peer.selection.upload_rgba(
-               renderer,
-               point(x, y),
-               &Reader::with_format(Cursor::new(data), ImageFormat::Png).decode()?.to_rgba8(),
-            );
+            peer.selection.paste(renderer, point(x, y), &Self::decode_image(&data)?);
          }
+         Packet::Update(data) => peer.selection.upload_rgba(renderer, &Self::decode_image(&data)?),
+      }
+      Ok(())
+   }
+
+   /// Sends a capture packet to the peer that joined.
+   fn network_peer_join(&mut self, net: Net, address: SocketAddr) -> anyhow::Result<()> {
+      if let Some(capture) = self.selection.download_rgba() {
+         self.send_rect_packet(&net)?;
+         net.send(
+            self,
+            Some(address),
+            Packet::Update(Self::encode_image(capture)?),
+         )?;
       }
       Ok(())
    }
@@ -621,26 +643,34 @@ impl Selection {
       None
    }
 
-   /// Uploads a new selection with a capture.
-   fn upload_rgba(&mut self, renderer: &mut Backend, position: Point, image: &RgbaImage) {
+   /// Uploads the given image into the capture framebuffer.
+   /// Does not do anything else with the selection; the rectangle must be initialized separately.
+   fn upload_rgba(&mut self, renderer: &mut Backend, image: &RgbaImage) {
+      let mut capture = renderer.create_framebuffer(image.width(), image.height());
+      capture.upload_rgba((0, 0), (image.width(), image.height()), &image);
+      self.capture = Some(capture);
+   }
+
+   /// Creates a new selection with the given image capture, at the given origin.
+   fn paste(&mut self, renderer: &mut Backend, position: Point, image: &RgbaImage) {
       let rect = Rect::new(
          position,
          vector(image.width() as f32, image.height() as f32),
       );
+
       // Limit the rectangle to a maximum width (or height) of 1024.
       // These calculations are performed in order to make the shorter dimension scaled
       // proportionally to the shorter one.
       let long_side = rect.width().max(rect.height());
       let scale = long_side.min(Self::MAX_SIZE) / long_side;
       let rect = Rect::new(rect.position, rect.size * scale);
+
       // Center the rectangle on the screen.
       let rect = Rect::new(rect.position - rect.size / 2.0, rect.size);
       self.rect = Some(rect);
-
-      let mut capture = renderer.create_framebuffer(image.width(), image.height());
-      capture.upload_rgba((0, 0), (image.width(), image.height()), &image);
-      self.capture = Some(capture);
       self.normalize();
+
+      self.upload_rgba(renderer, image);
    }
 
    /// Returns a rounded, limited version of the selection rectangle.
@@ -690,14 +720,21 @@ impl PeerSelection {
 /// A network packet for the selection tool.
 #[derive(Serialize, Deserialize)]
 enum Packet {
+   /// The selection rectangle.
    Rect {
       position: (f32, f32),
       size: (f32, f32),
    },
+   /// Invoke [`Selection::capture`].
    Capture,
+   /// Invoke [`Selection::cancel`].
    Cancel,
+   /// Invoke [`Selection::deselect`].
    Deselect,
+   /// Paste an image at the provided origin, starting a new selection.
    Paste((f32, f32), Vec<u8>),
+   /// Update the captured image.
+   Update(Vec<u8>),
 }
 
 fn format_vector(vector: Vector) -> String {

@@ -126,6 +126,14 @@ pub trait Tool {
       Ok(())
    }
 
+   /// Called when a peer joins the room.
+   ///
+   /// This can be used to let the peer know what's happening at the moment they joined,
+   /// eg. in the selection tool this is used to send them the current capture.
+   fn network_peer_join(&mut self, _net: Net, _address: SocketAddr) -> anyhow::Result<()> {
+      Ok(())
+   }
+
    /// Called when a peer has selected this tool.
    ///
    /// This can be used to initialize the tool's state for the peer.
@@ -161,12 +169,17 @@ impl<'peer> Net<'peer> {
    }
 
    /// Sends a tool packet.
-   pub fn send<T>(&self, tool: &impl Tool, payload: T) -> anyhow::Result<()>
+   pub fn send<T>(
+      &self,
+      tool: &impl Tool,
+      address: Option<SocketAddr>,
+      payload: T,
+   ) -> anyhow::Result<()>
    where
       T: 'static + Serialize,
    {
       let payload = bincode::serialize(&payload)?;
-      self.peer.send_tool(tool.name().to_owned(), payload)?;
+      self.peer.send_tool(address, tool.name().to_owned(), payload)?;
       Ok(())
    }
 

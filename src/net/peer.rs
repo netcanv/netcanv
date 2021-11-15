@@ -377,8 +377,13 @@ impl Peer {
    }
 
    /// Sends a tool-specific packet.
-   pub fn send_tool(&self, name: String, payload: Vec<u8>) -> anyhow::Result<()> {
-      self.send_to_client(None, cl::Packet::Tool(name, payload))
+   pub fn send_tool(
+      &self,
+      address: Option<SocketAddr>,
+      name: String,
+      payload: Vec<u8>,
+   ) -> anyhow::Result<()> {
+      self.send_to_client(address, cl::Packet::Tool(name, payload))
    }
 
    /// Sends a tool selection packet.

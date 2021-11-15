@@ -351,13 +351,14 @@ impl Tool for BrushTool {
    fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
       if !self.stroke_points.is_empty() {
          let packet = Packet::Stroke(self.stroke_points.drain(..).collect());
-         net.send(self, packet)?;
+         net.send(self, None, packet)?;
       }
       if self.mouse_position != self.previous_mouse_position {
          let Point { x, y } = self.mouse_position;
          let Color { r, g, b, a } = self.color;
          net.send(
             self,
+            None,
             Packet::Cursor {
                position: (x, y),
                thickness: self.thickness() as u8,
