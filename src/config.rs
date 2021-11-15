@@ -28,10 +28,17 @@ pub enum ToolbarPosition {
    Right,
 }
 
+impl Default for ToolbarPosition {
+   fn default() -> Self {
+      Self::Left
+   }
+}
+
 /// UI-related configuration options.
 #[derive(Deserialize, Serialize)]
 pub struct UiConfig {
    pub color_scheme: ColorScheme,
+   #[serde(default)]
    pub toolbar_position: ToolbarPosition,
 }
 
@@ -69,17 +76,17 @@ impl UserConfig {
          Ok(config)
       } else {
          let file = std::fs::read_to_string(&config_file)?;
-         let config = match toml::from_str(&file) {
+         let config: Self = match toml::from_str(&file) {
             Ok(config) => config,
             Err(error) => {
                eprintln!("error while deserializing config file: {}", error);
                eprintln!("falling back to default config");
-               let config = Self::default();
-               eprintln!("the user config will be overwritten with a fresh one");
-               config.save()?;
-               config
+               return Ok(Self::default());
             }
          };
+         // Preemptively save the config to the disk if any new keys have been added.
+         // I'm not sure if errors should be treated as fatal or not in this case.
+         config.save()?;
          Ok(config)
       }
    }
