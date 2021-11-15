@@ -1,5 +1,6 @@
 //! Simplified input handling facility.
 
+use std::ops::{BitAnd, BitOr};
 use std::time::Instant;
 
 use crate::backend::winit::dpi::PhysicalPosition;
@@ -69,7 +70,11 @@ impl Input {
 
    /// Returns the mouse's scroll delta.
    pub fn mouse_scroll(&self) -> Vector {
-      self.mouse_scroll
+      if self.mouse_buttons_locked() {
+         vector(0.0, 0.0)
+      } else {
+         self.mouse_scroll
+      }
    }
 
    /// Returns whether mouse clicks are locked.
@@ -273,5 +278,149 @@ impl Input {
             self.key_is_down[i] = false;
          }
       }
+   }
+}
+
+//
+// Actions
+//
+
+/// An input action. This includes key presses, mouse clicks, etc., optionally combined with
+/// modifier keys.
+pub trait Action {
+   /// The result of the action. Usually a `bool`, but some actions, eg. mouse scrolling, can
+   /// produce other things like scroll deltas.
+   type Result;
+
+   /// Checks whether the action is now being performed.
+   fn check(&self, input: &Input) -> Self::Result;
+}
+
+impl Input {
+   /// Checks the input state against an action.
+   pub fn action<A>(&self, action: A) -> A::Result
+   where
+      A: Action,
+   {
+      action.check(self)
+   }
+}
+
+/// The state of a mouse button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonState {
+   /// A button is neither down, nor pressed, nor released.
+   None,
+   /// A button has just been pressed.
+   Pressed,
+   /// A button is being held down.
+   Down,
+   /// A button has just been released.
+   Released,
+}
+
+impl Action for MouseButton {
+   type Result = ButtonState;
+
+   fn check(&self, input: &Input) -> Self::Result {
+      if input.mouse_button_just_pressed(*self) {
+         ButtonState::Pressed
+      } else if input.mouse_button_just_released(*self) {
+         ButtonState::Released
+      } else if input.mouse_button_is_down(*self) {
+         ButtonState::Down
+      } else {
+         ButtonState::None
+      }
+   }
+}
+
+impl Action for VirtualKeyCode {
+   type Result = bool;
+
+   fn check(&self, input: &Input) -> Self::Result {
+      input.key_just_typed(*self)
+   }
+}
+
+/// Marker struct for the mouse scroll action.
+pub struct MouseScroll;
+
+impl Action for MouseScroll {
+   type Result = Option<Vector>;
+
+   fn check(&self, input: &Input) -> Self::Result {
+      if input.mouse_scroll().x != 0.0 || input.mouse_scroll().y != 0.0 {
+         Some(input.mouse_scroll())
+      } else {
+         None
+      }
+   }
+}
+
+/// A set of modifier keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Modifier(u8);
+
+impl Modifier {
+   /// No modifier keys.
+   pub const NONE: Self = Self(0);
+
+   /// The Shift key.
+   pub const SHIFT: Self = Self(0b1);
+   /// The Ctrl key.
+   pub const CTRL: Self = Self(0b10);
+
+   /// Creates modifiers from the given input.
+   pub fn from_input(input: &Input) -> Self {
+      let mut mods = Modifier(0);
+      if input.shift_is_down() {
+         mods = mods | Self::SHIFT;
+      }
+      if input.ctrl_is_down() {
+         mods = mods | Self::CTRL;
+      }
+      mods
+   }
+
+   /// Returns whether the modifier set contains the Shift key.
+   pub fn has_shift(self) -> bool {
+      (self & Self::SHIFT).0 > 0
+   }
+
+   /// Returns whether the modifier set contains the Ctrl key.
+   pub fn has_ctrl(self) -> bool {
+      (self & Self::CTRL).0 > 0
+   }
+}
+
+impl BitOr for Modifier {
+   type Output = Self;
+
+   /// Combines modifiers together.
+   fn bitor(self, rhs: Self) -> Self::Output {
+      Self(self.0 | rhs.0)
+   }
+}
+
+impl BitAnd for Modifier {
+   type Output = Self;
+
+   /// Intersects modifiers together.
+   fn bitand(self, rhs: Self) -> Self::Output {
+      Self(self.0 & rhs.0)
+   }
+}
+
+impl<A> Action for (Modifier, A)
+where
+   A: Action,
+{
+   /// The first tuple element specifies whether the modifier was satisfied. The second one
+   /// is carried over from the other action in the pair.
+   type Result = (bool, A::Result);
+
+   fn check(&self, input: &Input) -> Self::Result {
+      (Modifier::from_input(input) == self.0, self.1.check(input))
    }
 }

@@ -19,7 +19,7 @@ use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::clipboard;
 use crate::common::{lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{UiElements, UiInput};
+use crate::ui::{ButtonState, Modifier, UiElements, UiInput};
 use crate::viewport::Viewport;
 
 use super::{KeyShortcutAction, Net, Tool, ToolArgs};
@@ -192,7 +192,7 @@ impl Tool for SelectionTool {
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.key_just_typed(VirtualKeyCode::Delete) {
+      if input.action((Modifier::NONE, VirtualKeyCode::Delete)) == (true, true) {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
@@ -203,12 +203,12 @@ impl Tool for SelectionTool {
          return KeyShortcutAction::Success;
       }
 
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
+      if input.action((Modifier::CTRL, VirtualKeyCode::C)) == (true, true) {
          self.copy_to_clipboard();
          return KeyShortcutAction::Success;
       }
 
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
+      if input.action((Modifier::CTRL, VirtualKeyCode::X)) == (true, true) {
          self.copy_to_clipboard();
          self.selection.cancel();
          return KeyShortcutAction::Success;
@@ -224,7 +224,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
+      if input.action((Modifier::CTRL, VirtualKeyCode::V)) == (true, true) {
          self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
          return KeyShortcutAction::SwitchToThisTool;
       }
@@ -289,39 +289,42 @@ impl Tool for SelectionTool {
       }
 
       // Check if the left mouse button was pressed, and if so, start selecting.
-      if input.mouse_button_just_pressed(MouseButton::Left) {
-         if self.potential_action == Action::Selecting {
-            // Before we erase the old data, draw the capture back onto the canvas.
-            self.selection.deselect(ui, paint_canvas);
-            catch!(self.send_rect_packet(&net));
-            catch!(net.send(self, Packet::Deselect));
-            // Anchor the selection to the mouse position.
-            self.selection.begin(mouse_position);
-            catch!(self.send_rect_packet(&net));
-         }
-         self.action = self.potential_action;
-      }
-      if input.mouse_button_just_released(MouseButton::Left) {
-         // After the button is released and the selection's size is close to 0, deselect.
-         if let Some(rect) = self.selection.rect {
-            if Self::rect_is_smaller_than_a_pixel(rect) {
-               self.selection.cancel();
-               catch!(net.send(self, Packet::Cancel));
+      match input.action((Modifier::NONE, MouseButton::Left)) {
+         (true, ButtonState::Pressed) => {
+            if self.potential_action == Action::Selecting {
+               // Before we erase the old data, draw the capture back onto the canvas.
+               self.selection.deselect(ui, paint_canvas);
+               catch!(self.send_rect_packet(&net));
+               catch!(net.send(self, Packet::Deselect));
+               // Anchor the selection to the mouse position.
+               self.selection.begin(mouse_position);
+               catch!(self.send_rect_packet(&net));
             }
+            self.action = self.potential_action;
          }
-         if self.action == Action::Selecting {
-            // Normalize the stored selection after the user's done marking.
-            // This will make sure that before making any other actions mutating the selection, the
-            // selection's rectangle satisfies all the expectations, eg. that the corners' names are
-            // what they are visually.
-            self.selection.normalize();
-            catch!(self.send_rect_packet(&net));
-            // If there's still a selection after all of this, capture the paint canvas into an
-            // image.
-            self.selection.capture(ui, paint_canvas);
-            catch!(net.send(self, Packet::Capture));
+         (_, ButtonState::Released) => {
+            // After the button is released and the selection's size is close to 0, deselect.
+            if let Some(rect) = self.selection.rect {
+               if Self::rect_is_smaller_than_a_pixel(rect) {
+                  self.selection.cancel();
+                  catch!(net.send(self, Packet::Cancel));
+               }
+            }
+            if self.action == Action::Selecting {
+               // Normalize the stored selection after the user's done marking.
+               // This will make sure that before making any other actions mutating the selection,
+               // the selection's rectangle satisfies all the expectations, eg. that the corners'
+               // names are what they are visually.
+               self.selection.normalize();
+               catch!(self.send_rect_packet(&net));
+               // If there's still a selection after all of this, capture the paint canvas into an
+               // image.
+               self.selection.capture(ui, paint_canvas);
+               catch!(net.send(self, Packet::Capture));
+            }
+            self.action = Action::None;
          }
-         self.action = Action::None;
+         _ => (),
       }
 
       // Perform all the actions.
