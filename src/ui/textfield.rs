@@ -307,7 +307,7 @@ impl TextField {
    fn process_events(&mut self, ui: &Ui, input: &Input) -> TextFieldProcessResult {
       let mut process_result = TextFieldProcessResult { done: false };
 
-      if input.mouse_button_just_pressed(MouseButton::Left) {
+      if input.action(MouseButton::Left) == (true, ButtonState::Pressed) {
          self.focused = ui.has_mouse(input);
          if self.focused {
             self.reset_blink(input);
@@ -318,6 +318,9 @@ impl TextField {
          if !input.characters_typed().is_empty() {
             self.reset_blink(input);
          }
+
+         // Most of these keybindings don't use the action system, as it would be quite cumbersome
+         // and repetitive to represent all the possible textbox actions using it.
 
          if input.key_just_typed(VirtualKeyCode::Left) {
             self.reset_blink(input);
@@ -349,19 +352,19 @@ impl TextField {
             self.reset_blink(input);
          }
 
-         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::A) {
+         if input.action((Modifier::CTRL, VirtualKeyCode::A)) == (true, true) {
             self.selection.anchor = TextPosition(0);
             self.selection.cursor = TextPosition(self.text.len());
          }
 
-         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
+         if input.action((Modifier::CTRL, VirtualKeyCode::C)) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
             );
          }
 
-         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
+         if input.action((Modifier::CTRL, VirtualKeyCode::V)) == (true, true) {
             if let Ok(clipboard) = clipboard::paste_string() {
                let cursor = self.selection.cursor();
                self.text.replace_range(self.selection.normalize(), &clipboard);
@@ -369,7 +372,7 @@ impl TextField {
             }
          }
 
-         if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
+         if input.action((Modifier::CTRL, VirtualKeyCode::X)) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
@@ -377,6 +380,7 @@ impl TextField {
             self.backspace();
          }
 
+         // NB: This is actually backspace, but the winit enum has a misnomer.
          if input.key_just_typed(VirtualKeyCode::Back) {
             if input.ctrl_is_down() {
                // Simulate the shift key being held down while moving to the word on the left, so as
