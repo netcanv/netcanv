@@ -347,6 +347,23 @@ impl BasicAction for MouseScroll {
    }
 }
 
+impl<A, const N: usize> BasicAction for [A; N]
+where
+   A: BasicAction,
+{
+   type Result = [A::Result; N];
+
+   /// Checks all basic actions against the given input, and returns their results in an array.
+   fn check(&self, input: &Input) -> Self::Result {
+      let mut i = 0;
+      [0; N].map(|_| {
+         let r = self[i].check(input);
+         i += 1;
+         r
+      })
+   }
+}
+
 /// A full input action. This includes all basic actions, and actions with modifier keys.
 ///
 /// Actions without modifier keys are treated as if they require no modifier keys to be held.

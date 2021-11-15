@@ -9,6 +9,7 @@ use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
+use netcanv_renderer_opengl::winit::event::VirtualKeyCode;
 use serde::{Deserialize, Serialize};
 
 use crate::app::paint;
@@ -16,7 +17,9 @@ use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::common::{lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{Slider, SliderArgs, SliderStep, UiElements, UiInput};
+use crate::ui::{
+   ButtonState, Modifier, MouseScroll, Slider, SliderArgs, SliderStep, UiElements, UiInput,
+};
 use crate::viewport::Viewport;
 
 use super::{Net, Tool, ToolArgs};
@@ -140,18 +143,32 @@ impl Tool for BrushTool {
       viewport: &Viewport,
    ) {
       // Read input.
-      // We use the just_pressed/just_released pair of functions because _clicks_ specifically
-      // may be blocked by other parts of the app, eg. when the mouse is over a panel.
-      if input.mouse_button_just_pressed(MouseButton::Left) {
-         self.state = BrushState::Drawing;
-      } else if input.mouse_button_just_pressed(MouseButton::Right) {
-         self.state = BrushState::Erasing;
+
+      match input.action([MouseButton::Left, MouseButton::Right]) {
+         (true, [ButtonState::Pressed, _]) => self.state = BrushState::Drawing,
+         (true, [_, ButtonState::Pressed]) => self.state = BrushState::Erasing,
+         (_, [ButtonState::Released, _] | [_, ButtonState::Released]) => {
+            self.state = BrushState::Idle
+         }
+         _ => (),
       }
-      if input.mouse_button_just_released(MouseButton::Left)
-         || input.mouse_button_just_released(MouseButton::Right)
-      {
-         self.state = BrushState::Idle;
+
+      // Shortcuts: Ctrl+Scroll, Ctrl+- and Ctrl+= can be used to alter the brush size.
+
+      let mut thickness_change = 0.0;
+
+      if let (true, Some(scroll)) = input.action((Modifier::CTRL, MouseScroll)) {
+         thickness_change += scroll.y * 2.0;
       }
+
+      if input.action(VirtualKeyCode::LBracket) == (true, true) {
+         thickness_change -= 2.0;
+      }
+      if input.action(VirtualKeyCode::RBracket) == (true, true) {
+         thickness_change += 2.0;
+      }
+
+      self.thickness_slider.set_value(self.thickness() + thickness_change);
 
       // Draw to the paint canvas.
       let a = ui.previous_mouse_position(input);

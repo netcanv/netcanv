@@ -122,6 +122,13 @@ impl Slider {
       }
    }
 
+   /// Sets a new value for the slider (mapped; range [min; max]).
+   pub fn set_value(&mut self, new_value: f32) {
+      let raw = (new_value - self.min) / (self.max - self.min);
+      let raw = raw.clamp(0.0, 1.0);
+      self.value = raw;
+   }
+
    /// Returns whether the slider is currently being slid around.
    pub fn is_sliding(&self) -> bool {
       self.sliding
