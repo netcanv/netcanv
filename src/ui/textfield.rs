@@ -81,7 +81,7 @@ impl TextField {
          colors,
          hint,
       }: TextFieldArgs,
-   ) {
+   ) -> TextFieldProcessResult {
       ui.push((width, Self::height(font)), Layout::Freeform);
 
       // Rendering: box
@@ -159,9 +159,52 @@ impl TextField {
       ui.pop();
 
       // Process events
-      self.process_events(ui, input);
+      let process_result = self.process_events(ui, input);
 
       ui.pop();
+
+      process_result
+   }
+
+   /// Returns the height of a labelled text field.
+   pub fn labelled_height(font: &Font) -> f32 {
+      16.0 + TextField::height(font)
+   }
+
+   /// Processes a text field with an extra label above it.
+   pub fn with_label(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      label: &str,
+      args: TextFieldArgs,
+   ) -> TextFieldProcessResult {
+      ui.push(
+         (args.width, Self::labelled_height(args.font)),
+         Layout::Vertical,
+      );
+
+      // label
+      ui.push((args.width, 16.0), Layout::Freeform);
+      ui.text(
+         args.font,
+         label,
+         args.colors.label,
+         (AlignH::Left, AlignV::Top),
+      );
+      ui.pop();
+
+      // field
+      let process_result = self.process(ui, input, args);
+
+      ui.pop();
+
+      process_result
+   }
+
+   /// Returns the text in the text field.
+   pub fn text(&self) -> &str {
+      &self.text
    }
 
    /// Returns the selection contents.
@@ -261,7 +304,9 @@ impl TextField {
    }
 
    /// Processes input events.
-   fn process_events(&mut self, ui: &Ui, input: &Input) {
+   fn process_events(&mut self, ui: &Ui, input: &Input) -> TextFieldProcessResult {
+      let mut process_result = TextFieldProcessResult { done: false };
+
       if input.mouse_button_just_pressed(MouseButton::Left) {
          self.focused = ui.has_mouse(input);
          if self.focused {
@@ -310,7 +355,10 @@ impl TextField {
          }
 
          if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::C) {
-            catch!(clipboard::copy_string(self.selection_text().to_owned()));
+            catch!(
+               clipboard::copy_string(self.selection_text().to_owned()),
+               return process_result
+            );
          }
 
          if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::V) {
@@ -322,7 +370,10 @@ impl TextField {
          }
 
          if input.ctrl_is_down() && input.key_just_typed(VirtualKeyCode::X) {
-            catch!(clipboard::copy_string(self.selection_text().to_owned()));
+            catch!(
+               clipboard::copy_string(self.selection_text().to_owned()),
+               return process_result
+            );
             self.backspace();
          }
 
@@ -344,6 +395,10 @@ impl TextField {
             self.delete();
          }
 
+         if input.key_just_typed(VirtualKeyCode::Return) {
+            process_result.done = true;
+         }
+
          for ch in input.characters_typed() {
             if !ch.is_control() {
                self.append(*ch);
@@ -352,39 +407,8 @@ impl TextField {
       } else {
          self.selection.anchor = self.selection.cursor;
       }
-   }
 
-   /// Returns the height of a labelled text field.
-   pub fn labelled_height(font: &Font) -> f32 {
-      16.0 + TextField::height(font)
-   }
-
-   /// Processes a text field with an extra label above it.
-   pub fn with_label(&mut self, ui: &mut Ui, input: &Input, label: &str, args: TextFieldArgs) {
-      ui.push(
-         (args.width, Self::labelled_height(args.font)),
-         Layout::Vertical,
-      );
-
-      // label
-      ui.push((args.width, 16.0), Layout::Freeform);
-      ui.text(
-         args.font,
-         label,
-         args.colors.label,
-         (AlignH::Left, AlignV::Top),
-      );
-      ui.pop();
-
-      // field
-      self.process(ui, input, args);
-
-      ui.pop();
-   }
-
-   /// Returns the text in the text field.
-   pub fn text(&self) -> &str {
-      &self.text
+      process_result
    }
 }
 
@@ -395,6 +419,18 @@ impl Focus for TextField {
 
    fn set_focus(&mut self, focused: bool) {
       self.focused = focused;
+   }
+}
+
+/// The result of processing a text field.
+pub struct TextFieldProcessResult {
+   done: bool,
+}
+
+impl TextFieldProcessResult {
+   /// Returns whether the user pressed the Return key while editing text.
+   pub fn done(&self) -> bool {
+      self.done
    }
 }
 

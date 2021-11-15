@@ -185,7 +185,7 @@ impl State {
             (0.0, TextField::labelled_height(textfield.font)),
             Layout::Horizontal,
          );
-         self.room_id_field.with_label(
+         let room_id_field = self.room_id_field.with_label(
             ui,
             input,
             "Room ID",
@@ -195,7 +195,9 @@ impl State {
             },
          );
          ui.offset(vector(16.0, 16.0));
-         if Button::with_text(ui, input, button, &self.assets.sans, "Join").clicked() {
+         if Button::with_text(ui, input, button, &self.assets.sans, "Join").clicked()
+            || room_id_field.done()
+         {
             match Self::join_room(
                &self.matchmaker_socksys,
                self.nickname_field.text(),
