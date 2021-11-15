@@ -284,11 +284,10 @@ impl State {
 
       // Panning and zooming
 
-      if ui.has_mouse(input) && input.mouse_button_just_pressed(MouseButton::Middle) {
-         self.panning = true;
-      }
-      if input.mouse_button_just_released(MouseButton::Middle) {
-         self.panning = false;
+      match input.action(MouseButton::Middle) {
+         (true, ButtonState::Pressed) if ui.has_mouse(input) => self.panning = true,
+         (_, ButtonState::Released) => self.panning = false,
+         _ => (),
       }
 
       if self.panning {
@@ -298,8 +297,8 @@ impl State {
          let position = format!("{}, {}", (pan.x / 256.0).floor(), (pan.y / 256.0).floor());
          self.show_tip(&position, Duration::from_millis(100));
       }
-      if input.mouse_scroll().y != 0.0 {
-         self.viewport.zoom_in(input.mouse_scroll().y);
+      if let (true, Some(scroll)) = input.action(MouseScroll) {
+         self.viewport.zoom_in(scroll.y);
          self.show_tip(
             &format!("{:.0}%", self.viewport.zoom() * 100.0),
             Duration::from_secs(3),
