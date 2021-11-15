@@ -2,7 +2,7 @@
 
 A lightweight app for painting with other people over the Internet, in real time.
 
-![screenshot](contrib/screenshot.png)
+![screenshot](contrib/screenshots.png)
 <p align="center">
 A screenshot of my imaginary friend and I painting things together using NetCanv.
 </p>
