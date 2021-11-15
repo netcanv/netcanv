@@ -289,7 +289,7 @@ impl Tool for SelectionTool {
       }
 
       // Check if the left mouse button was pressed, and if so, start selecting.
-      match input.action((Modifier::NONE, MouseButton::Left)) {
+      match input.action(MouseButton::Left) {
          (true, ButtonState::Pressed) => {
             if self.potential_action == Action::Selecting {
                // Before we erase the old data, draw the capture back onto the canvas.

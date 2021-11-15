@@ -285,25 +285,14 @@ impl Input {
 // Actions
 //
 
-/// An input action. This includes key presses, mouse clicks, etc., optionally combined with
-/// modifier keys.
-pub trait Action {
+/// A basic input action. This includes key presses, mouse clicks, etc., without modifier keys.
+pub trait BasicAction {
    /// The result of the action. Usually a `bool`, but some actions, eg. mouse scrolling, can
    /// produce other things like scroll deltas.
    type Result;
 
    /// Checks whether the action is now being performed.
    fn check(&self, input: &Input) -> Self::Result;
-}
-
-impl Input {
-   /// Checks the input state against an action.
-   pub fn action<A>(&self, action: A) -> A::Result
-   where
-      A: Action,
-   {
-      action.check(self)
-   }
 }
 
 /// The state of a mouse button.
@@ -319,7 +308,7 @@ pub enum ButtonState {
    Released,
 }
 
-impl Action for MouseButton {
+impl BasicAction for MouseButton {
    type Result = ButtonState;
 
    fn check(&self, input: &Input) -> Self::Result {
@@ -335,7 +324,7 @@ impl Action for MouseButton {
    }
 }
 
-impl Action for VirtualKeyCode {
+impl BasicAction for VirtualKeyCode {
    type Result = bool;
 
    fn check(&self, input: &Input) -> Self::Result {
@@ -346,7 +335,7 @@ impl Action for VirtualKeyCode {
 /// Marker struct for the mouse scroll action.
 pub struct MouseScroll;
 
-impl Action for MouseScroll {
+impl BasicAction for MouseScroll {
    type Result = Option<Vector>;
 
    fn check(&self, input: &Input) -> Self::Result {
@@ -355,6 +344,27 @@ impl Action for MouseScroll {
       } else {
          None
       }
+   }
+}
+
+/// A full input action. This includes all basic actions, and actions with modifier keys.
+///
+/// Actions without modifier keys are treated as if they require no modifier keys to be held.
+pub trait Action {
+   /// The result of the action. See [`BasicAction::Result`].
+   type Result;
+
+   /// Checks whether the action is now being performed.
+   fn check(&self, input: &Input) -> Self::Result;
+}
+
+impl Input {
+   /// Checks the input state against an action.
+   pub fn action<A>(&self, action: A) -> A::Result
+   where
+      A: Action,
+   {
+      action.check(self)
    }
 }
 
@@ -382,16 +392,6 @@ impl Modifier {
       }
       mods
    }
-
-   /// Returns whether the modifier set contains the Shift key.
-   pub fn has_shift(self) -> bool {
-      (self & Self::SHIFT).0 > 0
-   }
-
-   /// Returns whether the modifier set contains the Ctrl key.
-   pub fn has_ctrl(self) -> bool {
-      (self & Self::CTRL).0 > 0
-   }
 }
 
 impl BitOr for Modifier {
@@ -414,7 +414,7 @@ impl BitAnd for Modifier {
 
 impl<A> Action for (Modifier, A)
 where
-   A: Action,
+   A: BasicAction,
 {
    /// The first tuple element specifies whether the modifier was satisfied. The second one
    /// is carried over from the other action in the pair.
@@ -422,5 +422,22 @@ where
 
    fn check(&self, input: &Input) -> Self::Result {
       (Modifier::from_input(input) == self.0, self.1.check(input))
+   }
+}
+
+impl<A> Action for A
+where
+   A: BasicAction,
+{
+   /// See the other implementation.
+   type Result = (bool, A::Result);
+
+   /// Checks the action against input state.
+   /// Lone basic actions are the same as `(Modifier::NONE, self)`.
+   fn check(&self, input: &Input) -> Self::Result {
+      (
+         Modifier::from_input(input) == Modifier::NONE,
+         self.check(input),
+      )
    }
 }
