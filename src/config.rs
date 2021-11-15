@@ -1,4 +1,9 @@
 //! User configuration.
+//!
+//! ## Note for adding new keys
+//!
+//! New keys added to the config _must_ use `#[serde(default)]` to maintain compatibility with
+//! older configs. These keys will be added to the user's configuration automatically.
 
 use std::path::PathBuf;
 
@@ -22,13 +27,18 @@ pub enum ColorScheme {
 /// The position of the toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ToolbarPosition {
+   /// Vertical on the left side of the screen.
    Left,
+   /// Horizontal on the top of the screen.
    Top,
-   Bottom,
+   /// Vertical on the right side of the screen.
    Right,
+   /// Horizontal on the bottom of the screen.
+   Bottom,
 }
 
 impl Default for ToolbarPosition {
+   /// The default toolbar position is the left-hand side of the screen.
    fn default() -> Self {
       Self::Left
    }
