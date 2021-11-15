@@ -63,8 +63,17 @@ impl Slider {
 
       if self.sliding {
          self.value = ui.mouse_position(input).x / ui.width();
-         self.value = self.value.clamp(0.0, 1.0);
       }
+
+      if ui.has_mouse(input) {
+         let scroll_amount = match self.step {
+            SliderStep::Discrete(increment) => increment / self.step_count() as f32 * 2.0,
+            SliderStep::Smooth => 8.0 / width,
+         };
+         self.value += input.mouse_scroll().y * scroll_amount;
+      }
+
+      self.value = self.value.clamp(0.0, 1.0);
 
       ui.draw(|ui| {
          let transparent = color.with_alpha(128);
