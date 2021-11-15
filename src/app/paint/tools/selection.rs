@@ -633,6 +633,8 @@ impl Selection {
       let long_side = rect.width().max(rect.height());
       let scale = long_side.min(Self::MAX_SIZE) / long_side;
       let rect = Rect::new(rect.position, rect.size * scale);
+      // Center the rectangle on the screen.
+      let rect = Rect::new(rect.position - rect.size / 2.0, rect.size);
       self.rect = Some(rect);
 
       let mut capture = renderer.create_framebuffer(image.width(), image.height());
