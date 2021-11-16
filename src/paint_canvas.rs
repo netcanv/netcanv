@@ -95,6 +95,9 @@ impl Chunk {
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
    fn upload_image(&mut self, image: RgbaImage, offset: (u32, u32)) {
+      for sub in 0..Self::SUB_COUNT {
+         self.mark_dirty(sub)
+      }
       self.framebuffer.upload_rgba(offset, Self::SIZE, &image);
    }
 
@@ -276,6 +279,7 @@ impl Chunk {
    /// Marks the given sub-chunk within this master chunk as dirty - that is, invalidates any
    /// cached PNG and WebP data, marks the sub-chunk as non-empty, and marks it as unsaved.
    fn mark_dirty(&mut self, sub: usize) {
+      self.image_data.set(None);
       self.png_data[sub] = None;
       self.webp_data[sub] = None;
       self.non_empty_subs[sub] = true;
