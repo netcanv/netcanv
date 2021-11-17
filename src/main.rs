@@ -84,7 +84,10 @@ fn inner_main() -> anyhow::Result<()> {
    // Build the render backend.
    let renderer = Backend::new(window_builder, &event_loop)?;
    // Also, initialize the clipboard because we now have a window handle.
-   clipboard::init()?;
+   match clipboard::init() {
+      Ok(_) => (),
+      Err(error) => eprintln!("failed to initialize clipboard: {}", error),
+   }
 
    // On Wayland, winit draws its own set of decorations, which can be customized.
    // We customize them to fit our color scheme.
