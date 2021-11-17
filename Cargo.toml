@@ -1,8 +1,8 @@
 [package]
 name = "netcanv"
 version = "0.4.0"
-authors = ["lqdev <liquidekgaming@gmail.com>"]
-edition = "2018"
+authors = ["liquidev <liquidev@tutanota.com>"]
+edition = "2021"
 
 [workspace]
 members = [
