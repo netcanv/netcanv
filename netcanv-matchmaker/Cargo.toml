@@ -1,7 +1,6 @@
 [package]
 name = "netcanv-matchmaker"
 version = "0.1.0"
-authors = ["lqdev <liquidekgaming@gmail.com>"]
 edition = "2018"
 
 [dependencies]
