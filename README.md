@@ -26,19 +26,16 @@ $ cargo run --release
 Alternate rendering backends can be chosen by passing in features via the `--features` flag.
 
 - `renderer-opengl` (default) – The OpenGL rendering backend. May be incomplete or buggy in some
-  places on certain drivers, but it is much faster (both compile-time-wise and runtime-wise)
-  than the Skia backend.
-- `renderer-skia` – The old Skia backend. Slow, in the process of being deprecated; avoid using it.
+  places on certain drivers, please file issue reports if you find bugs!
 
-For example, to build with the Skia backend:
-```
-$ cargo build --features renderer-skia --release
-```
+Right now this is the only backend available. Do note that PRs implementing alternate backends will
+not be merged, because the rendering API is still in flux and may change at any time. More backends
+may be added after 1.0 is released.
 
-Do note that PRs implementing alternate backends will not be merged, because the rendering API is
-still in flux and may change at any time. This may change after 1.0.0 is released (in the far
-future).
+#### Skia backend
 
+There used to be a Skia backend, but it was removed because it was an unsupported, unnecessary
+maintenance burden. The last tag to feature this backend is [0.5.0](https://github.com/liquidev/netcanv/tree/0.5.0).
 
 ### Matchmaker
 

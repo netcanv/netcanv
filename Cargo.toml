@@ -8,14 +8,12 @@ edition = "2018"
 members = [
    "netcanv-renderer",
    "netcanv-renderer-opengl",
-   "netcanv-renderer-skia",
    "netcanv-matchmaker",
    "netcanv-protocol",
 ]
 
 [features]
 default = ["renderer-opengl"]
-renderer-skia = ["netcanv-renderer-skia"]
 renderer-opengl = ["netcanv-renderer-opengl"]
 
 [dependencies]
@@ -49,7 +47,6 @@ arboard = "2.0.1"
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
-netcanv-renderer-skia = { path = "netcanv-renderer-skia", optional = true }
 netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
 netcanv-protocol = { path = "netcanv-protocol" }
 
