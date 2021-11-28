@@ -22,7 +22,6 @@ const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 pub struct ColorScheme {
    pub text: Color,
    pub panel: Color,
-   pub panel2: Color,
    pub separator: Color,
    pub error: Color,
 
@@ -91,8 +90,8 @@ impl Assets {
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(renderer: &mut Backend, colors: ColorScheme) -> Self {
       Self {
-         sans: Font::from_memory(SANS_TTF, 14.0),
-         sans_bold: Font::from_memory(SANS_BOLD_TTF, 14.0),
+         sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
+         sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
          colors,
          icons: Icons {
             expand: ExpandIcons {
@@ -121,7 +120,6 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xff000000),
          panel: Color::argb(0xffeeeeee),
-         panel2: Color::argb(0xffffffff),
          separator: Color::argb(0xff202020),
          error: Color::argb(0xff7f0000),
 
@@ -185,7 +183,6 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xffb7b7b7),
          panel: Color::argb(0xff1f1f1f),
-         panel2: Color::argb(0xffffffff),
          separator: Color::argb(0xff202020),
          error: Color::argb(0xfffc9292),
 
