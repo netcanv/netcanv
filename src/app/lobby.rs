@@ -12,6 +12,7 @@ use nysa::global as bus;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme, SwitchColorScheme};
+use crate::backend::Backend;
 use crate::common::{Error, Fatal};
 use crate::config::{self, UserConfig};
 use crate::net::peer::{self, Peer};
@@ -449,7 +450,7 @@ impl AppState for State {
       }
    }
 
-   fn next_state(self: Box<Self>) -> Box<dyn AppState> {
+   fn next_state(self: Box<Self>, renderer: &mut Backend) -> Box<dyn AppState> {
       let mut connected = false;
       if let Some(peer) = &self.peer {
          for message in &bus::retrieve_all::<peer::Connected>() {
@@ -469,6 +470,7 @@ impl AppState for State {
             this.config,
             this.peer.unwrap(),
             this.image_file,
+            renderer,
          ))
       } else {
          self

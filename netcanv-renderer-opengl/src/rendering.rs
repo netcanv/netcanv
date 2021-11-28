@@ -795,6 +795,10 @@ impl RenderBackend for OpenGlBackend {
 
    type Framebuffer = Framebuffer;
 
+   fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image {
+      Image::from_rgba(Rc::clone(&self.gl), width, height, pixel_data)
+   }
+
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
       Framebuffer::new(
          Rc::clone(&self.gl),
@@ -840,10 +844,9 @@ impl RenderBackend for OpenGlBackend {
          Vertex::textured_colored(rect.top_left(), point(0.0, 0.0), color),
          Vertex::textured_colored(rect.bottom_right(), point(1.0, 1.0), color),
       );
-      let texture = image.upload(&self.gl);
       unsafe {
          self.gl.active_texture(glow::TEXTURE0);
-         self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(image.texture.texture));
          let swizzle_mask = if image.color.is_some() {
             [glow::ONE, glow::ONE, glow::ONE, glow::ALPHA]
          } else {

@@ -66,7 +66,7 @@ fn inner_main() -> anyhow::Result<()> {
    let event_loop = EventLoop::new();
    let window_builder = {
       let b = WindowBuilder::new()
-         .with_inner_size(LogicalSize::new(1024, 600))
+         .with_inner_size(LogicalSize::<u16>::new(1024, 600))
          .with_title("NetCanv")
          .with_resizable(true);
       // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
@@ -98,7 +98,7 @@ fn inner_main() -> anyhow::Result<()> {
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
-   let assets = Assets::new(color_scheme);
+   let assets = Assets::new(ui.render(), color_scheme);
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config)) as _);
    let mut input = Input::new();
 
@@ -127,7 +127,7 @@ fn inner_main() -> anyhow::Result<()> {
                   input: &mut input,
                });
                // See? Told ya.
-               app = Some(app.take().unwrap().next_state());
+               app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
                Err(error) => eprintln!("render error: {}", error),
                _ => (),

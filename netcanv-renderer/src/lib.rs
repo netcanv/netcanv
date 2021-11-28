@@ -25,9 +25,6 @@ pub trait Font {
 
 /// An image.
 pub trait Image {
-   /// Creates an image from RGBA pixels.
-   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self;
-
    /// _Colorizes_ an image by replacing all of its color with a single, solid color.
    ///
    /// The alpha channel in the resulting image is multiplied with the given color's alpha channel.
@@ -102,6 +99,9 @@ pub enum BlendMode {
 pub trait RenderBackend: Renderer {
    type Image: Image;
    type Framebuffer: Framebuffer;
+
+   /// Creates a new image of the given size, from the given RGBA pixel data.
+   fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image;
 
    /// Creates a new framebuffer of the given size.
    ///

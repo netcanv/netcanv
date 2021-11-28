@@ -99,7 +99,13 @@ impl State {
    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
    /// Creates a new paint state.
-   pub fn new(assets: Assets, config: UserConfig, peer: Peer, image_path: Option<PathBuf>) -> Self {
+   pub fn new(
+      assets: Assets,
+      config: UserConfig,
+      peer: Peer,
+      image_path: Option<PathBuf>,
+      renderer: &mut Backend,
+   ) -> Self {
       let mut this = Self {
          assets,
          config,
@@ -128,7 +134,7 @@ impl State {
          panning: false,
          viewport: Viewport::new(),
       };
-      this.register_tools();
+      this.register_tools(renderer);
 
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
@@ -149,11 +155,11 @@ impl State {
    }
 
    /// Registers all the tools.
-   fn register_tools(&mut self) {
-      self.register_tool(Box::new(SelectionTool::new()));
+   fn register_tools(&mut self, renderer: &mut Backend) {
+      self.register_tool(Box::new(SelectionTool::new(renderer)));
       // Set the default tool to the brush.
       self.current_tool = self.tools.borrow().len();
-      self.register_tool(Box::new(BrushTool::new()));
+      self.register_tool(Box::new(BrushTool::new(renderer)));
    }
 
    /// Executes the given callback with the currently selected tool.
@@ -758,7 +764,7 @@ impl AppState for State {
       self.process_bar(ui, input);
    }
 
-   fn next_state(self: Box<Self>) -> Box<dyn AppState> {
+   fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {
       if self.fatal_error {
          Box::new(lobby::State::new(self.assets, self.config))
       } else {
