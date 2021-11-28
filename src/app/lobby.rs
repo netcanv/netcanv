@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use native_dialog::FileDialog;
-use netcanv_protocol::matchmaker;
+use netcanv_protocol::matchmaker::{self, RoomId};
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Layout};
 use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
@@ -364,14 +364,13 @@ impl State {
       matchmaker_addr_str: &str,
       room_id_str: &str,
    ) -> Result<Peer, Status> {
-      if !matches!(room_id_str.len(), 4..=6) {
+      if room_id_str.len() != 6 {
          return Err(Status::Error(
-            "Room ID must be a number with 4–6 digits".into(),
+            "Room ID must be a code with 6 characters".into(),
          ));
       }
       Self::validate_nickname(nickname)?;
-      let room_id: u32 =
-         room_id_str.parse().map_err(|_| Status::Error("Room ID must be an integer".into()))?;
+      let room_id = RoomId::try_from(room_id_str)?;
       Ok(Peer::join(socksys, nickname, matchmaker_addr_str, room_id)?)
    }
 
