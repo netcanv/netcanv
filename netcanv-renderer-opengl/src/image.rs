@@ -1,81 +1,68 @@
-use std::cell::Cell;
 use std::rc::Rc;
 
 use glow::HasContext;
 use netcanv_renderer::paws::Color;
 
-pub(crate) enum ImageState {
-   Queued(Vec<u8>),
-   Uploading,
-   Ready(Rc<glow::Context>, glow::Texture),
+pub(crate) struct TextureHandle {
+   gl: Rc<glow::Context>,
+   pub(crate) texture: glow::Texture,
 }
 
-impl Drop for ImageState {
+impl Drop for TextureHandle {
    fn drop(&mut self) {
-      match self {
-         Self::Ready(gl, texture) => unsafe {
-            gl.delete_texture(*texture);
-         },
-         _ => (),
+      unsafe {
+         self.gl.delete_texture(self.texture);
       }
    }
 }
 
 pub struct Image {
+   pub(crate) texture: Rc<TextureHandle>,
    width: u32,
    height: u32,
    pub(crate) color: Option<Color>,
-   pub(crate) state: Rc<Cell<ImageState>>,
 }
 
 impl Image {
-   pub(crate) fn upload(&self, gl: &Rc<glow::Context>) -> glow::Texture {
-      let state = self.state.replace(ImageState::Uploading);
-      match &state {
-         ImageState::Queued(pixels) => unsafe {
-            let texture = gl.create_texture().unwrap();
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-            gl.tex_image_2d(
-               glow::TEXTURE_2D,
-               0,
-               glow::RGBA as i32,
-               self.width as i32,
-               self.height as i32,
-               0,
-               glow::RGBA,
-               glow::UNSIGNED_BYTE,
-               Some(pixels),
-            );
-            gl.generate_mipmap(glow::TEXTURE_2D);
-            self.state.set(ImageState::Ready(Rc::clone(gl), texture));
-            texture
-         },
-         ImageState::Uploading => unreachable!(),
-         ImageState::Ready(_, texture) => {
-            let texture = *texture;
-            self.state.set(state);
-            return texture;
+   pub(crate) fn from_rgba(
+      gl: Rc<glow::Context>,
+      width: u32,
+      height: u32,
+      pixel_data: &[u8],
+   ) -> Self {
+      unsafe {
+         let texture = gl.create_texture().unwrap();
+         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            glow::RGBA as i32,
+            width as i32,
+            height as i32,
+            0,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            Some(pixel_data),
+         );
+         gl.generate_mipmap(glow::TEXTURE_2D);
+         let texture = Rc::new(TextureHandle { gl, texture });
+         Self {
+            texture,
+            width,
+            height,
+            color: None,
          }
       }
    }
 }
 
 impl netcanv_renderer::Image for Image {
-   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self {
-      Self {
-         width,
-         height,
-         color: None,
-         state: Rc::new(Cell::new(ImageState::Queued(pixel_data.into()))),
-      }
-   }
-
    fn colorized(&self, color: Color) -> Self {
       Self {
+         texture: Rc::clone(&self.texture),
          width: self.width,
          height: self.height,
          color: Some(color),
-         state: Rc::clone(&self.state),
       }
    }
 

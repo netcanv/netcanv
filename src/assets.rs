@@ -1,9 +1,9 @@
 //! Handling of assets such as icons, fonts, etc.
 
 use netcanv_renderer::paws::Color;
-use netcanv_renderer::{Font as FontTrait, Image as ImageTrait};
+use netcanv_renderer::{Font as FontTrait, RenderBackend};
 
-use crate::backend::{Font, Image};
+use crate::backend::{Backend, Font, Image};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -22,7 +22,6 @@ const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 pub struct ColorScheme {
    pub text: Color,
    pub panel: Color,
-   pub panel2: Color,
    pub separator: Color,
    pub error: Color,
 
@@ -73,7 +72,7 @@ pub struct Assets {
 
 impl Assets {
    /// Loads an icon from an SVG file.
-   pub fn load_icon(data: &[u8]) -> Image {
+   pub fn load_icon(renderer: &mut Backend, data: &[u8]) -> Image {
       use usvg::{FitTo, NodeKind, Tree};
 
       let tree =
@@ -85,30 +84,30 @@ impl Assets {
       let mut pixmap = tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
       resvg::render(&tree, FitTo::Original, pixmap.as_mut());
 
-      Image::from_rgba(size.width() as u32, size.height() as u32, pixmap.data())
+      renderer.create_image_from_rgba(size.width() as u32, size.height() as u32, pixmap.data())
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
-   pub fn new(colors: ColorScheme) -> Self {
+   pub fn new(renderer: &mut Backend, colors: ColorScheme) -> Self {
       Self {
-         sans: Font::from_memory(SANS_TTF, 14.0),
-         sans_bold: Font::from_memory(SANS_BOLD_TTF, 14.0),
+         sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
+         sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
          colors,
          icons: Icons {
             expand: ExpandIcons {
-               expand: Self::load_icon(CHEVRON_RIGHT_SVG),
-               shrink: Self::load_icon(CHEVRON_DOWN_SVG),
+               expand: Self::load_icon(renderer, CHEVRON_RIGHT_SVG),
+               shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
             },
             status: StatusIcons {
-               info: Self::load_icon(INFO_SVG),
-               error: Self::load_icon(ERROR_SVG),
+               info: Self::load_icon(renderer, INFO_SVG),
+               error: Self::load_icon(renderer, ERROR_SVG),
             },
             file: FileIcons {
-               save: Self::load_icon(SAVE_SVG),
+               save: Self::load_icon(renderer, SAVE_SVG),
             },
             color_switcher: ColorSwitcherIcons {
-               dark: Self::load_icon(DARK_MODE_SVG),
-               light: Self::load_icon(LIGHT_MODE_SVG),
+               dark: Self::load_icon(renderer, DARK_MODE_SVG),
+               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
             },
          },
       }
@@ -121,7 +120,6 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xff000000),
          panel: Color::argb(0xffeeeeee),
-         panel2: Color::argb(0xffffffff),
          separator: Color::argb(0xff202020),
          error: Color::argb(0xff7f0000),
 
@@ -185,7 +183,6 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xffb7b7b7),
          panel: Color::argb(0xff1f1f1f),
-         panel2: Color::argb(0xffffffff),
          separator: Color::argb(0xff202020),
          error: Color::argb(0xfffc9292),
 

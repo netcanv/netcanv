@@ -71,17 +71,25 @@ impl SelectionTool {
    /// The radius of handles for resizing the selection contents.
    const HANDLE_RADIUS: f32 = 4.0;
 
-   pub fn new() -> Self {
+   pub fn new(renderer: &mut Backend) -> Self {
       Self {
          icons: Icons {
-            tool: Assets::load_icon(include_bytes!("../../../assets/icons/selection.svg")),
-            cursor: Assets::load_icon(include_bytes!("../../../assets/icons/position.svg")),
-            position: Assets::load_icon(include_bytes!(
-               "../../../assets/icons/selection-position.svg"
-            )),
-            rectangle: Assets::load_icon(include_bytes!(
-               "../../../assets/icons/selection-rectangle.svg"
-            )),
+            tool: Assets::load_icon(
+               renderer,
+               include_bytes!("../../../assets/icons/selection.svg"),
+            ),
+            cursor: Assets::load_icon(
+               renderer,
+               include_bytes!("../../../assets/icons/position.svg"),
+            ),
+            position: Assets::load_icon(
+               renderer,
+               include_bytes!("../../../assets/icons/selection-position.svg"),
+            ),
+            rectangle: Assets::load_icon(
+               renderer,
+               include_bytes!("../../../assets/icons/selection-rectangle.svg"),
+            ),
          },
          mouse_position: point(0.0, 0.0),
          potential_action: Action::None,

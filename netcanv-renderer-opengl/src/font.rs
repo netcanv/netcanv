@@ -14,32 +14,10 @@ use freetype::Face;
 use glow::{HasContext, PixelUnpackData};
 use netcanv_renderer::paws::{vector, Rect, Vector};
 
-use crate::common::GlUtilities;
-use crate::{common::RectMath, rect_packer::RectPacker};
+use crate::common::{GlUtilities, RectMath};
+use crate::rect_packer::RectPacker;
 
 const TEXTURE_ATLAS_SIZE: u32 = 1024;
-
-struct LoadedFaceState {
-   gl: Rc<glow::Context>,
-   _freetype: Rc<freetype::Library>,
-   face: Face,
-}
-
-enum FaceState {
-   NotLoaded(Vec<u8>),
-   Loading,
-   Loaded(LoadedFaceState),
-}
-
-impl FaceState {
-   fn assume_loaded(&self) -> &LoadedFaceState {
-      if let Self::Loaded(loaded) = self {
-         loaded
-      } else {
-         panic!("face is not loaded")
-      }
-   }
-}
 
 struct Glyph {
    uv_rect: Rect,
@@ -81,7 +59,9 @@ struct FontFace {
    // We store a reference to the FT_Library to make sure the FT_Face doesn't
    // outlive it. Seems like freetype-rs has some lifetime safety issues.
    // https://freetype.org/freetype2/docs/reference/ft2-base_interface.html#ft_done_freetype
-   face_state: FaceState,
+   gl: Rc<glow::Context>,
+   _freetype: Rc<freetype::Library>,
+   face: Face,
    sizes: HashMap<u32, FontSize>,
 }
 
@@ -90,7 +70,7 @@ impl FontFace {
       if self.sizes.contains_key(&size) {
          return;
       }
-      let LoadedFaceState { gl, face, .. } = self.face_state.assume_loaded();
+      let Self { gl, face, .. } = &self;
       face.set_pixel_sizes(0, size).unwrap();
       let size_metrics = face.size_metrics().unwrap();
       let height = (size_metrics.ascender - size_metrics.descender.abs()) as f32 / 64.0;
@@ -138,8 +118,8 @@ impl FontFace {
    fn glyph_renderer(&mut self, size: u32) -> GlyphRenderer<'_, '_, '_> {
       self.make_size(size);
       GlyphRenderer {
-         face: &self.face_state.assume_loaded().face,
-         gl: &self.face_state.assume_loaded().gl,
+         face: &self.face,
+         gl: &self.gl,
          size_store: self.sizes.get_mut(&size).unwrap(),
       }
    }
@@ -147,11 +127,9 @@ impl FontFace {
 
 impl Drop for FontFace {
    fn drop(&mut self) {
-      if let FaceState::Loaded(loaded) = &self.face_state {
-         for (_, size) in &self.sizes {
-            unsafe {
-               loaded.gl.delete_texture(size.texture);
-            }
+      for (_, size) in &self.sizes {
+         unsafe {
+            self.gl.delete_texture(size.texture);
          }
       }
    }
@@ -163,24 +141,27 @@ pub struct Font {
 }
 
 impl Font {
-   pub(crate) fn atlas(
-      &self,
-      freetype: &Rc<freetype::Library>,
-      gl: &Rc<glow::Context>,
-   ) -> glow::Texture {
-      let mut store = self.store.borrow_mut();
-      if let FaceState::NotLoaded(_) = &store.face_state {
-         if let FaceState::NotLoaded(data) =
-            std::mem::replace(&mut store.face_state, FaceState::Loading)
-         {
-            let face = freetype.new_memory_face(data, 0).unwrap();
-            store.face_state = FaceState::Loaded(LoadedFaceState {
-               face,
-               _freetype: Rc::clone(freetype),
-               gl: Rc::clone(gl),
-            })
-         }
+   pub(crate) fn new(
+      gl: Rc<glow::Context>,
+      freetype: Rc<freetype::Library>,
+      data: &[u8],
+      default_size: f32,
+   ) -> Self {
+      let face = freetype.new_memory_face(Rc::new(data.to_owned()), 0).unwrap();
+      face.set_pixel_sizes(default_size as u32, default_size as u32).unwrap();
+      Self {
+         store: Rc::new(RefCell::new(FontFace {
+            gl,
+            _freetype: freetype,
+            face,
+            sizes: HashMap::new(),
+         })),
+         size: default_size as u32,
       }
+   }
+
+   pub(crate) fn atlas(&self) -> glow::Texture {
+      let mut store = self.store.borrow_mut();
       store.make_size(self.size);
       let size_store = store.sizes.get(&self.size).unwrap();
       size_store.texture
@@ -197,16 +178,6 @@ impl Font {
 }
 
 impl netcanv_renderer::Font for Font {
-   fn from_memory(memory: &[u8], default_size: f32) -> Self {
-      Self {
-         store: Rc::new(RefCell::new(FontFace {
-            face_state: FaceState::NotLoaded(memory.into()),
-            sizes: HashMap::new(),
-         })),
-         size: default_size as u32,
-      }
-   }
-
    fn with_size(&self, new_size: f32) -> Self {
       Self {
          store: Rc::clone(&self.store),

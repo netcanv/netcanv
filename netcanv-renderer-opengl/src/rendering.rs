@@ -768,7 +768,7 @@ impl Renderer for OpenGlBackend {
    ) -> f32 {
       // Set up textures.
       unsafe {
-         let atlas = font.atlas(&self.freetype, &self.gl);
+         let atlas = font.atlas();
          self.gl.active_texture(glow::TEXTURE0);
          self.gl.bind_texture(glow::TEXTURE_2D, Some(atlas));
       }
@@ -794,6 +794,19 @@ impl RenderBackend for OpenGlBackend {
    type Image = Image;
 
    type Framebuffer = Framebuffer;
+
+   fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image {
+      Image::from_rgba(Rc::clone(&self.gl), width, height, pixel_data)
+   }
+
+   fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font {
+      Font::new(
+         Rc::clone(&self.gl),
+         Rc::clone(&self.freetype),
+         data,
+         default_size,
+      )
+   }
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
       Framebuffer::new(
@@ -840,10 +853,9 @@ impl RenderBackend for OpenGlBackend {
          Vertex::textured_colored(rect.top_left(), point(0.0, 0.0), color),
          Vertex::textured_colored(rect.bottom_right(), point(1.0, 1.0), color),
       );
-      let texture = image.upload(&self.gl);
       unsafe {
          self.gl.active_texture(glow::TEXTURE0);
-         self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(image.texture.texture));
          let swizzle_mask = if image.color.is_some() {
             [glow::ONE, glow::ONE, glow::ONE, glow::ALPHA]
          } else {

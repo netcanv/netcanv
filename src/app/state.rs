@@ -1,5 +1,6 @@
 //! The trait all app states must implement.
 
+use crate::backend::Backend;
 use crate::ui::{Input, Ui};
 
 /// Arguments passed to app states.
@@ -20,5 +21,5 @@ pub trait AppState {
    ///
    /// If no state transitions should occur, this should simply return `self`. Otherwise, another
    /// app state may be constructed, boxed, and returned.
-   fn next_state(self: Box<Self>) -> Box<dyn AppState>;
+   fn next_state(self: Box<Self>, renderer: &mut Backend) -> Box<dyn AppState>;
 }

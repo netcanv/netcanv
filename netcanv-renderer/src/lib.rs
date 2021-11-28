@@ -3,9 +3,6 @@ use paws::{vector, Color, Point, Rect, Renderer, Vector};
 
 /// A font.
 pub trait Font {
-   /// Creates a font from an in-memory file.
-   fn from_memory(memory: &[u8], default_size: f32) -> Self;
-
    /// Creates a new font of the same typeface, but with a different size.
    ///
    /// Backends should optimize this operation to be as cheap as possible.
@@ -25,9 +22,6 @@ pub trait Font {
 
 /// An image.
 pub trait Image {
-   /// Creates an image from RGBA pixels.
-   fn from_rgba(width: u32, height: u32, pixel_data: &[u8]) -> Self;
-
    /// _Colorizes_ an image by replacing all of its color with a single, solid color.
    ///
    /// The alpha channel in the resulting image is multiplied with the given color's alpha channel.
@@ -103,12 +97,19 @@ pub trait RenderBackend: Renderer {
    type Image: Image;
    type Framebuffer: Framebuffer;
 
+   /// Creates a new image of the given size, from the given RGBA pixel data.
+   fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image;
+
+   /// Creates a new font from the given in-memory TTF/OTF file, with a set default size.
+   fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font;
+
    /// Creates a new framebuffer of the given size.
    ///
    /// The framebuffer should be cleared with transparent pixels.
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer;
 
-   /// Draws to the provided framebuffer for the duration of `f`.
+   /// Sets the current framebuffer to the provided one, calls `f`, and sets the framebuffer
+   /// back to what it was before `draw_to` was called.
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self));
 
    /// Clears the framebuffer with a solid color.
