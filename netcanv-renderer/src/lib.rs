@@ -100,6 +100,7 @@ pub trait RenderBackend: Renderer {
    /// Creates a new image of the given size, from the given RGBA pixel data.
    fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image;
 
+   /// Creates a new font from the given in-memory TTF/OTF file, with a set default size.
    fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font;
 
    /// Creates a new framebuffer of the given size.
