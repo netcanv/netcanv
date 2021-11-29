@@ -298,7 +298,6 @@ async fn read_packets(
          read.read_exact(&mut buffer).await?;
          bincode::deserialize(&buffer)?
       };
-      println!("got packet {:?}", packet);
       handle_packet(&write, address, &state, packet).await?;
    }
 }

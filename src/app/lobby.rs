@@ -135,6 +135,7 @@ impl State {
       self.nickname_field.with_label(
          ui,
          input,
+         &self.assets.sans,
          "Nickname",
          TextFieldArgs {
             hint: Some("Name shown to others"),
@@ -145,6 +146,7 @@ impl State {
       self.matchmaker_field.with_label(
          ui,
          input,
+         &self.assets.sans,
          "Matchmaker",
          TextFieldArgs {
             hint: Some("IP address"),
@@ -189,9 +191,11 @@ impl State {
          let room_id_field = self.room_id_field.with_label(
             ui,
             input,
+            &self.assets.sans,
             "Room ID",
             TextFieldArgs {
-               hint: Some("4–6 digits"),
+               hint: Some("6 characters"),
+               font: &self.assets.monospace,
                ..textfield
             },
          );

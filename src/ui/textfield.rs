@@ -176,6 +176,7 @@ impl TextField {
       &mut self,
       ui: &mut Ui,
       input: &Input,
+      label_font: &Font,
       label: &str,
       args: TextFieldArgs,
    ) -> TextFieldProcessResult {
@@ -187,7 +188,7 @@ impl TextField {
       // label
       ui.push((args.width, 16.0), Layout::Freeform);
       ui.text(
-         args.font,
+         label_font,
          label,
          args.colors.label,
          (AlignH::Left, AlignV::Top),

@@ -1,7 +1,6 @@
 // matchmaker packets
 
 use std::fmt::{Display, Formatter};
-use std::net::SocketAddr;
 
 use serde::{Deserialize, Serialize};
 

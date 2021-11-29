@@ -1,13 +1,14 @@
 //! Handling of assets such as icons, fonts, etc.
 
 use netcanv_renderer::paws::Color;
-use netcanv_renderer::{Font as FontTrait, RenderBackend};
+use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
+const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf");
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
@@ -65,6 +66,7 @@ pub struct Icons {
 pub struct Assets {
    pub sans: Font,
    pub sans_bold: Font,
+   pub monospace: Font,
 
    pub colors: ColorScheme,
    pub icons: Icons,
@@ -92,6 +94,7 @@ impl Assets {
       Self {
          sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
          sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
+         monospace: renderer.create_font_from_memory(MONOSPACE_TTF, 13.0),
          colors,
          icons: Icons {
             expand: ExpandIcons {

@@ -13,7 +13,7 @@ use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, RenderBackend};
+use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 
 use crate::app::paint::tools::KeyShortcutAction;
@@ -489,9 +489,9 @@ impl State {
       if self.peer.is_host() {
          // The room ID itself
          let id_text = format!("{}", self.peer.room_id().unwrap());
-         ui.push((64.0, ui.height()), Layout::Freeform);
+         ui.push((72.0, ui.height()), Layout::Freeform);
          ui.text(
-            &self.assets.sans_bold,
+            &self.assets.monospace.with_size(15.0),
             &id_text,
             self.assets.colors.text,
             (AlignH::Center, AlignV::Middle),
