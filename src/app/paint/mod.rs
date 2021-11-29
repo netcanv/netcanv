@@ -486,28 +486,28 @@ impl State {
             _ => (),
          }
       }
-      if self.peer.is_host() {
-         // The room ID itself
-         let id_text = format!("{}", self.peer.room_id().unwrap());
-         ui.push((72.0, ui.height()), Layout::Freeform);
-         ui.text(
-            &self.assets.monospace.with_size(15.0),
-            &id_text,
-            self.assets.colors.text,
-            (AlignH::Center, AlignV::Middle),
-         );
-         ui.pop();
 
-         // "Room ID" text
-         ui.push((64.0, ui.height()), Layout::Freeform);
-         ui.text(
-            &self.assets.sans,
-            "Room ID",
-            self.assets.colors.text,
-            (AlignH::Center, AlignV::Middle),
-         );
-         ui.pop();
-      }
+      // The room ID itself
+      let id_text = format!("{}", self.peer.room_id().unwrap());
+      ui.push((72.0, ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.monospace.with_size(15.0),
+         &id_text,
+         self.assets.colors.text,
+         (AlignH::Center, AlignV::Middle),
+      );
+      ui.pop();
+
+      // "Room ID" text
+      ui.push((64.0, ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.sans,
+         "Room ID",
+         self.assets.colors.text,
+         (AlignH::Center, AlignV::Middle),
+      );
+      ui.pop();
+
       ui.pop();
 
       ui.pop();

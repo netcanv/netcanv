@@ -161,7 +161,6 @@ impl State {
 }
 
 async fn send_packet(stream: &Mutex<OwnedWriteHalf>, packet: Packet) -> anyhow::Result<()> {
-   println!("-> {:?}", packet);
    let encoded = bincode::serialize(&packet)?;
    stream.lock().await.write_all(&encoded).await?;
    Ok(())
