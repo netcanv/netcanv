@@ -8,6 +8,7 @@ use std::sync::Arc;
 use nanorand::Rng;
 use netcanv_protocol::matchmaker::{self as mm, Packet, PeerId, RoomId, DEFAULT_PORT};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
@@ -102,7 +103,7 @@ impl Rooms {
 struct Peers {
    occupied_peer_ids: HashSet<PeerId>,
    peer_ids: HashMap<SocketAddr, PeerId>,
-   peer_streams: HashMap<PeerId, Arc<Mutex<TcpStream>>>,
+   peer_streams: HashMap<PeerId, Arc<Mutex<OwnedWriteHalf>>>,
 }
 
 impl Peers {
@@ -117,7 +118,7 @@ impl Peers {
    /// Allocates a new peer ID for the given socket address.
    fn allocate_peer_id(
       &mut self,
-      stream: Arc<Mutex<TcpStream>>,
+      stream: Arc<Mutex<OwnedWriteHalf>>,
       address: SocketAddr,
    ) -> Option<PeerId> {
       let mut rng = nanorand::tls_rng();
@@ -159,7 +160,7 @@ impl State {
    }
 }
 
-async fn send_packet(stream: &Mutex<TcpStream>, packet: Packet) -> anyhow::Result<()> {
+async fn send_packet(stream: &Mutex<OwnedWriteHalf>, packet: Packet) -> anyhow::Result<()> {
    println!("-> {:?}", packet);
    let encoded = bincode::serialize(&packet)?;
    stream.lock().await.write_all(&encoded).await?;
@@ -167,62 +168,62 @@ async fn send_packet(stream: &Mutex<TcpStream>, packet: Packet) -> anyhow::Resul
 }
 
 async fn host(
-   stream: &Arc<Mutex<TcpStream>>,
+   write: &Arc<Mutex<OwnedWriteHalf>>,
    address: SocketAddr,
    state: &mut State,
 ) -> anyhow::Result<()> {
-   let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(stream), address) {
+   let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&stream, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
+      send_packet(&write, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let room_id = if let Some(id) = state.rooms.find_room_id() {
       id
    } else {
-      send_packet(&stream, Packet::Error(mm::Error::NoFreeRooms)).await?;
+      send_packet(&write, Packet::Error(mm::Error::NoFreeRooms)).await?;
       anyhow::bail!("no more free room IDs");
    };
 
    state.rooms.make_host(room_id, peer_id);
    state.rooms.join_room(peer_id, room_id);
-   send_packet(&stream, Packet::RoomCreated(room_id, peer_id)).await?;
+   send_packet(&write, Packet::RoomCreated(room_id, peer_id)).await?;
 
    Ok(())
 }
 
 async fn join(
-   stream: &Arc<Mutex<TcpStream>>,
+   write: &Arc<Mutex<OwnedWriteHalf>>,
    address: SocketAddr,
    state: &mut State,
    room_id: RoomId,
 ) -> anyhow::Result<()> {
    println!("joining room");
 
-   let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(stream), address) {
+   let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&stream, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
+      send_packet(&write, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let host_id = if let Some(id) = state.rooms.host_id(room_id) {
       id
    } else {
-      send_packet(&stream, Packet::Error(mm::Error::RoomDoesNotExist)).await?;
+      send_packet(&write, Packet::Error(mm::Error::RoomDoesNotExist)).await?;
       anyhow::bail!("no room with the given ID");
    };
 
    state.rooms.join_room(peer_id, room_id);
-   send_packet(&stream, Packet::HostId(host_id)).await?;
+   send_packet(&write, Packet::HostId(host_id)).await?;
 
    Ok(())
 }
 
 /// Relays a packet to the peer with the given ID.
 async fn relay(
-   stream: &Mutex<TcpStream>,
+   write: &Mutex<OwnedWriteHalf>,
    address: SocketAddr,
    state: &mut State,
    target_id: PeerId,
@@ -253,7 +254,7 @@ async fn relay(
       if let Some(stream) = state.peers.peer_streams.get(&target_id) {
          stream.lock().await.write_all(&packet).await?;
       } else {
-         send_packet(stream, Packet::Error(mm::Error::NoSuchPeer)).await?;
+         send_packet(write, Packet::Error(mm::Error::NoSuchPeer)).await?;
       }
    }
 
@@ -261,16 +262,16 @@ async fn relay(
 }
 
 async fn handle_packet(
-   stream: Arc<Mutex<TcpStream>>,
+   write: &Arc<Mutex<OwnedWriteHalf>>,
    address: SocketAddr,
    state: &Mutex<State>,
    packet: Packet,
 ) -> anyhow::Result<()> {
    match packet {
-      Packet::Host => host(&stream, address, &mut *state.lock().await).await?,
-      Packet::Join(room_id) => join(&stream, address, &mut *state.lock().await, room_id).await?,
+      Packet::Host => host(&write, address, &mut *state.lock().await).await?,
+      Packet::Join(room_id) => join(&write, address, &mut *state.lock().await, room_id).await?,
       Packet::Relay(target_id, data) => {
-         relay(&stream, address, &mut *state.lock().await, target_id, data).await?
+         relay(&write, address, &mut *state.lock().await, target_id, data).await?
       }
 
       // These ones shouldn't happen, ignore.
@@ -284,22 +285,21 @@ async fn handle_packet(
 }
 
 async fn read_packets(
-   stream: Arc<Mutex<TcpStream>>,
+   mut read: OwnedReadHalf,
+   write: Arc<Mutex<OwnedWriteHalf>>,
    address: SocketAddr,
    state: &Mutex<State>,
 ) -> anyhow::Result<()> {
    loop {
       // This is a bit of a workaround because bincode can't read from async streams.
       let packet: Packet = {
-         let mut stream = stream.lock().await;
-         let packet_size = stream.read_u32().await?;
+         let packet_size = read.read_u32().await?;
          let mut buffer = vec![0; packet_size as usize];
-         stream.read_exact(&mut buffer).await?;
-         drop(stream);
+         read.read_exact(&mut buffer).await?;
          bincode::deserialize(&buffer)?
       };
       println!("got packet {:?}", packet);
-      handle_packet(Arc::clone(&stream), address, &state, packet).await?;
+      handle_packet(&write, address, &state, packet).await?;
    }
 }
 
@@ -310,9 +310,10 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
    eprintln!("{} has connected", address);
    stream.set_nodelay(true)?;
-   let stream = Arc::new(Mutex::new(stream));
+   let (read, write) = stream.into_split();
+   let write = Arc::new(Mutex::new(write));
 
-   match read_packets(stream, address, &state).await {
+   match read_packets(read, write, address, &state).await {
       Ok(()) => (),
       Err(error) => eprintln!("[{}] connection error: {}", address, error),
    }
