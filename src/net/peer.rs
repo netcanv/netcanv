@@ -35,6 +35,10 @@ pub enum MessageKind {
       nickname: String,
       last_tool: Option<String>,
    },
+   /// The host role has been transferred to another peer in the room.
+   NewHost(String),
+   /// The host role has been transferred to the peer (you).
+   NowHosting,
    /// The host sent us the chunk positions for the room.
    ChunkPositions(Vec<(i32, i32)>),
    /// Somebody requested chunk positions from the host.
@@ -232,12 +236,24 @@ impl Peer {
             self.state = State::InRoom;
             bus::push(Connected { peer: self.token });
          }
-         mm::Packet::HostId(host_id) => {
+         mm::Packet::Joined { peer_id, host_id } => {
             eprintln!("got host ID: {:?}", host_id);
+            self.peer_id = Some(peer_id);
             self.host = Some(host_id);
             self.state = State::InRoom;
             bus::push(Connected { peer: self.token });
             self.say_hello()?;
+         }
+         mm::Packet::HostTransfer(host_id) => {
+            if self.peer_id == Some(host_id) {
+               self.send_message(MessageKind::NowHosting);
+               self.host = None;
+            } else {
+               if let Some(mate) = self.mates.get(&host_id) {
+                  self.send_message(MessageKind::NewHost(mate.nickname.clone()))
+               }
+               self.host = Some(host_id);
+            }
          }
          mm::Packet::Relayed(author, payload) => {
             let client_packet: cl::Packet = bincode::deserialize(&payload)?;

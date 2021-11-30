@@ -85,13 +85,29 @@ impl Rooms {
       }
    }
 
-   /// Makes the peer quit the room with the given ID.
+   /// Removes a room.
+   fn remove_room(&mut self, room_id: RoomId) {
+      self.occupied_room_ids.remove(&room_id);
+      self.room_clients.remove(&room_id);
+      self.room_hosts.remove(&room_id);
+   }
+
+   /// Makes the peer quit the room with the given ID. Returns the peer's room ID.
    fn quit_room(&mut self, peer_id: PeerId) {
       if let Some(room_id) = self.client_rooms.remove(&peer_id) {
-         if let Some(room_clients) = self.room_clients.get_mut(&room_id) {
+         let n_connected = if let Some(room_clients) = self.room_clients.get_mut(&room_id) {
             if let Some(index) = room_clients.iter().position(|&id| id == peer_id) {
-               room_clients.swap_remove(index);
+               // We use the order-preserving `remove`, such that peers are queued up for the host
+               // role in the order they joined into the room.
+               room_clients.remove(index);
             }
+            room_clients.len()
+         } else {
+            0
+         };
+         if n_connected == 0 {
+            println!("closing room {:?}", room_id);
+            self.remove_room(room_id);
          }
       }
    }
@@ -178,6 +194,33 @@ async fn send_packet(stream: &Mutex<OwnedWriteHalf>, packet: Packet) -> anyhow::
    Ok(())
 }
 
+/// Broadcasts a packet to all peers in the room.
+///
+/// If `sender` is not `PeerId::BROADCAST`, the packet is not sent to them.
+async fn broadcast_packet(
+   state: &mut State,
+   room_id: RoomId,
+   sender_id: PeerId,
+   packet: Packet,
+) -> anyhow::Result<()> {
+   let packet = bincode::serialize(&packet)?;
+   let peers_in_room = state.rooms.peers_in_room(room_id);
+   let mut result = Ok(());
+   if let Some(iter) = peers_in_room {
+      for peer_id in iter {
+         if peer_id != sender_id {
+            if let Some(stream) = state.peers.peer_streams.get(&peer_id) {
+               match stream.lock().await.write_all(&packet).await {
+                  Ok(()) => (),
+                  Err(error) => result = Err(error),
+               }
+            }
+         }
+      }
+   }
+   Ok(result?)
+}
+
 async fn host(
    write: &Arc<Mutex<OwnedWriteHalf>>,
    address: SocketAddr,
@@ -210,8 +253,6 @@ async fn join(
    state: &mut State,
    room_id: RoomId,
 ) -> anyhow::Result<()> {
-   println!("joining room");
-
    let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
@@ -227,7 +268,7 @@ async fn join(
    };
 
    state.rooms.join_room(peer_id, room_id);
-   send_packet(&write, Packet::HostId(host_id)).await?;
+   send_packet(&write, Packet::Joined { peer_id, host_id }).await?;
 
    Ok(())
 }
@@ -245,31 +286,18 @@ async fn relay(
    let room_id =
       state.rooms.room_id(sender_id).ok_or_else(|| anyhow::anyhow!("peer is not in a room"))?;
 
-   let packet = bincode::serialize(&Packet::Relayed(sender_id, data))?;
-   let mut result = Ok(());
+   let packet = Packet::Relayed(sender_id, data);
    if target_id.is_broadcast() {
-      let peers_in_room = state.rooms.peers_in_room(room_id);
-      if let Some(iter) = peers_in_room {
-         for peer_id in iter {
-            if peer_id != sender_id {
-               if let Some(stream) = state.peers.peer_streams.get(&peer_id) {
-                  match stream.lock().await.write_all(&packet).await {
-                     Ok(()) => (),
-                     Err(error) => result = Err(error),
-                  }
-               }
-            }
-         }
-      }
+      broadcast_packet(state, room_id, sender_id, packet).await?;
    } else {
       if let Some(stream) = state.peers.peer_streams.get(&target_id) {
-         stream.lock().await.write_all(&packet).await?;
+         send_packet(stream, packet).await?;
       } else {
          send_packet(write, Packet::Error(mm::Error::NoSuchPeer)).await?;
       }
    }
 
-   Ok(result?)
+   Ok(())
 }
 
 async fn handle_packet(
@@ -287,7 +315,8 @@ async fn handle_packet(
 
       // These ones shouldn't happen, ignore.
       Packet::RoomCreated(_room_id, _peer_id) => (),
-      Packet::HostId(_host_id) => (),
+      Packet::Joined { .. } => (),
+      Packet::HostTransfer(_host_id) => (),
       Packet::Relayed(_peer_id, _data) => (),
       Packet::Disconnected(_peer_id) => (),
       Packet::Error(_message) => (),
@@ -313,6 +342,24 @@ async fn read_packets(
    }
 }
 
+/// Performs the host transferrence procedure.
+///
+/// This transfers the host status to the next person that joined the room.
+async fn transfer_host(state: &mut State, room_id: RoomId) -> anyhow::Result<()> {
+   // If we get here, the room can't have been deleted, and because of that, there's at least
+   // one person still in the room.
+   let new_host_id = state.rooms.peers_in_room(room_id).unwrap().next().unwrap();
+   state.rooms.make_host(room_id, new_host_id);
+   broadcast_packet(
+      state,
+      room_id,
+      PeerId::BROADCAST,
+      Packet::HostTransfer(new_host_id),
+   )
+   .await?;
+   Ok(())
+}
+
 async fn handle_connection(
    stream: TcpStream,
    address: SocketAddr,
@@ -333,7 +380,20 @@ async fn handle_connection(
       let mut state = state.lock().await;
       let peer_id =
          state.peers.peer_id(address).ok_or_else(|| anyhow::anyhow!("peer had no ID"))?;
+      let room_id = state.rooms.room_id(peer_id);
       state.rooms.quit_room(peer_id);
+      if let Some(room_id) = room_id {
+         broadcast_packet(
+            &mut state,
+            room_id,
+            PeerId::BROADCAST,
+            Packet::Disconnected(peer_id),
+         )
+         .await?;
+         if state.rooms.host_id(room_id) == Some(peer_id) {
+            transfer_host(&mut state, room_id).await?;
+         }
+      }
       state.peers.free_peer_id(address);
    }
 

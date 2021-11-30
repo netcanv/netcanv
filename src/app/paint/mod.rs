@@ -617,6 +617,8 @@ impl State {
                }
             }
          }
+         MessageKind::NewHost(name) => log!(self.log, "{} is now hosting the room", name),
+         MessageKind::NowHosting => log!(self.log, "You are now hosting the room"),
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
             for chunk_position in positions {

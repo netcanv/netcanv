@@ -19,8 +19,12 @@ pub enum Packet {
    RoomCreated(RoomId, PeerId),
    /// Request sent from a client, to join a room with the given ID.
    Join(RoomId),
-   /// Response from the matchmaker to the client containing the host's peer ID.
-   HostId(PeerId),
+   /// Response from the matchmaker to the client containing the client's peer ID and the host's
+   /// peer ID.
+   Joined { peer_id: PeerId, host_id: PeerId },
+   /// Message from the matchmaker that the host has disconnected, and that the host role now
+   /// belongs to the peer with the given ID.
+   HostTransfer(PeerId),
 
    // ---
    // Packet relay
