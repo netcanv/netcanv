@@ -7,10 +7,19 @@ use std::sync::Arc;
 
 use nanorand::Rng;
 use netcanv_protocol::matchmaker::{self as mm, Packet, PeerId, RoomId, DEFAULT_PORT};
+use structopt::StructOpt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+
+#[derive(StructOpt)]
+#[structopt(name = "netcanv-matchmaker")]
+struct Options {
+   /// The port to host the matchmaker under.
+   #[structopt(short)]
+   port: Option<u16>,
+}
 
 struct Rooms {
    occupied_room_ids: HashSet<RoomId>,
@@ -26,7 +35,10 @@ impl Rooms {
    /// This is _almost_ base32, with `I`, `0`, and `O` omitted to avoid confusion.
    /// Some fonts render `0` and `O` in a very similar way, and people often confuse the capital
    /// `I` for the lowercase `l`, even if it's not a part of a code.
-   const ID_CHARSET: &'static str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+   ///
+   /// **Warning:** all characters in this string must be ASCII, as [`Self::generate_room_id`] does
+   /// not handle Unicode characters for performance reasons.
+   const ID_CHARSET: &'static [u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
    fn new() -> Self {
       Self {
@@ -38,11 +50,11 @@ impl Rooms {
    }
 
    /// Generates a pseudo-random room ID.
-   fn generate_room_id() -> RoomId {
+   fn generate_room_id(&self) -> RoomId {
       let mut rng = nanorand::tls_rng();
       RoomId([(); 6].map(|_| {
          let index = rng.generate_range(0..Self::ID_CHARSET.len());
-         Self::ID_CHARSET.as_bytes()[index]
+         Self::ID_CHARSET[index]
       }))
    }
 
@@ -51,7 +63,7 @@ impl Rooms {
    /// Returns `None` if all attempts to find a free ID have failed.
    fn find_room_id(&mut self) -> Option<RoomId> {
       for _attempt in 0..50 {
-         let id = Self::generate_room_id();
+         let id = self.generate_room_id();
          if self.occupied_room_ids.insert(id) {
             self.room_clients.insert(id, Vec::new());
             return Some(id);
@@ -330,7 +342,13 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-   let listener = TcpListener::bind((Ipv4Addr::from([0, 0, 0, 0]), DEFAULT_PORT)).await?;
+   let options = Options::from_args();
+
+   let listener = TcpListener::bind((
+      Ipv4Addr::from([0, 0, 0, 0]),
+      options.port.unwrap_or(DEFAULT_PORT),
+   ))
+   .await?;
    let state = Arc::new(Mutex::new(State::new()));
 
    eprintln!("NetCanv Matchmaker server");
