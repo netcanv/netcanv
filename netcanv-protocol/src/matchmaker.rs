@@ -1,6 +1,6 @@
 // matchmaker packets
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +49,7 @@ pub enum Packet {
 
 /// The unique ID of a room.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct RoomId(pub [u8; Self::LEN]);
 
 impl RoomId {
@@ -83,6 +83,12 @@ impl Display for RoomId {
    }
 }
 
+impl fmt::Debug for RoomId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+      write!(f, "r:{}", self)
+   }
+}
+
 /// An error returned in case the room ID is not made up of characters.
 #[derive(Debug)]
 pub struct RoomIdError(());
@@ -100,7 +106,7 @@ type PeerIdInner = u64;
 
 /// The unique ID of a peer.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct PeerId(pub PeerIdInner);
 
 impl PeerId {
@@ -117,6 +123,18 @@ impl PeerId {
    /// Returns whether the peer ID is the one used for broadcasting messages.
    pub fn is_broadcast(self) -> bool {
       self == Self::BROADCAST
+   }
+}
+
+impl Display for PeerId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+      write!(f, "p:{:16x}", self.0)
+   }
+}
+
+impl fmt::Debug for PeerId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+      write!(f, "{}", self)
    }
 }
 
