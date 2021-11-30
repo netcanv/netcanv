@@ -14,6 +14,8 @@ const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg"
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
+const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
+const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
@@ -48,6 +50,12 @@ pub struct FileIcons {
    pub save: Image,
 }
 
+/// Icons for peer roles.
+pub struct PeerIcons {
+   pub client: Image,
+   pub host: Image,
+}
+
 /// Icons for the color scheme switcher.
 pub struct ColorSwitcherIcons {
    pub dark: Image,
@@ -59,6 +67,7 @@ pub struct Icons {
    pub expand: ExpandIcons,
    pub status: StatusIcons,
    pub file: FileIcons,
+   pub peer: PeerIcons,
    pub color_switcher: ColorSwitcherIcons,
 }
 
@@ -107,6 +116,10 @@ impl Assets {
             },
             file: FileIcons {
                save: Self::load_icon(renderer, SAVE_SVG),
+            },
+            peer: PeerIcons {
+               client: Self::load_icon(renderer, PEER_CLIENT_SVG),
+               host: Self::load_icon(renderer, PEER_HOST_SVG),
             },
             color_switcher: ColorSwitcherIcons {
                dark: Self::load_icon(renderer, DARK_MODE_SVG),

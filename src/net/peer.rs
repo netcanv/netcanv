@@ -248,6 +248,7 @@ impl Peer {
             if self.peer_id == Some(host_id) {
                self.send_message(MessageKind::NowHosting);
                self.host = None;
+               self.is_host = true;
             } else {
                if let Some(mate) = self.mates.get(&host_id) {
                   self.send_message(MessageKind::NewHost(mate.nickname.clone()))

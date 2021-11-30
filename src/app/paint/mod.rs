@@ -507,6 +507,18 @@ impl State {
          (AlignH::Center, AlignV::Middle),
       );
       ui.pop();
+      ui.space(8.0);
+
+      // Role icon
+      ui.icon(
+         if self.peer.is_host() {
+            &self.assets.icons.peer.host
+         } else {
+            &self.assets.icons.peer.client
+         },
+         self.assets.colors.text,
+         Some(vector(ui.height(), ui.height())),
+      );
 
       ui.pop();
 
