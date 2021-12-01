@@ -6,7 +6,8 @@ use crate::token::Token;
 
 use super::{Input, Ui, UiInput};
 
-/// A size.
+/// A dimension. Unlike concrete sizes, dimensions can be specified relative to the
+/// parent container.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Dimension {
    /// A constant size.
@@ -28,6 +29,38 @@ impl Dimension {
    }
 }
 
+impl From<f32> for Dimension {
+   /// Creates a constant dimension.
+   fn from(value: f32) -> Self {
+      Self::Constant(value)
+   }
+}
+
+/// Horizontal and vertical dimensions.
+pub struct Dimensions {
+   pub horizontal: Dimension,
+   pub vertical: Dimension,
+}
+
+impl Dimensions {
+   pub fn new(horizontal: impl Into<Dimension>, vertical: impl Into<Dimension>) -> Self {
+      Self {
+         horizontal: horizontal.into(),
+         vertical: vertical.into(),
+      }
+   }
+}
+
+impl<T, U> From<(T, U)> for Dimensions
+where
+   T: Into<Dimension>,
+   U: Into<Dimension>,
+{
+   fn from(dimensions: (T, U)) -> Self {
+      Self::new(dimensions.0, dimensions.1)
+   }
+}
+
 /// A view.
 pub struct View {
    /// The ID of the view. This is used for specifying mouse areas in the input layer.
@@ -35,9 +68,9 @@ pub struct View {
    /// The position of the view.
    pub position: Point,
    /// The dimensions of the view.
-   pub dimensions: (Dimension, Dimension),
+   pub dimensions: Dimensions,
    /// The computed size of the view.
-   size: Vector,
+   size: Option<Vector>,
 }
 
 static MOUSE_AREA: Token = Token::new();
@@ -46,13 +79,34 @@ impl View {
    /// Creates a new view with the provided dimensions.
    ///
    /// The initial position of the view is `(0.0, 0.0)`.
-   pub fn new(dimensions: (Dimension, Dimension)) -> Self {
+   pub fn new(dimensions: impl Into<Dimensions>) -> Self {
       Self {
          id: MOUSE_AREA.next(),
          position: point(0.0, 0.0),
-         dimensions,
-         size: vector(0.0, 0.0),
+         dimensions: dimensions.into(),
+         size: None,
       }
+   }
+
+   /// Returns the computed size of the view.
+   ///
+   /// Panics if the size has not been computed yet.
+   pub fn size(&self) -> Vector {
+      self.size.expect("attempt to get computed size of view that has not been laid out yet")
+   }
+
+   /// Returns the width of the view.
+   ///
+   /// Panics if the size has not been computed yet.
+   pub fn width(&self) -> f32 {
+      self.size().x
+   }
+
+   /// Returns the height of the view.
+   ///
+   /// Panics if the size has not been computed yet.
+   pub fn height(&self) -> f32 {
+      self.size().y
    }
 
    /// Creates a new view, whose size is the current group in the given UI.
@@ -67,17 +121,17 @@ impl View {
    }
 
    /// Begins rendering inside the view.
-   fn begin(&self, ui: &mut Ui, input: &mut Input, layout: Layout) {
+   pub fn begin(&self, ui: &mut Ui, input: &mut Input, layout: Layout) {
       // Push an intermediary, zero-sized group onto the stack, such that the current group's
       // layout does not get displaced.
       ui.push((0.0, 0.0), Layout::Freeform);
-      ui.push(self.size, layout);
+      ui.push(self.size(), layout);
       ui.set_position(self.position);
       input.set_mouse_area(self.id, ui.has_mouse(input));
    }
 
    /// Ends rendering inside the view.
-   fn end(&self, ui: &mut Ui) {
+   pub fn end(&self, ui: &mut Ui) {
       ui.pop();
       ui.pop();
    }
@@ -85,7 +139,26 @@ impl View {
 
 /// Functions for laying out views.
 pub mod layout {
+   use netcanv_renderer::paws::{AlignH, AlignV, Alignment, Padding};
+
    use super::*;
+
+   /// Creates a new view with an amount of padding applied.
+   ///
+   /// The given view must have a computed size.
+   pub fn padded(view: &View, padding: impl Into<Padding>) -> View {
+      let padding = padding.into();
+      let position = view.position + vector(padding.left, padding.top);
+      let size = view.size();
+      let size = vector(
+         size.x - padding.left - padding.right,
+         size.y - padding.top - padding.bottom,
+      );
+      let mut new_view = View::new((size.x, size.y));
+      new_view.position = position;
+      new_view.size = Some(size);
+      new_view
+   }
 
    /// Lays the view out as if it filled the whole screen.
    ///
@@ -93,42 +166,70 @@ pub mod layout {
    ///
    /// The view's dimensions must be Constant.
    pub fn full_screen(view: &mut View) {
-      let (width, height) = view.dimensions;
-      if let Dimension::Constant(width) = width {
-         if let Dimension::Constant(height) = height {
+      let Dimensions {
+         horizontal,
+         vertical,
+      } = view.dimensions;
+      if let Dimension::Constant(width) = horizontal {
+         if let Dimension::Constant(height) = vertical {
             view.position = point(0.0, 0.0);
-            view.size = vector(width, height);
+            view.size = Some(vector(width, height));
             return;
          }
       }
       panic!("the dimensions of the view passed to full_screen must be Constant");
    }
 
+   /// Lays the view out such that the given view is aligned inside of the parent view.
+   ///
+   /// The parent view's size must be computed.
+   pub fn align(parent_view: &View, view: &mut View, alignment: Alignment) {
+      let parent_size = parent_view.size();
+      let size = vector(
+         view.dimensions.horizontal.compute(0.0, parent_size.x),
+         view.dimensions.vertical.compute(0.0, parent_size.y),
+      );
+      view.size = Some(size);
+      view.position.x = match alignment.0 {
+         AlignH::Left => parent_view.position.x,
+         AlignH::Center => parent_view.position.x + parent_view.width() / 2.0 - view.width() / 2.0,
+         AlignH::Right => parent_view.position.x + parent_view.width() - view.width(),
+      };
+      view.position.y = match alignment.1 {
+         AlignV::Top => parent_view.position.y,
+         AlignV::Middle => {
+            parent_view.position.y + parent_view.height() / 2.0 - view.height() / 2.0
+         }
+         AlignV::Bottom => parent_view.position.y + parent_view.height() - view.height(),
+      }
+   }
+
    /// Vertical layout direction.
    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-   pub enum VDirection {
+   pub enum DirectionV {
       /// Views are laid out from top to bottom.
       TopToBottom,
       /// Views are laid out from bottom to top.
       BottomToTop,
    }
 
-   pub use VDirection::*;
-
-   /// Lays out the provided views vertically.
-   pub fn vertical(direction: VDirection, parent_view: &View, views: &mut [&mut View]) {
-      let width = parent_view.size.x;
+   /// Lays out the provided views vertically, in the provided direction.
+   ///
+   /// The parent view's size must be computed.
+   pub fn vertical(parent_view: &View, views: &mut [&mut View], direction: DirectionV) {
+      let parent_size = parent_view.size();
       let mut cursor = 0.0;
       for view in views {
-         let height = view.dimensions.1.compute(cursor, parent_view.size.y);
+         let width = view.dimensions.horizontal.compute(0.0, parent_size.x);
+         let height = view.dimensions.vertical.compute(cursor, parent_size.y);
          view.position = point(
             0.0,
             match direction {
-               TopToBottom => cursor,
-               BottomToTop => parent_view.size.y - cursor - height,
+               DirectionV::TopToBottom => cursor,
+               DirectionV::BottomToTop => parent_size.y - cursor - height,
             },
          );
-         view.size = vector(width, height);
+         view.size = Some(vector(width, height));
          cursor += height;
       }
    }

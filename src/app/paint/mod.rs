@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use native_dialog::FileDialog;
 use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
+   point, vector, AlignH, AlignV, Alignment, Color, Layout, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
@@ -25,6 +25,8 @@ use crate::config::{ToolbarPosition, UserConfig};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
+use crate::ui::view::layout::DirectionV;
+use crate::ui::view::{Dimension, View};
 use crate::ui::*;
 use crate::viewport::Viewport;
 
@@ -80,6 +82,10 @@ pub struct State {
 
    panning: bool,
    viewport: Viewport,
+
+   canvas_view: View,
+   bottom_bar_view: View,
+   toolbar_view: View,
 }
 
 macro_rules! log {
@@ -91,12 +97,16 @@ macro_rules! log {
 impl State {
    /// The interval of automatic saving.
    const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
+
+   /// The network communication tick interval.
+   pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
+
    /// The height of the bottom bar.
    const BOTTOM_BAR_SIZE: f32 = 32.0;
    /// The width of the toolbar.
    const TOOLBAR_SIZE: f32 = 40.0;
-   /// The network communication tick interval.
-   pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
+   /// The width and height of a tool button.
+   const TOOL_SIZE: f32 = Self::TOOLBAR_SIZE - 8.0;
 
    /// Creates a new paint state.
    pub fn new(
@@ -133,6 +143,10 @@ impl State {
 
          panning: false,
          viewport: Viewport::new(),
+
+         canvas_view: View::new((Dimension::Percentage(1.0), Dimension::Rest(1.0))),
+         bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
+         toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
       };
       this.register_tools(renderer);
 
@@ -280,11 +294,7 @@ impl State {
 
    /// Processes the paint canvas.
    fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
-      ui.push(
-         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
-         Layout::Freeform,
-      );
-      input.set_mouse_area(mouse_areas::CANVAS, ui.has_mouse(input));
+      self.canvas_view.begin(ui, input, Layout::Freeform);
       let canvas_size = ui.size();
 
       //
@@ -397,7 +407,7 @@ impl State {
 
       self.process_log(ui);
 
-      ui.pop();
+      self.canvas_view.end(ui);
 
       //
       // Networking
@@ -436,9 +446,8 @@ impl State {
 
    /// Processes the bottom bar.
    fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
-      ui.push((ui.width(), Self::BOTTOM_BAR_SIZE), Layout::Horizontal);
-      ui.align((AlignH::Left, AlignV::Bottom));
-      input.set_mouse_area(mouse_areas::BOTTOM_BAR, ui.has_mouse(input));
+      self.bottom_bar_view.begin(ui, input, Layout::Horizontal);
+
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
 
@@ -522,38 +531,33 @@ impl State {
 
       ui.pop();
 
-      ui.pop();
+      self.bottom_bar_view.end(ui);
    }
 
-   /// Processes the toolbar.
-   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
-      // The outer group, to add some padding.
-      ui.push(
-         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
-         Layout::Freeform,
-      );
-      ui.pad(8.0);
+   /// Reflows the toolbar's size.
+   fn resize_toolbar(&mut self) {
+      let length = 4.0 + self.tools.borrow().len() as f32 * (Self::TOOL_SIZE + 4.0);
+      self.toolbar_view.dimensions = match self.config.ui.toolbar_position {
+         ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
+         ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
+      }
+      .into();
+   }
 
-      // The inner group, that actually contains the bar.
-      let tool_size = Self::TOOLBAR_SIZE - 8.0;
-      let length = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
-      ui.push(
-         match self.config.ui.toolbar_position {
-            ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
-            ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
-         },
-         match self.config.ui.toolbar_position {
-            ToolbarPosition::Left | ToolbarPosition::Right => Layout::Vertical,
-            ToolbarPosition::Top | ToolbarPosition::Bottom => Layout::Horizontal,
-         },
-      );
-      ui.align(match self.config.ui.toolbar_position {
+   /// Returns the toolbar's alignment inside the canvas view.
+   fn toolbar_alignment(&self) -> Alignment {
+      match self.config.ui.toolbar_position {
          ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
          ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
          ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
          ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
-      });
-      input.set_mouse_area(mouse_areas::TOOLBAR, ui.has_mouse(input));
+      }
+   }
+
+   /// Processes the toolbar.
+   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
+      self.toolbar_view.begin(ui, input, Layout::Vertical);
+
       ui.fill_rounded(self.assets.colors.panel, ui.width().min(ui.height()) / 2.0);
       ui.pad(4.0);
 
@@ -561,12 +565,12 @@ impl State {
 
       let mut selected_tool = None;
       for (i, tool) in tools.iter().enumerate() {
-         ui.push((tool_size, tool_size), Layout::Freeform);
+         ui.push((Self::TOOL_SIZE, Self::TOOL_SIZE), Layout::Freeform);
          if Button::with_icon(
             ui,
             input,
             ButtonArgs {
-               height: tool_size,
+               height: Self::TOOL_SIZE,
                colors: if self.current_tool == i {
                   &self.assets.colors.selected_toolbar_button
                } else {
@@ -589,9 +593,7 @@ impl State {
          self.set_current_tool(ui, selected_tool);
       }
 
-      ui.pop();
-
-      ui.pop();
+      self.toolbar_view.end(ui);
    }
 
    fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
@@ -720,7 +722,14 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input, .. }: StateArgs) {
+   fn process(
+      &mut self,
+      StateArgs {
+         ui,
+         input,
+         root_view,
+      }: StateArgs,
+   ) {
       ui.clear(Color::WHITE);
 
       // Loading from file
@@ -770,6 +779,20 @@ impl AppState for State {
          self.fatal_error = true;
       }
 
+      // Layout
+      view::layout::vertical(
+         &root_view,
+         &mut [&mut self.bottom_bar_view, &mut self.canvas_view],
+         DirectionV::BottomToTop,
+      );
+      self.resize_toolbar();
+      let toolbar_alignment = self.toolbar_alignment();
+      view::layout::align(
+         &view::layout::padded(&self.canvas_view, 8.0),
+         &mut self.toolbar_view,
+         toolbar_alignment,
+      );
+
       // Paint canvas
       self.process_canvas(ui, input);
 
@@ -785,10 +808,4 @@ impl AppState for State {
          self
       }
    }
-}
-
-mod mouse_areas {
-   pub const CANVAS: usize = 0;
-   pub const BOTTOM_BAR: usize = 1;
-   pub const TOOLBAR: usize = 2;
 }
