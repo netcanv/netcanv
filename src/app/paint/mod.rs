@@ -108,6 +108,9 @@ impl State {
    /// The width and height of a tool button.
    const TOOL_SIZE: f32 = Self::TOOLBAR_SIZE - 8.0;
 
+   /// The amount of padding applied around the canvas area, when laying out elements on top of it.
+   const CANVAS_INNER_PADDING: f32 = 8.0;
+
    /// Creates a new paint state.
    pub fn new(
       assets: Assets,
@@ -719,6 +722,23 @@ impl State {
 
       Ok(())
    }
+
+   fn reflow_layout(&mut self, root_view: &View) -> () {
+      // The bottom bar and the canvas.
+      view::layout::vertical(
+         root_view,
+         &mut [&mut self.bottom_bar_view, &mut self.canvas_view],
+         DirectionV::BottomToTop,
+      );
+      // The toolbar.
+      self.resize_toolbar();
+      let toolbar_alignment = self.toolbar_alignment();
+      view::layout::align(
+         &view::layout::padded(&self.canvas_view, Self::CANVAS_INNER_PADDING),
+         &mut self.toolbar_view,
+         toolbar_alignment,
+      );
+   }
 }
 
 impl AppState for State {
@@ -780,18 +800,7 @@ impl AppState for State {
       }
 
       // Layout
-      view::layout::vertical(
-         &root_view,
-         &mut [&mut self.bottom_bar_view, &mut self.canvas_view],
-         DirectionV::BottomToTop,
-      );
-      self.resize_toolbar();
-      let toolbar_alignment = self.toolbar_alignment();
-      view::layout::align(
-         &view::layout::padded(&self.canvas_view, 8.0),
-         &mut self.toolbar_view,
-         toolbar_alignment,
-      );
+      self.reflow_layout(&root_view);
 
       // Paint canvas
       self.process_canvas(ui, input);
