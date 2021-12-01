@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::net::SocketAddr;
 use std::time::Instant;
 
 use crate::backend::winit::event::{MouseButton, VirtualKeyCode};
 use image::io::Reader;
 use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
+use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
@@ -62,7 +62,7 @@ pub struct SelectionTool {
    potential_action: Action,
    action: Action,
    selection: Selection,
-   peer_selections: HashMap<SocketAddr, PeerSelection>,
+   peer_selections: HashMap<PeerId, PeerSelection>,
 }
 
 impl SelectionTool {
@@ -117,10 +117,10 @@ impl SelectionTool {
 
    /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
    /// said selection.
-   fn ensure_peer(&mut self, address: SocketAddr) -> &mut PeerSelection {
-      if !self.peer_selections.contains_key(&address) {
+   fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerSelection {
+      if !self.peer_selections.contains_key(&peer_id) {
          self.peer_selections.insert(
-            address,
+            peer_id,
             PeerSelection {
                selection: Selection::new(),
                previous_normalized_rect: None,
@@ -128,7 +128,7 @@ impl SelectionTool {
             },
          );
       }
-      self.peer_selections.get_mut(&address).unwrap()
+      self.peer_selections.get_mut(&peer_id).unwrap()
    }
 
    /// Sends a `Rect` packet containing the current selection rectangle.
@@ -138,7 +138,7 @@ impl SelectionTool {
       if let Some(rect) = self.selection.normalized_rect() {
          net.send(
             self,
-            None,
+            PeerId::BROADCAST,
             Packet::Rect {
                position: (rect.x(), rect.y()),
                size: (rect.width(), rect.height()),
@@ -169,7 +169,7 @@ impl SelectionTool {
 
       let bytes = catch!(Self::encode_image(image));
       let Point { x, y } = position;
-      catch!(net.send(self, None, Packet::Paste((x, y), bytes)));
+      catch!(net.send(self, PeerId::BROADCAST, Packet::Paste((x, y), bytes)));
       catch!(self.send_rect_packet(net));
    }
 
@@ -216,7 +216,7 @@ impl Tool for SelectionTool {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
-               net.send(self, None, Packet::Cancel),
+               net.send(self, PeerId::BROADCAST, Packet::Cancel),
                return KeyShortcutAction::None
             );
          }
@@ -315,7 +315,7 @@ impl Tool for SelectionTool {
                // Before we erase the old data, draw the capture back onto the canvas.
                self.selection.deselect(ui, paint_canvas);
                catch!(self.send_rect_packet(&net));
-               catch!(net.send(self, None, Packet::Deselect));
+               catch!(net.send(self, PeerId::BROADCAST, Packet::Deselect));
                // Anchor the selection to the mouse position.
                self.selection.begin(mouse_position);
                catch!(self.send_rect_packet(&net));
@@ -327,7 +327,7 @@ impl Tool for SelectionTool {
             if let Some(rect) = self.selection.rect {
                if Self::rect_is_smaller_than_a_pixel(rect) {
                   self.selection.cancel();
-                  catch!(net.send(self, None, Packet::Cancel));
+                  catch!(net.send(self, PeerId::BROADCAST, Packet::Cancel));
                }
             }
             if self.action == Action::Selecting {
@@ -340,7 +340,7 @@ impl Tool for SelectionTool {
                // If there's still a selection after all of this, capture the paint canvas into an
                // image.
                self.selection.capture(ui, paint_canvas);
-               catch!(net.send(self, None, Packet::Capture));
+               catch!(net.send(self, PeerId::BROADCAST, Packet::Capture));
             }
             self.action = Action::None;
          }
@@ -424,9 +424,9 @@ impl Tool for SelectionTool {
          ui, net, assets, ..
       }: ToolArgs,
       viewport: &Viewport,
-      address: SocketAddr,
+      peer_id: PeerId,
    ) {
-      if let Some(peer) = self.peer_selections.get(&address) {
+      if let Some(peer) = self.peer_selections.get(&peer_id) {
          if let Some(rect) = peer.lerp_normalized_rect() {
             if !Self::rect_is_smaller_than_a_pixel(rect) {
                ui.draw(|ui| {
@@ -434,7 +434,7 @@ impl Tool for SelectionTool {
                   let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size());
                   let rect = Rect::new(top_left, bottom_right - top_left);
 
-                  let nickname = net.peer_name(address).unwrap();
+                  let nickname = net.peer_name(peer_id).unwrap();
                   let text_width = assets.sans.text_width(nickname);
                   let padding = vector(4.0, 4.0);
                   let text_rect = Rect::new(
@@ -511,7 +511,7 @@ impl Tool for SelectionTool {
       renderer: &mut Backend,
       _net: Net,
       paint_canvas: &mut PaintCanvas,
-      sender: SocketAddr,
+      sender: PeerId,
       payload: Vec<u8>,
    ) -> anyhow::Result<()> {
       let packet = bincode::deserialize(&payload)?;
@@ -544,21 +544,17 @@ impl Tool for SelectionTool {
    }
 
    /// Sends a capture packet to the peer that joined.
-   fn network_peer_join(&mut self, net: Net, address: SocketAddr) -> anyhow::Result<()> {
+   fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> anyhow::Result<()> {
       if let Some(capture) = self.selection.download_rgba() {
          self.send_rect_packet(&net)?;
-         net.send(
-            self,
-            Some(address),
-            Packet::Update(Self::encode_image(capture)?),
-         )?;
+         net.send(self, peer_id, Packet::Update(Self::encode_image(capture)?))?;
       }
       Ok(())
    }
 
    /// Ensures the peer's selection is initialized.
-   fn network_peer_activate(&mut self, _net: Net, address: SocketAddr) -> anyhow::Result<()> {
-      self.ensure_peer(address);
+   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> anyhow::Result<()> {
+      self.ensure_peer(peer_id);
       Ok(())
    }
 
@@ -568,10 +564,10 @@ impl Tool for SelectionTool {
       renderer: &mut Backend,
       _net: Net,
       paint_canvas: &mut PaintCanvas,
-      address: SocketAddr,
+      peer_id: PeerId,
    ) -> anyhow::Result<()> {
-      println!("selection {} deactivate", address);
-      if let Some(peer) = self.peer_selections.get_mut(&address) {
+      println!("selection {:?} deactivate", peer_id);
+      if let Some(peer) = self.peer_selections.get_mut(&peer_id) {
          peer.selection.deselect(renderer, paint_canvas);
       }
       Ok(())

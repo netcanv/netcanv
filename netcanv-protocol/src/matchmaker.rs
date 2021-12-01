@@ -1,6 +1,6 @@
 // matchmaker packets
 
-use std::net::SocketAddr;
+use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,48 +9,148 @@ pub const DEFAULT_PORT: u16 = 62137;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
-   //
-   // initial hosting procedure
-   //
-
-   // request from the host to the matchmaker for a free ID
+   // ---
+   // Initial hosting procedure
+   // ---
+   /// Request from the host to the matchmaker for a free room ID.
    Host,
-   // response from the matchmaker to the host containing the ID
-   RoomId(u32),
-   // request from a client to join a room with the given ID
-   GetHost(u32),
-   // response from the matchmaker to the client containing the host's IP address and port
-   HostAddress(SocketAddr),
-   // notification from the matchmaker to the host with a connecting client's IP address and port
-   ClientAddress(SocketAddr),
+   /// Response from the matchmaker to the host containing the room ID, and the peer ID inside the
+   /// room.
+   RoomCreated(RoomId, PeerId),
+   /// Request sent from a client, to join a room with the given ID.
+   Join(RoomId),
+   /// Response from the matchmaker to the client containing the client's peer ID and the host's
+   /// peer ID.
+   Joined { peer_id: PeerId, host_id: PeerId },
+   /// Message from the matchmaker that the host has disconnected, and that the host role now
+   /// belongs to the peer with the given ID.
+   HostTransfer(PeerId),
 
-   //
-   // packet relay
-   //
+   // ---
+   // Packet relay
+   // ---
+   /// Payload to be relayed. The first argument is the target to relay to.
+   ///
+   /// If the target is [`PeerID::BROADCAST`], the packet will be sent out to all the peers in
+   /// the room.
+   Relay(PeerId, Vec<u8>),
+   /// Payload relayed from another peer.
+   Relayed(PeerId, Vec<u8>),
 
-   // request for the matchmaker to serve as a packet relay for clients incapable of making direct P2P connections
-   RequestRelay(Option<SocketAddr>),
+   /// A peer has left the room.
+   Disconnected(PeerId),
 
-   // payload to be relayed. the first argument is an optional target to relay to
-   Relay(Option<SocketAddr>, Vec<u8>),
-   // relayed payload.
-   // in version 2 of the protocol there's a special case for this packet, where if the Vec is empty, the packet is
-   // a response to the RequestRelay packet.
-   Relayed(SocketAddr, Vec<u8>),
-
-   // a relay client has disconnected. sent out to relay clients because they can't normally tell if one of their
-   // peers has disconnected
-   Disconnected(SocketAddr),
-
-   //
-   // other
-   //
-
-   // an error occured
-   Error(String),
+   // ---
+   // Other
+   // ---
+   /// An error occured.
+   Error(Error),
 }
 
-// fast way to create an error packet
-pub fn error_packet(message: &str) -> Packet {
-   Packet::Error(message.to_string())
+/// The unique ID of a room.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub struct RoomId(pub [u8; Self::LEN]);
+
+impl RoomId {
+   /// The length of a room ID.
+   pub const LEN: usize = 6;
+}
+
+impl TryFrom<&str> for RoomId {
+   type Error = RoomIdError;
+
+   fn try_from(value: &str) -> Result<Self, Self::Error> {
+      if value.len() != Self::LEN {
+         Err(RoomIdError(()))
+      } else {
+         let mut bytes = [0u8; Self::LEN];
+         for (i, byte) in value.bytes().enumerate() {
+            bytes[i] = byte;
+         }
+         Ok(RoomId(bytes))
+      }
+   }
+}
+
+impl Display for RoomId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+      // Should not panic, as room ID is always
+      match std::str::from_utf8(&self.0) {
+         Ok(s) => write!(f, "{}", s),
+         Err(_) => write!(f, "<invalid UTF-8>"),
+      }
+   }
+}
+
+impl fmt::Debug for RoomId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+      write!(f, "r:{}", self)
+   }
+}
+
+/// An error returned in case the room ID is not made up of characters.
+#[derive(Debug)]
+pub struct RoomIdError(());
+
+impl std::error::Error for RoomIdError {}
+
+impl Display for RoomIdError {
+   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+      write!(f, "room ID must be 6 characters long")
+   }
+}
+
+/// The inner type for storing a peer ID.
+type PeerIdInner = u64;
+
+/// The unique ID of a peer.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub struct PeerId(pub PeerIdInner);
+
+impl PeerId {
+   /// The broadcast ID. Any occurrence of this signifies that a message should be broadcast
+   /// to all clients in a room.
+   pub const BROADCAST: Self = Self(0);
+
+   /// The first peer.
+   pub const FIRST_PEER: PeerIdInner = 1;
+
+   /// The last peer.
+   pub const LAST_PEER: PeerIdInner = PeerIdInner::MAX;
+
+   /// Returns whether the peer ID is the one used for broadcasting messages.
+   pub fn is_broadcast(self) -> bool {
+      self == Self::BROADCAST
+   }
+}
+
+impl Display for PeerId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+      write!(f, "p:{:16x}", self.0)
+   }
+}
+
+impl fmt::Debug for PeerId {
+   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+      write!(f, "{}", self)
+   }
+}
+
+/// An error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum Error {
+   /// No more free room IDs available.
+   NoFreeRooms,
+   /// No more free peer IDs available.
+   ///
+   /// Like, this shouldn't happen. If it happens, well…
+   ///
+   /// The peer ID is stored in a `u64`. Good luck exhausting that.
+   NoFreePeerIDs,
+   /// The room with the given ID does not exist.
+   RoomDoesNotExist,
+   /// The peer with the given ID doesn't seem to be connected.
+   NoSuchPeer,
 }

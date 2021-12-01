@@ -224,7 +224,15 @@ where
             match &*message {
                // Serialize and send the packet.
                SendPacket::Packet(packet) if packet.token == token => {
-                  catch!(bincode::serialize_into(&mut writer, &packet.data));
+                  let data = catch!(bincode::serialize(&packet.data));
+                  let length = [
+                     (data.len() >> 24) as u8,
+                     (data.len() >> 16) as u8,
+                     (data.len() >> 8) as u8,
+                     (data.len()) as u8,
+                  ];
+                  catch!(writer.write_all(&length));
+                  catch!(writer.write_all(&data));
                   catch!(writer.flush());
                   message.consume();
                }

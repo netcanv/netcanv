@@ -1,6 +1,5 @@
 //! Painting tools - brushes, selections, and all the like.
 
-use std::net::SocketAddr;
 use std::ops::Deref;
 
 use crate::assets::Assets;
@@ -14,6 +13,7 @@ mod brush;
 mod selection;
 
 pub use brush::*;
+use netcanv_protocol::matchmaker::PeerId;
 pub use selection::*;
 use serde::Serialize;
 
@@ -96,7 +96,7 @@ pub trait Tool {
       &mut self,
       _args: ToolArgs,
       _viewport: &Viewport,
-      _address: SocketAddr,
+      _peer_id: PeerId,
    ) {
    }
 
@@ -120,7 +120,7 @@ pub trait Tool {
       _renderer: &mut Backend,
       _net: Net,
       _paint_canvas: &mut PaintCanvas,
-      _sender: SocketAddr,
+      _peer_id: PeerId,
       _payload: Vec<u8>,
    ) -> anyhow::Result<()> {
       Ok(())
@@ -130,14 +130,14 @@ pub trait Tool {
    ///
    /// This can be used to let the peer know what's happening at the moment they joined,
    /// eg. in the selection tool this is used to send them the current capture.
-   fn network_peer_join(&mut self, _net: Net, _address: SocketAddr) -> anyhow::Result<()> {
+   fn network_peer_join(&mut self, _net: Net, _peer_id: PeerId) -> anyhow::Result<()> {
       Ok(())
    }
 
    /// Called when a peer has selected this tool.
    ///
    /// This can be used to initialize the tool's state for the peer.
-   fn network_peer_activate(&mut self, _net: Net, _address: SocketAddr) -> anyhow::Result<()> {
+   fn network_peer_activate(&mut self, _net: Net, _peer_id: PeerId) -> anyhow::Result<()> {
       Ok(())
    }
 
@@ -150,7 +150,7 @@ pub trait Tool {
       _renderer: &mut Backend,
       _net: Net,
       _paint_canvas: &mut PaintCanvas,
-      _address: SocketAddr,
+      _peer_id: PeerId,
    ) -> anyhow::Result<()> {
       Ok(())
    }
@@ -169,23 +169,18 @@ impl<'peer> Net<'peer> {
    }
 
    /// Sends a tool packet.
-   pub fn send<T>(
-      &self,
-      tool: &impl Tool,
-      address: Option<SocketAddr>,
-      payload: T,
-   ) -> anyhow::Result<()>
+   pub fn send<T>(&self, tool: &impl Tool, peer_id: PeerId, payload: T) -> anyhow::Result<()>
    where
       T: 'static + Serialize,
    {
       let payload = bincode::serialize(&payload)?;
-      self.peer.send_tool(address, tool.name().to_owned(), payload)?;
+      self.peer.send_tool(peer_id, tool.name().to_owned(), payload)?;
       Ok(())
    }
 
    /// Returns the name of the given peer, if the peer is present.
-   pub fn peer_name(&self, address: SocketAddr) -> Option<&str> {
-      self.peer.mates().get(&address).map(|mate| mate.nickname.deref())
+   pub fn peer_name(&self, peer_id: PeerId) -> Option<&str> {
+      self.peer.mates().get(&peer_id).map(|mate| mate.nickname.deref())
    }
 }
 

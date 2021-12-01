@@ -4,16 +4,16 @@ mod tools;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use native_dialog::FileDialog;
+use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, RenderBackend};
+use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 
 use crate::app::paint::tools::KeyShortcutAction;
@@ -486,28 +486,40 @@ impl State {
             _ => (),
          }
       }
-      if self.peer.is_host() {
-         // The room ID itself
-         let id_text = format!("{:04}", self.peer.room_id().unwrap());
-         ui.push((64.0, ui.height()), Layout::Freeform);
-         ui.text(
-            &self.assets.sans_bold,
-            &id_text,
-            self.assets.colors.text,
-            (AlignH::Center, AlignV::Middle),
-         );
-         ui.pop();
 
-         // "Room ID" text
-         ui.push((64.0, ui.height()), Layout::Freeform);
-         ui.text(
-            &self.assets.sans,
-            "Room ID",
-            self.assets.colors.text,
-            (AlignH::Center, AlignV::Middle),
-         );
-         ui.pop();
-      }
+      // The room ID itself
+      let id_text = format!("{}", self.peer.room_id().unwrap());
+      ui.push((72.0, ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.monospace.with_size(15.0),
+         &id_text,
+         self.assets.colors.text,
+         (AlignH::Center, AlignV::Middle),
+      );
+      ui.pop();
+
+      // "Room ID" text
+      ui.push((64.0, ui.height()), Layout::Freeform);
+      ui.text(
+         &self.assets.sans,
+         "Room ID",
+         self.assets.colors.text,
+         (AlignH::Center, AlignV::Middle),
+      );
+      ui.pop();
+      ui.space(8.0);
+
+      // Role icon
+      ui.icon(
+         if self.peer.is_host() {
+            &self.assets.icons.peer.host
+         } else {
+            &self.assets.icons.peer.client
+         },
+         self.assets.colors.text,
+         Some(vector(ui.height(), ui.height())),
+      );
+
       ui.pop();
 
       ui.pop();
@@ -586,19 +598,19 @@ impl State {
       use peer::MessageKind;
 
       match message.kind {
-         MessageKind::Joined(nickname, address) => {
+         MessageKind::Joined(nickname, peer_id) => {
             log!(self.log, "{} joined the room", nickname);
             if self.peer.is_host() {
                let positions = self.paint_canvas.chunk_positions();
-               self.peer.send_chunk_positions(address, positions)?;
+               self.peer.send_chunk_positions(peer_id, positions)?;
             }
             // Order matters here! The tool selection packet must arrive before the packets sent
             // from the tool's `network_peer_join` event.
             self.peer.send_select_tool(self.clone_tool_name())?;
-            self.with_current_tool(|p, tool| tool.network_peer_join(Net::new(&p.peer), address))?;
+            self.with_current_tool(|p, tool| tool.network_peer_join(Net::new(&p.peer), peer_id))?;
          }
          MessageKind::Left {
-            address,
+            peer_id,
             nickname,
             last_tool,
          } => {
@@ -612,11 +624,13 @@ impl State {
                      ui,
                      Net::new(&mut self.peer),
                      &mut self.paint_canvas,
-                     address,
+                     peer_id,
                   )?;
                }
             }
          }
+         MessageKind::NewHost(name) => log!(self.log, "{} is now hosting the room", name),
+         MessageKind::NowHosting => log!(self.log, "You are now hosting the room"),
          MessageKind::ChunkPositions(positions) => {
             eprintln!("received {} chunk positions", positions.len());
             for chunk_position in positions {
@@ -651,11 +665,11 @@ impl State {
             }
          }
          MessageKind::SelectTool {
-            address,
+            peer_id: address,
             previous_tool,
             tool,
          } => {
-            eprintln!("{} selected tool {}", address, tool);
+            eprintln!("{:?} selected tool {}", address, tool);
             // Deselect the old tool.
             if let Some(tool) = previous_tool {
                if let Some(&tool_id) = self.tools_by_name.get(&tool) {
@@ -682,7 +696,7 @@ impl State {
       Ok(())
    }
 
-   fn send_chunks(&mut self, address: SocketAddr, positions: &[(i32, i32)]) -> anyhow::Result<()> {
+   fn send_chunks(&mut self, peer_id: PeerId, positions: &[(i32, i32)]) -> anyhow::Result<()> {
       const KILOBYTE: usize = 1024;
       const MAX_BYTES_PER_PACKET: usize = 128 * KILOBYTE;
 
@@ -692,14 +706,14 @@ impl State {
          if bytes_of_image_data > MAX_BYTES_PER_PACKET {
             let packet = std::mem::replace(&mut packet, Vec::new());
             bytes_of_image_data = 0;
-            self.peer.send_chunks(address, packet)?;
+            self.peer.send_chunks(peer_id, packet)?;
          }
          if let Some(image_data) = self.paint_canvas.network_data(chunk_position) {
             packet.push((chunk_position, image_data.to_owned()));
             bytes_of_image_data += image_data.len();
          }
       }
-      self.peer.send_chunks(address, packet)?;
+      self.peer.send_chunks(peer_id, packet)?;
 
       Ok(())
    }

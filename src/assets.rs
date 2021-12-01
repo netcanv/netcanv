@@ -1,18 +1,21 @@
 //! Handling of assets such as icons, fonts, etc.
 
 use netcanv_renderer::paws::Color;
-use netcanv_renderer::{Font as FontTrait, RenderBackend};
+use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
 use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
+const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf");
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
+const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
+const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
@@ -47,6 +50,12 @@ pub struct FileIcons {
    pub save: Image,
 }
 
+/// Icons for peer roles.
+pub struct PeerIcons {
+   pub client: Image,
+   pub host: Image,
+}
+
 /// Icons for the color scheme switcher.
 pub struct ColorSwitcherIcons {
    pub dark: Image,
@@ -58,6 +67,7 @@ pub struct Icons {
    pub expand: ExpandIcons,
    pub status: StatusIcons,
    pub file: FileIcons,
+   pub peer: PeerIcons,
    pub color_switcher: ColorSwitcherIcons,
 }
 
@@ -65,6 +75,7 @@ pub struct Icons {
 pub struct Assets {
    pub sans: Font,
    pub sans_bold: Font,
+   pub monospace: Font,
 
    pub colors: ColorScheme,
    pub icons: Icons,
@@ -92,6 +103,7 @@ impl Assets {
       Self {
          sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
          sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
+         monospace: renderer.create_font_from_memory(MONOSPACE_TTF, 14.0),
          colors,
          icons: Icons {
             expand: ExpandIcons {
@@ -104,6 +116,10 @@ impl Assets {
             },
             file: FileIcons {
                save: Self::load_icon(renderer, SAVE_SVG),
+            },
+            peer: PeerIcons {
+               client: Self::load_icon(renderer, PEER_CLIENT_SVG),
+               host: Self::load_icon(renderer, PEER_HOST_SVG),
             },
             color_switcher: ColorSwitcherIcons {
                dark: Self::load_icon(renderer, DARK_MODE_SVG),

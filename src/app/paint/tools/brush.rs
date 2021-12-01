@@ -1,10 +1,10 @@
 //! The Brush tool. Allows for painting, as well as erasing pixels from the canvas.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::time::Instant;
 
 use crate::backend::winit::event::MouseButton;
+use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
 };
@@ -42,7 +42,7 @@ pub struct BrushTool {
    previous_mouse_position: Point,
    stroke_points: Vec<Stroke>,
 
-   peers: HashMap<SocketAddr, PeerBrush>,
+   peers: HashMap<PeerId, PeerBrush>,
 }
 
 impl BrushTool {
@@ -109,10 +109,10 @@ impl BrushTool {
       });
    }
 
-   fn ensure_peer(&mut self, address: SocketAddr) -> &mut PeerBrush {
-      if !self.peers.contains_key(&address) {
+   fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerBrush {
+      if !self.peers.contains_key(&peer_id) {
          self.peers.insert(
-            address,
+            peer_id,
             PeerBrush {
                mouse_position: point(0.0, 0.0),
                previous_mouse_position: point(0.0, 0.0),
@@ -122,7 +122,7 @@ impl BrushTool {
             },
          );
       }
-      self.peers.get_mut(&address).unwrap()
+      self.peers.get_mut(&peer_id).unwrap()
    }
 }
 
@@ -239,9 +239,9 @@ impl Tool for BrushTool {
          ui, net, assets, ..
       }: ToolArgs,
       viewport: &Viewport,
-      address: SocketAddr,
+      peer_id: PeerId,
    ) {
-      if let Some(peer) = self.peers.get(&address) {
+      if let Some(peer) = self.peers.get(&peer_id) {
          let position = viewport.to_screen_space(peer.lerp_mouse_position(), ui.size());
          let radius = peer.thickness / 2.0 * viewport.zoom();
          let renderer = ui.render();
@@ -251,7 +251,7 @@ impl Tool for BrushTool {
          renderer.outline_circle(position, radius, Color::WHITE.with_alpha(240), 1.0);
          renderer.pop();
          // Render their nickname.
-         let nickname = net.peer_name(address).unwrap();
+         let nickname = net.peer_name(peer_id).unwrap();
          let text_color = if peer.color.brightness() > 0.5 {
             Color::BLACK
          } else {
@@ -351,14 +351,14 @@ impl Tool for BrushTool {
    fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
       if !self.stroke_points.is_empty() {
          let packet = Packet::Stroke(self.stroke_points.drain(..).collect());
-         net.send(self, None, packet)?;
+         net.send(self, PeerId::BROADCAST, packet)?;
       }
       if self.mouse_position != self.previous_mouse_position {
          let Point { x, y } = self.mouse_position;
          let Color { r, g, b, a } = self.color;
          net.send(
             self,
-            None,
+            PeerId::BROADCAST,
             Packet::Cursor {
                position: (x, y),
                thickness: self.thickness() as u8,
@@ -374,7 +374,7 @@ impl Tool for BrushTool {
       renderer: &mut Backend,
       _net: Net,
       paint_canvas: &mut PaintCanvas,
-      sender: SocketAddr,
+      sender: PeerId,
       payload: Vec<u8>,
    ) -> anyhow::Result<()> {
       let packet: Packet = bincode::deserialize(&payload)?;
@@ -421,8 +421,8 @@ impl Tool for BrushTool {
       Ok(())
    }
 
-   fn network_peer_activate(&mut self, _net: Net, address: SocketAddr) -> anyhow::Result<()> {
-      self.ensure_peer(address);
+   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> anyhow::Result<()> {
+      self.ensure_peer(peer_id);
       Ok(())
    }
 }
