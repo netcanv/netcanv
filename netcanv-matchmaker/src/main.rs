@@ -106,7 +106,6 @@ impl Rooms {
             0
          };
          if n_connected == 0 {
-            println!("closing room {:?}", room_id);
             self.remove_room(room_id);
          }
       }
