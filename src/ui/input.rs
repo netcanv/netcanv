@@ -21,9 +21,9 @@ pub struct Input {
    mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
-   active_mouse_area: u32,
-   processed_mouse_area: u32,
-   frame_mouse_area: u32,
+   active_mouse_area: usize,
+   processed_mouse_area: usize,
+   frame_mouse_area: usize,
 
    // keyboard input
    char_buffer: Vec<char>,
@@ -124,7 +124,7 @@ impl Input {
    ///
    /// Mouse events are only received if the mouse area at the end of the previous frame was the
    /// same as the mouse area that's currently active.
-   pub fn set_mouse_area(&mut self, area: u32, active: bool) {
+   pub fn set_mouse_area(&mut self, area: usize, active: bool) {
       self.active_mouse_area = area;
       if active {
          self.processed_mouse_area = area;

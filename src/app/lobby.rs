@@ -390,7 +390,7 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+   fn process(&mut self, StateArgs { ui, input, .. }: StateArgs) {
       ui.clear(self.assets.colors.panel);
 
       // The lobby does not use mouse areas.

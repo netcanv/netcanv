@@ -720,7 +720,7 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+   fn process(&mut self, StateArgs { ui, input, .. }: StateArgs) {
       ui.clear(Color::WHITE);
 
       // Loading from file
@@ -788,7 +788,7 @@ impl AppState for State {
 }
 
 mod mouse_areas {
-   pub const CANVAS: u32 = 0;
-   pub const BOTTOM_BAR: u32 = 1;
-   pub const TOOLBAR: u32 = 2;
+   pub const CANVAS: usize = 0;
+   pub const BOTTOM_BAR: usize = 1;
+   pub const TOOLBAR: usize = 2;
 }

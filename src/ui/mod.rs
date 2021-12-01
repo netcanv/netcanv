@@ -10,6 +10,7 @@ mod expand;
 mod input;
 mod slider;
 mod textfield;
+pub mod view;
 
 pub use button::*;
 pub use expand::*;

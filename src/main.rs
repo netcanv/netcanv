@@ -33,6 +33,7 @@ use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::WindowBuilder;
+use crate::ui::view::{self, View};
 use backend::Backend;
 use config::UserConfig;
 use native_dialog::{MessageDialog, MessageType};
@@ -121,12 +122,14 @@ fn inner_main() -> anyhow::Result<()> {
                   vector(window_size.width as f32, window_size.height as f32),
                   Layout::Freeform,
                );
-               // `unwrap()` always succeeds here as app is never None.
+               let mut root_view = View::group_sized(ui);
+               view::layout::full_screen(&mut root_view);
+
                app.as_mut().unwrap().process(StateArgs {
                   ui,
                   input: &mut input,
+                  root_view,
                });
-               // See? Told ya.
                app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
                Err(error) => eprintln!("render error: {}", error),
