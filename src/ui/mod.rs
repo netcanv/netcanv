@@ -6,6 +6,7 @@ use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
 use crate::backend::{Backend, Font, Image};
 
 mod button;
+mod contextmenu;
 mod expand;
 mod input;
 mod slider;
@@ -13,6 +14,7 @@ mod textfield;
 pub mod view;
 
 pub use button::*;
+pub use contextmenu::*;
 pub use expand::*;
 pub use input::*;
 pub use slider::*;

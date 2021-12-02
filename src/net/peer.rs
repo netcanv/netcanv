@@ -88,7 +88,7 @@ pub struct Peer {
    mates: HashMap<PeerId, Mate>,
 }
 
-static PEER_TOKEN: Token = Token::new();
+static PEER_TOKEN: Token = Token::new(0);
 
 impl Peer {
    /// Host a new room on the given matchmaker.

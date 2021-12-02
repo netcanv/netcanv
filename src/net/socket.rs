@@ -108,7 +108,7 @@ where
    inner: Mutex<SocketSystemInner<T>>,
 }
 
-static CONNECTION_TOKEN: Token = Token::new();
+static CONNECTION_TOKEN: Token = Token::new(0);
 
 impl<T> SocketSystem<T>
 where

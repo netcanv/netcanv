@@ -87,11 +87,9 @@ impl Input {
       !self.mouse_buttons_locked()
    }
 
-   /// Returns whether the given mouse button is being held down.
-   pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked() {
-         return false;
-      }
+   /// Returns whether the given mouse button is being held down, globally (independent of
+   /// the current mouse area).
+   pub fn global_mouse_button_is_down(&self, button: MouseButton) -> bool {
       if let Some(i) = Self::mouse_button_index(button) {
          self.mouse_button_is_down[i]
       } else {
@@ -99,16 +97,24 @@ impl Input {
       }
    }
 
-   /// Returns whether the given mouse button has just been clicked.
-   pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked() {
-         return false;
-      }
+   /// Returns whether the given mouse button is being held down.
+   pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
+      !self.mouse_buttons_locked() && self.global_mouse_button_is_down(button)
+   }
+
+   /// Returns whether the given mouse button has just been pressed, globally (independent of
+   /// the current mouse area).
+   pub fn global_mouse_button_just_pressed(&self, button: MouseButton) -> bool {
       if let Some(i) = Self::mouse_button_index(button) {
          self.mouse_button_just_pressed[i]
       } else {
          false
       }
+   }
+
+   /// Returns whether the given mouse button has just been clicked.
+   pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
+      !self.mouse_buttons_locked() && self.global_mouse_button_just_pressed(button)
    }
 
    /// Returns whether the given mouse button has just been released.

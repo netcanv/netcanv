@@ -7,9 +7,9 @@ pub struct Token {
 }
 
 impl Token {
-   pub const fn new() -> Self {
+   pub const fn new(initial_value: usize) -> Self {
       Self {
-         next: AtomicUsize::new(0),
+         next: AtomicUsize::new(initial_value),
       }
    }
 

@@ -26,7 +26,7 @@ use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::view::layout::DirectionV;
-use crate::ui::view::{Dimension, View};
+use crate::ui::view::{Dimension, Dimensions, View};
 use crate::ui::*;
 use crate::viewport::Viewport;
 
@@ -86,6 +86,8 @@ pub struct State {
    canvas_view: View,
    bottom_bar_view: View,
    toolbar_view: View,
+
+   overflow_menu: ContextMenu,
 }
 
 macro_rules! log {
@@ -150,6 +152,8 @@ impl State {
          canvas_view: View::new((Dimension::Percentage(1.0), Dimension::Rest(1.0))),
          bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
          toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
+
+         overflow_menu: ContextMenu::new((192.0, 64.0)),
       };
       this.register_tools(renderer);
 
@@ -470,9 +474,27 @@ impl State {
       // Note that elements in HorizontalRev go from right to left rather than left to right.
       //
 
-      // Room ID display
+      // TODO: move this to an overflow menu
 
       ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
+
+      if Button::with_icon(
+         ui,
+         input,
+         ButtonArgs {
+            height: ui.height(),
+            colors: &self.assets.colors.action_button,
+            corner_radius: 0.0,
+         },
+         &self.assets.icons.navigation.menu,
+      )
+      .clicked()
+      {
+         self.overflow_menu.toggle();
+      }
+      /*
+      // Room ID display
+
       if Button::with_icon(
          ui,
          input,
@@ -532,9 +554,27 @@ impl State {
          Some(vector(ui.height(), ui.height())),
       );
 
+      */
       ui.pop();
 
       self.bottom_bar_view.end(ui);
+   }
+
+   /// Processes the overflow menu.
+   fn process_overflow_menu(&mut self, ui: &mut Ui, input: &mut Input) {
+      if self
+         .overflow_menu
+         .begin(
+            ui,
+            input,
+            ContextMenuArgs {
+               colors: &self.assets.colors.context_menu,
+            },
+         )
+         .is_open()
+      {
+         self.overflow_menu.end(ui);
+      }
    }
 
    /// Reflows the toolbar's size.
@@ -565,7 +605,6 @@ impl State {
       ui.pad(4.0);
 
       let tools = self.tools.borrow_mut();
-
       let mut selected_tool = None;
       for (i, tool) in tools.iter().enumerate() {
          ui.push((Self::TOOL_SIZE, Self::TOOL_SIZE), Layout::Freeform);
@@ -590,8 +629,8 @@ impl State {
          ui.pop();
          ui.space(4.0);
       }
-
       drop(tools);
+
       if let Some(selected_tool) = selected_tool {
          self.set_current_tool(ui, selected_tool);
       }
@@ -730,13 +769,18 @@ impl State {
          &mut [&mut self.bottom_bar_view, &mut self.canvas_view],
          DirectionV::BottomToTop,
       );
+      let padded_canvas = view::layout::padded(&self.canvas_view, Self::CANVAS_INNER_PADDING);
+
       // The toolbar.
       self.resize_toolbar();
       let toolbar_alignment = self.toolbar_alignment();
+      view::layout::align(&padded_canvas, &mut self.toolbar_view, toolbar_alignment);
+
+      // The overflow menu.
       view::layout::align(
-         &view::layout::padded(&self.canvas_view, Self::CANVAS_INNER_PADDING),
-         &mut self.toolbar_view,
-         toolbar_alignment,
+         &padded_canvas,
+         &mut self.overflow_menu.view,
+         (AlignH::Right, AlignV::Bottom),
       );
    }
 }
@@ -808,6 +852,7 @@ impl AppState for State {
       // Bars
       self.process_toolbar(ui, input);
       self.process_bar(ui, input);
+      self.process_overflow_menu(ui, input);
    }
 
    fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {

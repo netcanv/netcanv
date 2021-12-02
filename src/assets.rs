@@ -4,7 +4,7 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
-use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
+use crate::ui::{ButtonColors, ContextMenuColors, ExpandColors, ExpandIcons, TextFieldColors};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
@@ -12,6 +12,7 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
+const MENU_SVG: &[u8] = include_bytes!("assets/icons/menu.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
@@ -35,8 +36,14 @@ pub struct ColorScheme {
    pub expand: ExpandColors,
    pub slider: Color,
    pub text_field: TextFieldColors,
+   pub context_menu: ContextMenuColors,
 
    pub titlebar: TitlebarColors,
+}
+
+/// Icons for navigation.
+pub struct NavigationIcons {
+   pub menu: Image,
 }
 
 /// Icons for status messages.
@@ -65,6 +72,7 @@ pub struct ColorSwitcherIcons {
 /// Icons, rendered to images at startup.
 pub struct Icons {
    pub expand: ExpandIcons,
+   pub navigation: NavigationIcons,
    pub status: StatusIcons,
    pub file: FileIcons,
    pub peer: PeerIcons,
@@ -109,6 +117,9 @@ impl Assets {
             expand: ExpandIcons {
                expand: Self::load_icon(renderer, CHEVRON_RIGHT_SVG),
                shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
+            },
+            navigation: NavigationIcons {
+               menu: Self::load_icon(renderer, MENU_SVG),
             },
             status: StatusIcons {
                info: Self::load_icon(renderer, INFO_SVG),
@@ -183,6 +194,9 @@ impl ColorScheme {
             label: Color::argb(0xff000000),
             selection: Color::argb(0x33000000),
          },
+         context_menu: ContextMenuColors {
+            background: Color::argb(0xffeeeeee),
+         },
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xffffffff),
             separator: Color::argb(0x7f000000),
@@ -245,6 +259,9 @@ impl ColorScheme {
             text_hint: Color::argb(0x7f939393),
             label: Color::argb(0xffd5d5d5),
             selection: Color::argb(0x7f939393),
+         },
+         context_menu: ContextMenuColors {
+            background: Color::argb(0xff1f1f1f),
          },
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xff383838),

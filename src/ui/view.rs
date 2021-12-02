@@ -73,7 +73,8 @@ pub struct View {
    size: Option<Vector>,
 }
 
-static MOUSE_AREA: Token = Token::new();
+static NO_MOUSE_AREA: usize = 0;
+static MOUSE_AREA: Token = Token::new(NO_MOUSE_AREA + 1);
 
 impl View {
    /// Creates a new view with the provided dimensions.
@@ -134,6 +135,15 @@ impl View {
    pub fn end(&self, ui: &mut Ui) {
       ui.pop();
       ui.pop();
+   }
+
+   /// Returns whether the view contains the mouse cursor.
+   pub fn has_mouse(&self, input: &Input) -> bool {
+      let mouse_position = input.mouse_position();
+      mouse_position.x >= self.position.x
+         && mouse_position.x < self.position.x + self.size().x
+         && mouse_position.y >= self.position.y
+         && mouse_position.y < self.position.y + self.size().y
    }
 }
 
