@@ -150,7 +150,7 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xff000000),
          panel: Color::argb(0xffeeeeee),
-         separator: Color::argb(0xff202020),
+         separator: Color::argb(0x30202020),
          error: Color::argb(0xff7f0000),
 
          button: ButtonColors {
@@ -216,7 +216,7 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xffb7b7b7),
          panel: Color::argb(0xff1f1f1f),
-         separator: Color::argb(0xff202020),
+         separator: Color::argb(0x50b7b7b7),
          error: Color::argb(0xfffc9292),
 
          button: ButtonColors {

@@ -1,5 +1,6 @@
 //! The paint state. This is the screen where you paint on the canvas with other people.
 
+mod actions;
 mod tools;
 
 use std::cell::RefCell;
@@ -15,6 +16,7 @@ use netcanv_renderer::paws::{
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 
+use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
@@ -30,6 +32,7 @@ use crate::ui::view::{Dimension, View};
 use crate::ui::*;
 use crate::viewport::Viewport;
 
+use self::actions::SaveToFileAction;
 use self::tools::{BrushTool, Net, SelectionTool, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
@@ -68,13 +71,13 @@ pub struct State {
    tools_by_name: HashMap<String, usize>,
    current_tool: usize,
 
+   actions: Vec<Box<dyn actions::Action>>,
+   save_to_file: Option<PathBuf>,
+   last_autosave: Instant,
+
    peer: Peer,
    update_timer: Timer,
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
-
-   load_from_file: Option<PathBuf>,
-   save_to_file: Option<PathBuf>,
-   last_autosave: Instant,
 
    fatal_error: bool,
    log: Log,
@@ -97,9 +100,6 @@ macro_rules! log {
 }
 
 impl State {
-   /// The interval of automatic saving.
-   const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
-
    /// The network communication tick interval.
    pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
 
@@ -120,7 +120,7 @@ impl State {
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
-   ) -> Self {
+   ) -> Result<Self, (anyhow::Error, Assets, UserConfig)> {
       let mut this = Self {
          assets,
          config,
@@ -130,11 +130,12 @@ impl State {
          tools_by_name: HashMap::new(),
          current_tool: 0,
 
+         actions: Vec::new(),
+
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
 
-         load_from_file: image_path,
          save_to_file: None,
          last_autosave: Instant::now(),
 
@@ -153,9 +154,16 @@ impl State {
          bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
          toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
 
-         overflow_menu: ContextMenu::new((224.0, 112.0)),
+         overflow_menu: ContextMenu::new((256.0, 0.0)), // Vertical is filled in later
       };
       this.register_tools(renderer);
+      this.register_actions(renderer);
+
+      if let Some(path) = image_path {
+         if let Err(error) = this.paint_canvas.load(renderer, &path) {
+            return Err((error, this.assets, this.config));
+         }
+      }
 
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
@@ -165,7 +173,7 @@ impl State {
          );
       }
 
-      this
+      Ok(this)
    }
 
    /// Registers a tool.
@@ -181,6 +189,21 @@ impl State {
       // Set the default tool to the brush.
       self.current_tool = self.tools.borrow().len();
       self.register_tool(Box::new(BrushTool::new(renderer)));
+   }
+
+   /// Registers all the actions and calculates the layout height of the overflow menu.
+   fn register_actions(&mut self, renderer: &mut Backend) {
+      self.actions.push(Box::new(SaveToFileAction::new(renderer)));
+
+      let room_id_height = 108.0;
+      let separator_height = 8.0 * 2.0;
+      let action_height = 32.0;
+      let action_margin = 4.0;
+      let actions_height = action_height * self.actions.len() as f32
+         + action_margin * (self.actions.len() - 1) as f32
+         + 4.0;
+      self.overflow_menu.view.dimensions.vertical =
+         Dimension::Constant(room_id_height + separator_height + actions_height);
    }
 
    /// Executes the given callback with the currently selected tool.
@@ -565,9 +588,13 @@ impl State {
          )
          .is_open()
       {
-         ui.pad(12.0);
+         ui.pad(8.0);
 
          // Room ID display
+
+         ui.push((ui.width(), 0.0), Layout::Vertical);
+         ui.pad((8.0, 0.0));
+         ui.space(8.0);
 
          ui.vertical_label(
             &self.assets.sans,
@@ -601,7 +628,10 @@ impl State {
             Some(ui.remaining_width()),
          );
          ui.pop();
-         ui.space(8.0);
+
+         ui.fit();
+         ui.pop();
+         ui.space(4.0);
 
          // Room host display
 
@@ -615,6 +645,7 @@ impl State {
             self.assets.colors.text,
             Some(vector(ui.height(), ui.height())),
          );
+         ui.space(4.0);
          if self.peer.is_host() {
             ui.horizontal_label(
                &self.assets.sans,
@@ -649,6 +680,50 @@ impl State {
             ui.pop();
          }
          ui.pop();
+
+         ui.space(8.0);
+         ui.push((ui.width(), 0.0), Layout::Freeform);
+         ui.border_top(self.assets.colors.separator, 1.0);
+         ui.pop();
+         ui.space(8.0);
+
+         for action in &mut self.actions {
+            if Button::process(
+               ui,
+               input,
+               ButtonArgs {
+                  height: 32.0,
+                  colors: &self.assets.colors.action_button,
+                  corner_radius: 2.0,
+               },
+               Some(ui.width()),
+               |ui| {
+                  ui.push(ui.size(), Layout::Horizontal);
+                  ui.icon(
+                     action.icon(),
+                     self.assets.colors.text,
+                     Some(vector(ui.height(), ui.height())),
+                  );
+                  ui.space(4.0);
+                  ui.horizontal_label(
+                     &self.assets.sans,
+                     action.name(),
+                     self.assets.colors.text,
+                     None,
+                  );
+                  ui.pop();
+               },
+            )
+            .clicked()
+            {
+               if let Err(error) = action.perform(ActionArgs {
+                  paint_canvas: &mut self.paint_canvas,
+               }) {
+                  log!(self.log, "error while performing action: {}", error);
+               }
+            }
+            ui.space(4.0);
+         }
 
          self.overflow_menu.end(ui);
       }
@@ -873,21 +948,15 @@ impl AppState for State {
    ) {
       ui.clear(Color::WHITE);
 
-      // Loading from file
-
-      if self.load_from_file.is_some() {
-         catch!(self.paint_canvas.load(ui, &self.load_from_file.take().unwrap()))
-      }
-
       // Autosaving
 
-      if self.paint_canvas.filename().is_some()
-         && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
-      {
-         eprintln!("autosaving chunks");
-         catch!(self.paint_canvas.save(None));
-         eprintln!("autosave complete");
-         self.last_autosave = Instant::now();
+      for action in &mut self.actions {
+         match action.process(ActionArgs {
+            paint_canvas: &mut self.paint_canvas,
+         }) {
+            Ok(()) => (),
+            Err(error) => log!(self.log, "error while processing action: {}", error),
+         }
       }
 
       // Network
