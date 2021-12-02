@@ -308,7 +308,7 @@ impl Tool for BrushTool {
 
       // Draw the thickness: its slider and value display.
 
-      ui.label(&assets.sans, "Thickness", assets.colors.text, None);
+      ui.horizontal_label(&assets.sans, "Thickness", assets.colors.text, None);
       ui.space(16.0);
 
       ui.push((192.0, ui.height()), Layout::Freeform);
@@ -340,7 +340,7 @@ impl Tool for BrushTool {
       ui.pop();
       ui.space(8.0);
 
-      ui.label(
+      ui.horizontal_label(
          &assets.sans_bold,
          &self.thickness().to_string(),
          assets.colors.text,

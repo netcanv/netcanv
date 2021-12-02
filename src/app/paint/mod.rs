@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use native_dialog::FileDialog;
 use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, Layout, Rect, Renderer, Vector,
@@ -20,13 +19,14 @@ use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
+use crate::clipboard;
 use crate::common::*;
 use crate::config::{ToolbarPosition, UserConfig};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::view::layout::DirectionV;
-use crate::ui::view::{Dimension, Dimensions, View};
+use crate::ui::view::{Dimension, View};
 use crate::ui::*;
 use crate::viewport::Viewport;
 
@@ -153,7 +153,7 @@ impl State {
          bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
          toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
 
-         overflow_menu: ContextMenu::new((192.0, 64.0)),
+         overflow_menu: ContextMenu::new((224.0, 112.0)),
       };
       this.register_tools(renderer);
 
@@ -522,15 +522,7 @@ impl State {
       }
 
       // The room ID itself
-      let id_text = format!("{}", self.peer.room_id().unwrap());
-      ui.push((72.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.monospace.with_size(15.0),
-         &id_text,
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
+
 
       // "Room ID" text
       ui.push((64.0, ui.height()), Layout::Freeform);
@@ -573,6 +565,91 @@ impl State {
          )
          .is_open()
       {
+         ui.pad(12.0);
+
+         // Room ID display
+
+         ui.vertical_label(
+            &self.assets.sans,
+            "Room ID",
+            self.assets.colors.text,
+            AlignH::Left,
+         );
+         ui.space(8.0);
+
+         let id_text = format!("{}", self.peer.room_id().unwrap());
+         ui.push((ui.width(), 32.0), Layout::HorizontalRev);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: ui.height(),
+               colors: &self.assets.colors.action_button,
+               corner_radius: 0.0,
+            },
+            &self.assets.icons.navigation.copy,
+         )
+         .clicked()
+         {
+            log!(self.log, "Room ID copied to clipboard");
+            catch!(clipboard::copy_string(id_text.clone()));
+         }
+         ui.horizontal_label(
+            &self.assets.monospace.with_size(24.0),
+            &id_text,
+            self.assets.colors.text,
+            Some(ui.remaining_width()),
+         );
+         ui.pop();
+         ui.space(8.0);
+
+         // Room host display
+
+         ui.push((ui.width(), 32.0), Layout::Horizontal);
+         ui.icon(
+            if self.peer.is_host() {
+               &self.assets.icons.peer.host
+            } else {
+               &self.assets.icons.peer.client
+            },
+            self.assets.colors.text,
+            Some(vector(ui.height(), ui.height())),
+         );
+         if self.peer.is_host() {
+            ui.horizontal_label(
+               &self.assets.sans,
+               "You are the host",
+               self.assets.colors.text,
+               None,
+            );
+         } else {
+            ui.push(
+               (ui.remaining_width(), self.assets.sans.height() * 2.0 + 4.0),
+               Layout::Vertical,
+            );
+            ui.align((AlignH::Right, AlignV::Middle));
+            let name = truncate_text(
+               &self.assets.sans_bold,
+               ui.width(),
+               self.peer.host_name().unwrap_or("<unknown>"),
+            );
+            ui.vertical_label(
+               &self.assets.sans_bold,
+               &name,
+               self.assets.colors.text,
+               AlignH::Left,
+            );
+            ui.space(4.0);
+            ui.vertical_label(
+               &self.assets.sans,
+               "is your host",
+               self.assets.colors.text,
+               AlignH::Left,
+            );
+            ui.pop();
+         }
+         ui.pop();
+
          self.overflow_menu.end(ui);
       }
    }

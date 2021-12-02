@@ -13,6 +13,7 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
 const MENU_SVG: &[u8] = include_bytes!("assets/icons/menu.svg");
+const COPY_SVG: &[u8] = include_bytes!("assets/icons/copy.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
@@ -44,6 +45,7 @@ pub struct ColorScheme {
 /// Icons for navigation.
 pub struct NavigationIcons {
    pub menu: Image,
+   pub copy: Image,
 }
 
 /// Icons for status messages.
@@ -120,6 +122,7 @@ impl Assets {
             },
             navigation: NavigationIcons {
                menu: Self::load_icon(renderer, MENU_SVG),
+               copy: Self::load_icon(renderer, COPY_SVG),
             },
             status: StatusIcons {
                info: Self::load_icon(renderer, INFO_SVG),

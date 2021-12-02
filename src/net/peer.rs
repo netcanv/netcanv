@@ -394,6 +394,20 @@ impl Peer {
       self.is_host
    }
 
+   /// Returns the name of the host, or `None` if this peer is the host (or if the host's name isn't
+   /// yet known).
+   pub fn host_name(&self) -> Option<&str> {
+      if self.is_host() {
+         None
+      } else {
+         if let Some(mate) = self.mates.get(&self.host?) {
+            Some(&mate.nickname)
+         } else {
+            None
+         }
+      }
+   }
+
    /// Returns the ID of the room, or `None` if a connection hasn't been established.
    pub fn room_id(&self) -> Option<RoomId> {
       self.room_id

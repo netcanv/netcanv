@@ -1,6 +1,9 @@
 //! Various assorted utilities.
 
 use netcanv_renderer::paws::{point, vector, Color, Point, Rect, Vector};
+use netcanv_renderer::Font as FontTrait;
+
+use crate::backend::Font;
 
 //
 // Math
@@ -238,4 +241,23 @@ macro_rules! catch {
     ($exp:expr $(,)?) => {
         catch!($exp, return ())
     };
+}
+
+//
+// Text
+//
+
+/// Shrinks the given string until it matches the given width.
+pub fn truncate_text(font: &Font, max_width: f32, text: &str) -> String {
+   let mut text = String::from(text);
+   if font.text_width(&text) > max_width {
+      const ELLIPSIS: &str = "…";
+      let suffix_width = font.text_width(ELLIPSIS);
+      let max_width = max_width - suffix_width;
+      while font.text_width(&text) > max_width {
+         text.pop();
+      }
+      text.push_str(ELLIPSIS);
+   }
+   text
 }

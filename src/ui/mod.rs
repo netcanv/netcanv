@@ -57,9 +57,13 @@ pub trait UiElements {
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
 
    /// Draws text in a new group.
+   fn vertical_label(&mut self, font: &Font, text: &str, color: Color, alignment: AlignH);
+
+   /// Draws text in a new group.
    ///
    /// Intended for use with horizontal layouts. Will not work all that well with vertical.
-   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
+   /// Use [`UiElements::vertical_label`] instead.
+   fn horizontal_label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
 
    /// Draws a paragraph of text. Each string in `text` is treated as a new group.
    fn paragraph(
@@ -84,7 +88,13 @@ impl UiElements for Ui {
       self.pop();
    }
 
-   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
+   fn vertical_label(&mut self, font: &Font, text: &str, color: Color, alignment: AlignH) {
+      self.push((self.width(), font.height()), Layout::Freeform);
+      self.text(font, text, color, (alignment, AlignV::Top));
+      self.pop();
+   }
+
+   fn horizontal_label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
       let width = width.unwrap_or_else(|| font.text_width(text));
       self.push((width, self.height()), Layout::Freeform);
       self.text(font, text, color, (AlignH::Center, AlignV::Middle));

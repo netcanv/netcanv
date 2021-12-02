@@ -470,7 +470,7 @@ impl Tool for SelectionTool {
       // Show the mouse position.
       let mouse_position = format_vector(self.mouse_position);
       ui.icon(&self.icons.cursor, assets.colors.text, Some(icon_size));
-      ui.label(
+      ui.horizontal_label(
          &assets.sans,
          &mouse_position,
          assets.colors.text,
@@ -482,7 +482,7 @@ impl Tool for SelectionTool {
          // Show the selection anchor.
          let anchor = format_vector(rect.position);
          ui.icon(&self.icons.position, assets.colors.text, Some(icon_size));
-         ui.label(
+         ui.horizontal_label(
             &assets.sans,
             &anchor,
             assets.colors.text,
@@ -490,7 +490,7 @@ impl Tool for SelectionTool {
          );
          let size = format!("{:.0} × {:.0}", rect.width(), rect.height());
          ui.icon(&self.icons.rectangle, assets.colors.text, Some(icon_size));
-         ui.label(
+         ui.horizontal_label(
             &assets.sans,
             &size,
             assets.colors.text,
