@@ -1,0 +1,149 @@
+//! Color space conversions.
+
+// A lot of the code was adapted from Björn Ottosson's blog:
+// https://bottosson.github.io/posts/colorwrong/
+// https://bottosson.github.io/posts/oklab/
+// https://bottosson.github.io/posts/colorpicker/
+// I highly encourage that you check all of these posts out!
+
+use netcanv_renderer::paws::Color;
+
+/// An sRGB color.
+///
+/// The gamma is assumed to be 2.4.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Srgb {
+   /// The red channel, in range `0.0..=1.0`.
+   pub r: f32,
+   /// The green channel, in range `0.0..=1.0`.
+   pub g: f32,
+   /// The blue channel, in range `0.0..=1.0`.
+   pub b: f32,
+}
+
+impl Srgb {
+   /// Creates an sRGB color from a `Color`. The alpha channel is discarded.
+   pub fn from_color(color: Color) -> Self {
+      Self {
+         r: color.r as f32 / 255.0,
+         g: color.g as f32 / 255.0,
+         b: color.b as f32 / 255.0,
+      }
+   }
+
+   /// Converts an sRGB color to a `Color`. The provided alpha value is used.
+   pub fn to_color(&self, alpha: f32) -> Color {
+      Color {
+         r: (self.r * 255.0) as u8,
+         g: (self.g * 255.0) as u8,
+         b: (self.b * 255.0) as u8,
+         a: (alpha * 255.0) as u8,
+      }
+   }
+}
+
+impl From<LinearRgb> for Srgb {
+   fn from(color: LinearRgb) -> Self {
+      Self {
+         r: linear_to_srgb(color.r),
+         g: linear_to_srgb(color.g),
+         b: linear_to_srgb(color.b),
+      }
+   }
+}
+
+/// The linear RGB to sRGB mapping function.
+fn linear_to_srgb(x: f32) -> f32 {
+   if x >= 0.0031308 {
+      ((1.055) * x).powf(1.0 / 2.4) - 0.055
+   } else {
+      12.92 * x
+   }
+}
+
+/// A linear RGB color.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LinearRgb {
+   /// The red channel, in range `0.0..=1.0`.
+   pub r: f32,
+   /// The green channel, in range `0.0..=1.0`.
+   pub g: f32,
+   /// The blue channel, in range `0.0..=1.0`.
+   pub b: f32,
+}
+
+impl From<Srgb> for LinearRgb {
+   fn from(color: Srgb) -> Self {
+      Self {
+         r: srgb_to_linear(color.r),
+         g: srgb_to_linear(color.g),
+         b: srgb_to_linear(color.b),
+      }
+   }
+}
+
+/// The sRGB to linear RGB mapping function.
+fn srgb_to_linear(x: f32) -> f32 {
+   if x >= 0.04045 {
+      ((x + 0.055) / (1.0 + 0.055)).powf(2.4)
+   } else {
+      x / 12.92
+   }
+}
+
+/// An HSV color.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hsv {
+   /// The hue, in range `0.0..=6.0`. Multiply by 60 to get the number of degrees.
+   pub h: f32,
+   /// The saturation, in range `0.0..=1.0`.
+   pub s: f32,
+   /// The value, in range `0.0..=1.0`.
+   pub v: f32,
+}
+
+impl From<Srgb> for Hsv {
+   fn from(Srgb { r, g, b }: Srgb) -> Self {
+      // https://en.wikipedia.org/wiki/HSL_and_HSV#From_RGB
+      let v = f32::max(r, f32::max(g, b));
+      let c = v - f32::min(r, f32::min(g, b));
+      Self {
+         h: if r > g && r > b {
+            (g - b) / c
+         } else if g > r && g > b {
+            2.0 + (b - r) / c
+         } else if b > r && b > g {
+            4.0 + (r - g) / c
+         } else {
+            // R = G = B
+            0.0
+         },
+         s: if v == 0.0 { 0.0 } else { c / v },
+         v,
+      }
+   }
+}
+
+impl From<Hsv> for Srgb {
+   fn from(Hsv { h, s, v }: Hsv) -> Self {
+      // https://en.wikipedia.org/wiki/HSL_and_HSV#To_RGB
+      let c = v * s;
+      let x = c * (1.0 - f32::abs(h.rem_euclid(2.0) - 1.0));
+      let (r, g, b) = if h >= 0.0 && h < 1.0 {
+         (c, x, 0.0)
+      } else if h >= 1.0 && h < 2.0 {
+         (x, c, 0.0)
+      } else if h >= 2.0 && h < 3.0 {
+         (0.0, c, x)
+      } else if h >= 3.0 && h < 4.0 {
+         (0.0, x, c)
+      } else if h >= 4.0 && h < 5.0 {
+         (x, 0.0, c)
+      } else if h >= 5.0 && h < 6.0 {
+         (c, 0.0, x)
+      } else {
+         (0.0, 0.0, 0.0)
+      };
+      Self { r, g, b }
+   }
+}
