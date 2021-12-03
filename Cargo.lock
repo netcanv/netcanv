@@ -1166,7 +1166,6 @@ dependencies = [
  "glam",
  "glow",
  "glutin",
- "lazy_static",
  "memoffset",
  "netcanv-renderer",
  "smallvec",
