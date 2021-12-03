@@ -1,15 +1,33 @@
-//! Color picker with palettes.
+//! Color picker with palettes and multiple color spaces.
 
 use netcanv_renderer::paws::{point, Color, Layout, Rect, Renderer};
 use netcanv_renderer_opengl::winit::event::MouseButton;
 
+use crate::assets::Assets;
+use crate::backend::Image;
 use crate::color::{AnyColor, Srgb};
 
-use super::{Input, Ui, UiInput};
+use super::view::{Dimension, Dimensions, View};
+use super::wm::{WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager};
+use super::{Button, ButtonArgs, Input, Ui, UiInput};
 
+/// Arguments for processing the color picker.
+pub struct ColorPickerArgs<'a, 'wm> {
+   pub assets: &'a Assets,
+   pub wm: &'wm mut WindowManager,
+   pub window_view: View,
+}
+
+/// Icons used by the color picker.
+pub struct ColorPickerIcons {
+   pub palette: Image,
+}
+
+/// A color picker.
 pub struct ColorPicker {
    palette: [AnyColor; Self::NUM_COLORS],
    color: AnyColor,
+   window_state: Option<PickerWindowState>,
 }
 
 impl ColorPicker {
@@ -33,7 +51,14 @@ impl ColorPicker {
       Self {
          palette,
          color: palette[0],
+         window_state: Some(PickerWindowState::Closed(())),
       }
+   }
+
+   /// Returns a view for the picker window. This view should be laid out and then passed back to
+   /// `process` via [`ColorPickerArgs`].
+   pub fn picker_window_view() -> View {
+      View::new(PickerWindow::DIMENSIONS)
    }
 
    /// Returns the (paws) color that's currently selected.
@@ -42,7 +67,17 @@ impl ColorPicker {
    }
 
    /// Processes the color palette.
-   pub fn process(&mut self, ui: &mut Ui, input: &Input) {
+   pub fn process(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      ColorPickerArgs {
+         assets,
+         wm,
+         window_view,
+      }: ColorPickerArgs,
+   ) {
+      // The palette.
       for &color in &self.palette {
          ui.push((16.0, ui.height()), Layout::Freeform);
          let y_offset = ui.height()
@@ -64,5 +99,65 @@ impl ColorPicker {
          });
          ui.pop();
       }
+      ui.space(16.0);
+
+      // The color picker button.
+      if Button::with_icon(
+         ui,
+         input,
+         ButtonArgs {
+            height: ui.height(),
+            colors: &assets.colors.action_button,
+            corner_radius: 0.0,
+         },
+         &assets.icons.color_picker.palette,
+      )
+      .clicked()
+      {
+         self.toggle_picker_window(wm, window_view)
+      }
    }
+
+   /// Toggles the picker window on or off, depending on whether it's already open or not.
+   fn toggle_picker_window(&mut self, wm: &mut WindowManager, view: View) {
+      match self.window_state.take().unwrap() {
+         PickerWindowState::Open(window_id) => {
+            let data = wm.close_window(window_id);
+            self.window_state = Some(PickerWindowState::Closed(data));
+         }
+         PickerWindowState::Closed(data) => {
+            let content = PickerWindow::new().background();
+            let window_id = wm.open_window(view, content, data);
+            self.window_state = Some(PickerWindowState::Open(window_id));
+         }
+      }
+   }
+}
+
+enum PickerWindowState {
+   Open(WindowId<PickerWindowData>),
+   Closed(PickerWindowData),
+}
+
+type PickerWindowData = ();
+
+struct PickerWindow {}
+
+impl PickerWindow {
+   /// The dimensions of the picker window.
+   const DIMENSIONS: Dimensions = Dimensions {
+      horizontal: Dimension::Constant(256.0),
+      vertical: Dimension::Constant(256.0),
+   };
+
+   /// Creates the picker window's inner data.
+   fn new() -> Self {
+      Self {}
+   }
+}
+
+impl WindowContent for PickerWindow {
+   type Data = PickerWindowData;
+
+   fn process(&mut self, args: WindowContentArgs, data: &mut Self::Data) {}
 }

@@ -6,6 +6,8 @@ use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::net::peer::Peer;
 use crate::paint_canvas::PaintCanvas;
+use crate::ui::view::View;
+use crate::ui::wm::WindowManager;
 use crate::ui::{Input, Ui};
 use crate::viewport::Viewport;
 
@@ -188,6 +190,8 @@ impl<'peer> Net<'peer> {
 pub struct ToolArgs<'ui, 'input, 'state> {
    pub ui: &'ui mut Ui,
    pub input: &'input Input,
+   pub wm: &'state mut WindowManager,
+   pub canvas_view: &'state View,
    pub assets: &'state Assets,
    pub net: Net<'state>,
 }

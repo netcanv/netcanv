@@ -51,7 +51,11 @@ impl UiInput for Ui {
          x: width,
          y: height,
       } = self.size();
-      mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
+      input.mouse_active()
+         && mouse.x >= 0.0
+         && mouse.x <= width
+         && mouse.y >= 0.0
+         && mouse.y <= height
    }
 }
 

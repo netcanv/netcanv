@@ -37,6 +37,7 @@ impl From<f32> for Dimension {
 }
 
 /// Horizontal and vertical dimensions.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Dimensions {
    pub horizontal: Dimension,
    pub vertical: Dimension,
@@ -62,6 +63,7 @@ where
 }
 
 /// A view.
+#[derive(Debug, Clone)]
 pub struct View {
    /// The ID of the view. This is used for specifying mouse areas in the input layer.
    id: usize,

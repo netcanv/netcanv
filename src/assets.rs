@@ -4,7 +4,9 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
-use crate::ui::{ButtonColors, ContextMenuColors, ExpandColors, ExpandIcons, TextFieldColors};
+use crate::ui::{
+   ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, TextFieldColors,
+};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
@@ -12,6 +14,7 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
+const PALETTE_SVG: &[u8] = include_bytes!("assets/icons/palette.svg");
 const MENU_SVG: &[u8] = include_bytes!("assets/icons/menu.svg");
 const COPY_SVG: &[u8] = include_bytes!("assets/icons/copy.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
@@ -73,12 +76,16 @@ pub struct ColorSwitcherIcons {
 
 /// Icons, rendered to images at startup.
 pub struct Icons {
+   // Control-specific
    pub expand: ExpandIcons,
+   pub color_picker: ColorPickerIcons,
+   pub color_switcher: ColorSwitcherIcons,
+
+   // Generic
    pub navigation: NavigationIcons,
    pub status: StatusIcons,
    pub file: FileIcons,
    pub peer: PeerIcons,
-   pub color_switcher: ColorSwitcherIcons,
 }
 
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
@@ -120,6 +127,14 @@ impl Assets {
                expand: Self::load_icon(renderer, CHEVRON_RIGHT_SVG),
                shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
             },
+            color_picker: ColorPickerIcons {
+               palette: Self::load_icon(renderer, PALETTE_SVG),
+            },
+            color_switcher: ColorSwitcherIcons {
+               dark: Self::load_icon(renderer, DARK_MODE_SVG),
+               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
+            },
+
             navigation: NavigationIcons {
                menu: Self::load_icon(renderer, MENU_SVG),
                copy: Self::load_icon(renderer, COPY_SVG),
@@ -134,10 +149,6 @@ impl Assets {
             peer: PeerIcons {
                client: Self::load_icon(renderer, PEER_CLIENT_SVG),
                host: Self::load_icon(renderer, PEER_HOST_SVG),
-            },
-            color_switcher: ColorSwitcherIcons {
-               dark: Self::load_icon(renderer, DARK_MODE_SVG),
-               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
             },
          },
       }

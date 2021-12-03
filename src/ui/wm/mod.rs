@@ -6,10 +6,14 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use crate::assets::Assets;
 use crate::token::Token;
 
 use super::view::View;
 use super::{Input, Ui};
+
+use netcanv_renderer::paws::Layout;
+pub use windows::WindowContentWrappers;
 
 /// A window.
 struct Window {
@@ -59,30 +63,38 @@ impl WindowManager {
             data: Box::new(data),
          },
       );
+      self.stack.push(id);
       WindowId(id, PhantomData)
    }
 
    /// Closes an open window.
-   pub fn close_window(&mut self, window: UntypedWindowId) {
-      self.stack.retain(|f| f != &window);
-      self.windows.remove(&window);
+   pub fn close_window<D>(&mut self, window: WindowId<D>) -> D
+   where
+      D: Any,
+   {
+      self.stack.retain(|&f| f != window.0);
+      let window = self.windows.remove(&window.0).unwrap();
+      *window.data.downcast().unwrap()
    }
 
    /// Processes windows inside the window manager.
-   pub fn process(&mut self, ui: &mut Ui, input: &mut Input) {
+   pub fn process(&mut self, ui: &mut Ui, input: &mut Input, assets: &Assets) {
       for stack_index in 0..self.stack.len() {
          let window_id = &self.stack[stack_index];
          let window = self.windows.get_mut(window_id).unwrap();
          let mut hit_test = Default::default();
+         window.view.begin(ui, input, Layout::Freeform);
          window.content.process(
             WindowContentArgs {
                ui,
                input,
+               assets,
                view: &window.view,
                hit_test: &mut hit_test,
             },
             &mut window.data,
          );
+         window.view.end(ui);
       }
    }
 }
@@ -105,15 +117,16 @@ pub trait WindowContent {
 }
 
 /// Arguments passed to [`WindowContent::process`].
-pub struct WindowContentArgs<'u, 'i, 'v, 'ht> {
-   pub ui: &'u mut Ui,
-   pub input: &'i mut Input,
-   pub view: &'v View,
+pub struct WindowContentArgs<'ui, 'input, 'process> {
+   pub ui: &'ui mut Ui,
+   pub input: &'input mut Input,
+   pub assets: &'process Assets,
+   pub view: &'process View,
    /// The hit test result.
    ///
    /// This can be set to determine the type of area the mouse cursor is under.
    /// See [`HitTest`]'s documentation for more information.
-   pub hit_test: &'ht mut HitTest,
+   pub hit_test: &'process mut HitTest,
 }
 
 /// Window content, with the `Data` type erased.

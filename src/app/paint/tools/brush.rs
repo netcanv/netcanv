@@ -18,8 +18,8 @@ use crate::backend::{Backend, Image};
 use crate::common::{lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{
-   ButtonState, ColorPicker, Modifier, MouseScroll, Slider, SliderArgs, SliderStep, UiElements,
-   UiInput,
+   view, ButtonState, ColorPicker, ColorPickerArgs, Modifier, MouseScroll, Slider, SliderArgs,
+   SliderStep, UiElements, UiInput,
 };
 use crate::viewport::Viewport;
 
@@ -288,11 +288,30 @@ impl Tool for BrushTool {
    fn process_bottom_bar(
       &mut self,
       ToolArgs {
-         ui, input, assets, ..
+         ui,
+         input,
+         assets,
+         wm,
+         canvas_view,
+         ..
       }: ToolArgs,
    ) {
       // Draw the palette.
-      self.color_picker.process(ui, input);
+      let mut picker_window = ColorPicker::picker_window_view();
+      view::layout::align(
+         &view::layout::padded(canvas_view, 16.0),
+         &mut picker_window,
+         (AlignH::Left, AlignV::Bottom),
+      );
+      self.color_picker.process(
+         ui,
+         input,
+         ColorPickerArgs {
+            assets,
+            wm,
+            window_view: picker_window,
+         },
+      );
       ui.space(16.0);
 
       // Draw the thickness: its slider and value display.

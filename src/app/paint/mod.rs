@@ -285,6 +285,8 @@ impl State {
          ToolArgs {
             ui,
             input,
+            wm: &mut self.wm,
+            canvas_view: &self.canvas_view,
             assets: &mut self.assets,
             net: Net::new(&self.peer),
          },
@@ -302,6 +304,8 @@ impl State {
             ToolArgs {
                ui,
                input,
+               wm: &mut self.wm,
+               canvas_view: &self.canvas_view,
                assets: &mut self.assets,
                net: Net::new(&self.peer),
             },
@@ -366,6 +370,8 @@ impl State {
             ToolArgs {
                ui,
                input,
+               wm: &mut p.wm,
+               canvas_view: &p.canvas_view,
                assets: &p.assets,
                net: Net::new(&mut p.peer),
             },
@@ -400,6 +406,8 @@ impl State {
                      ToolArgs {
                         ui,
                         input,
+                        wm: &mut self.wm,
+                        canvas_view: &self.canvas_view,
                         assets: &self.assets,
                         net: Net::new(&self.peer),
                      },
@@ -416,6 +424,8 @@ impl State {
                ToolArgs {
                   ui,
                   input,
+                  wm: &mut p.wm,
+                  canvas_view: &p.canvas_view,
                   assets: &p.assets,
                   net: Net::new(&mut p.peer),
                },
@@ -490,6 +500,8 @@ impl State {
          tool.process_bottom_bar(ToolArgs {
             ui,
             input,
+            wm: &mut p.wm,
+            canvas_view: &p.canvas_view,
             assets: &p.assets,
             net: Net::new(&mut p.peer),
          });
@@ -518,61 +530,7 @@ impl State {
       {
          self.overflow_menu.toggle();
       }
-      /*
-      // Room ID display
 
-      if Button::with_icon(
-         ui,
-         input,
-         ButtonArgs {
-            height: 32.0,
-            colors: &self.assets.colors.action_button,
-            corner_radius: 0.0,
-         },
-         &self.assets.icons.file.save,
-      )
-      .clicked()
-      {
-         match FileDialog::new()
-            .set_filename("canvas.png")
-            .add_filter("PNG image", &["png"])
-            .add_filter("NetCanv canvas", &["netcanv", "toml"])
-            .show_save_single_file()
-         {
-            Ok(Some(path)) => {
-               self.save_to_file = Some(path);
-            }
-            Err(error) => log!(self.log, "Error while selecting file: {}", error),
-            _ => (),
-         }
-      }
-
-      // The room ID itself
-
-
-      // "Room ID" text
-      ui.push((64.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         "Room ID",
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
-      ui.space(8.0);
-
-      // Role icon
-      ui.icon(
-         if self.peer.is_host() {
-            &self.assets.icons.peer.host
-         } else {
-            &self.assets.icons.peer.client
-         },
-         self.assets.colors.text,
-         Some(vector(ui.height(), ui.height())),
-      );
-
-      */
       ui.pop();
 
       self.bottom_bar_view.end(ui);
@@ -1000,6 +958,8 @@ impl AppState for State {
 
       // Bars
       self.process_toolbar(ui, input);
+      // Draw windows over the toolbar, but below the bottom bar.
+      self.wm.process(ui, input, &self.assets);
       self.process_bar(ui, input);
       self.process_overflow_menu(ui, input);
    }
