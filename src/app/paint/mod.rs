@@ -29,6 +29,7 @@ use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::view::layout::DirectionV;
 use crate::ui::view::{Dimension, View};
+use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
@@ -91,6 +92,7 @@ pub struct State {
    toolbar_view: View,
 
    overflow_menu: ContextMenu,
+   wm: WindowManager,
 }
 
 macro_rules! log {
@@ -155,6 +157,7 @@ impl State {
          toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
 
          overflow_menu: ContextMenu::new((256.0, 0.0)), // Vertical is filled in later
+         wm: WindowManager::new(),
       };
       this.register_tools(renderer);
       this.register_actions(renderer);

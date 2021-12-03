@@ -1,12 +1,69 @@
 //! Color space conversions.
 
-// A lot of the code was adapted from Björn Ottosson's blog:
+// A lot of the code was adapted from Björn Ottosson's blog posts:
 // https://bottosson.github.io/posts/colorwrong/
 // https://bottosson.github.io/posts/oklab/
 // https://bottosson.github.io/posts/colorpicker/
-// I highly encourage that you check all of these posts out!
+// I highly encourage you to check all of them out!
 
 use netcanv_renderer::paws::Color;
+
+/// An enum consolidating all the colors to a single type, for storing colors in their original
+/// space, losslessly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AnyColor {
+   Srgb(Srgb),
+   LinearRgb(LinearRgb),
+   Hsv(Hsv),
+}
+
+impl From<Srgb> for AnyColor {
+   fn from(color: Srgb) -> Self {
+      Self::Srgb(color)
+   }
+}
+
+impl From<AnyColor> for Srgb {
+   fn from(color: AnyColor) -> Self {
+      match color {
+         AnyColor::Srgb(srgb) => srgb,
+         AnyColor::LinearRgb(linear_rgb) => Srgb::from(linear_rgb),
+         AnyColor::Hsv(hsv) => Srgb::from(hsv),
+      }
+   }
+}
+
+impl From<LinearRgb> for AnyColor {
+   fn from(color: LinearRgb) -> Self {
+      Self::LinearRgb(color)
+   }
+}
+
+impl From<AnyColor> for LinearRgb {
+   fn from(color: AnyColor) -> Self {
+      match color {
+         AnyColor::Srgb(srgb) => LinearRgb::from(srgb),
+         AnyColor::LinearRgb(linear_rgb) => linear_rgb,
+         AnyColor::Hsv(hsv) => LinearRgb::from(Srgb::from(hsv)),
+      }
+   }
+}
+
+impl From<Hsv> for AnyColor {
+   fn from(color: Hsv) -> Self {
+      Self::Hsv(color)
+   }
+}
+
+impl From<AnyColor> for Hsv {
+   fn from(color: AnyColor) -> Self {
+      match color {
+         AnyColor::Srgb(srgb) => Hsv::from(srgb),
+         AnyColor::LinearRgb(linear_rgb) => Hsv::from(Srgb::from(linear_rgb)),
+         AnyColor::Hsv(hsv) => hsv,
+      }
+   }
+}
 
 /// An sRGB color.
 ///

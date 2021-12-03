@@ -6,15 +6,17 @@ use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
 use crate::backend::{Backend, Font, Image};
 
 mod button;
+mod colorpicker;
 mod contextmenu;
 mod expand;
 mod input;
 mod slider;
 mod textfield;
 pub mod view;
-mod window;
+pub mod wm;
 
 pub use button::*;
+pub use colorpicker::*;
 pub use contextmenu::*;
 pub use expand::*;
 pub use input::*;
