@@ -12,6 +12,7 @@ mod input;
 mod slider;
 mod textfield;
 pub mod view;
+mod window;
 
 pub use button::*;
 pub use contextmenu::*;
