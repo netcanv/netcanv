@@ -341,7 +341,7 @@ impl State {
       // Panning and zooming
 
       match input.action(MouseButton::Middle) {
-         (true, ButtonState::Pressed) if ui.has_mouse(input) => self.panning = true,
+         (true, ButtonState::Pressed) if ui.hover(input) => self.panning = true,
          (_, ButtonState::Released) => self.panning = false,
          _ => (),
       }

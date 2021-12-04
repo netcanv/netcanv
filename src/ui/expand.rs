@@ -85,7 +85,7 @@ impl Expand {
 
       // visible area
       ui.push((width, ui.height()), Layout::Freeform);
-      if ui.has_mouse(input) {
+      if ui.hover(input) {
          let pressed = matches!(
             input.action(MouseButton::Left),
             (true, ButtonState::Pressed | ButtonState::Down)

@@ -309,7 +309,7 @@ impl TextField {
       let mut process_result = TextFieldProcessResult { done: false };
 
       if input.action(MouseButton::Left) == (true, ButtonState::Pressed) {
-         self.focused = ui.has_mouse(input);
+         self.focused = ui.hover(input);
          if self.focused {
             self.reset_blink(input);
          }

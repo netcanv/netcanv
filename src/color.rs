@@ -186,7 +186,7 @@ impl From<Hsv> for Srgb {
       // https://en.wikipedia.org/wiki/HSL_and_HSV#To_RGB
       let c = v * s;
       let x = c * (1.0 - f32::abs(h.rem_euclid(2.0) - 1.0));
-      let (r, g, b) = if h >= 0.0 && h < 1.0 {
+      let (r1, g1, b1) = if h >= 0.0 && h < 1.0 {
          (c, x, 0.0)
       } else if h >= 1.0 && h < 2.0 {
          (x, c, 0.0)
@@ -201,6 +201,8 @@ impl From<Hsv> for Srgb {
       } else {
          (0.0, 0.0, 0.0)
       };
+      let m = v - c;
+      let (r, g, b) = (r1 + m, g1 + m, b1 + m);
       Self { r, g, b }
    }
 }

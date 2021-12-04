@@ -1,6 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use glow::{HasContext, PixelPackData, PixelUnpackData};
+use netcanv_renderer::ScalingFilter;
 
 use crate::common::flip_vertically;
 use crate::rendering::GlState;
@@ -134,6 +136,18 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       }
       // Fleeeeeeeeeeep them 'round.
       flip_vertically(self.width as usize, self.height as usize, 4, dest);
+   }
+
+   fn set_scaling_filter(&mut self, filter: ScalingFilter) {
+      unsafe {
+         self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
+         let filter = match filter {
+            ScalingFilter::Nearest => glow::NEAREST,
+            ScalingFilter::Linear => glow::LINEAR,
+         } as i32;
+         self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, filter);
+         self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, filter);
+      }
    }
 }
 

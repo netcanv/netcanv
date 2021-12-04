@@ -34,6 +34,10 @@ pub trait UiInput {
 
    /// Returns whether the mouse position is in the current group's rectangle.
    fn has_mouse(&self, input: &Input) -> bool;
+
+   /// Returns whether the mouse position is in the current group's rectangle, and the mouse
+   /// is currently active.
+   fn hover(&self, input: &Input) -> bool;
 }
 
 impl UiInput for Ui {
@@ -51,11 +55,11 @@ impl UiInput for Ui {
          x: width,
          y: height,
       } = self.size();
-      input.mouse_active()
-         && mouse.x >= 0.0
-         && mouse.x <= width
-         && mouse.y >= 0.0
-         && mouse.y <= height
+      mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
+   }
+
+   fn hover(&self, input: &Input) -> bool {
+      input.mouse_active() && self.has_mouse(input)
    }
 }
 
