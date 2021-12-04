@@ -1,7 +1,7 @@
 //! Color picker with palettes and multiple color spaces.
 
 use image::{Rgba, RgbaImage};
-use netcanv_renderer::paws::{point, Color, Layout, Rect, Renderer};
+use netcanv_renderer::paws::{point, vector, Color, Layout, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
 use netcanv_renderer_opengl::winit::event::MouseButton;
 
@@ -11,7 +11,7 @@ use crate::color::{AnyColor, Hsv, Srgb};
 
 use super::view::{Dimension, Dimensions, View};
 use super::wm::{WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager};
-use super::{Button, ButtonArgs, Input, Ui, UiInput};
+use super::{Button, ButtonArgs, ButtonState, Input, Ui, UiInput};
 
 /// Arguments for processing the color picker.
 pub struct ColorPickerArgs<'a, 'wm> {
@@ -82,7 +82,7 @@ impl ColorPicker {
       }: ColorPickerArgs,
    ) {
       // The palette.
-      for &color in &self.palette {
+      for color in self.palette {
          ui.push((16.0, ui.height()), Layout::Freeform);
          let y_offset = ui.height()
             * if self.color == color {
@@ -94,7 +94,7 @@ impl ColorPicker {
             };
          let y_offset = y_offset.round();
          if ui.hover(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-            self.color = color;
+            self.window_data_mut(wm).color = color;
          }
          ui.draw(|ui| {
             let rect = Rect::new(point(0.0, y_offset), ui.size());
@@ -120,6 +120,9 @@ impl ColorPicker {
       {
          self.toggle_picker_window(ui, wm, window_view)
       }
+
+      // The color variable, cached from what was chosen in the picker window.
+      self.color = self.window_data(wm).color;
    }
 
    /// Toggles the picker window on or off, depending on whether it's already open or not.
@@ -134,6 +137,24 @@ impl ColorPicker {
             let window_id = wm.open_window(view, content, data);
             self.window_state = Some(PickerWindowState::Open(window_id));
          }
+      }
+   }
+
+   /// Returns the picker window's data, no matter if it's open.
+   fn window_data<'d>(&'d self, wm: &'d WindowManager) -> &'d PickerWindowData {
+      let state = self.window_state.as_ref().unwrap();
+      match state {
+         PickerWindowState::Open(window_id) => wm.window_data(window_id),
+         PickerWindowState::Closed(data) => data,
+      }
+   }
+
+   /// Same as [`Self::window_data`], but returns a mutable reference.
+   fn window_data_mut<'d>(&'d mut self, wm: &'d mut WindowManager) -> &'d mut PickerWindowData {
+      let state = self.window_state.as_mut().unwrap();
+      match state {
+         PickerWindowState::Open(window_id) => wm.window_data_mut(window_id),
+         PickerWindowState::Closed(data) => data,
       }
    }
 }
@@ -159,6 +180,10 @@ struct PickerWindow {
    canvas_image: Framebuffer,
    /// The image of the color slider - the vertical slider used to pick hues.
    slider_image: Framebuffer,
+
+   canvas_sliding: bool,
+   slider_sliding: bool,
+   previous_color: AnyColor,
 }
 
 impl PickerWindow {
@@ -175,11 +200,18 @@ impl PickerWindow {
       let mut this = Self {
          canvas_image: renderer.create_framebuffer(CANVAS_RESOLUTION, CANVAS_RESOLUTION),
          slider_image: renderer.create_framebuffer(SLIDER_RESOLUTION.0, SLIDER_RESOLUTION.1),
+         canvas_sliding: false,
+         slider_sliding: false,
+         previous_color: data.color,
       };
       this.slider_image.set_scaling_filter(ScalingFilter::Linear);
       this.canvas_image.set_scaling_filter(ScalingFilter::Linear);
-      Self::render_slider(&mut this.slider_image, data.color_space);
-      Self::render_canvas(&mut this.canvas_image, 0.0, data.color_space);
+      Self::update_slider(&mut this.slider_image, data.color_space);
+      Self::update_canvas(
+         &mut this.canvas_image,
+         Hsv::from(data.color).h,
+         data.color_space,
+      );
       this
    }
 
@@ -192,7 +224,7 @@ impl PickerWindow {
    }
 
    /// Renders the slider for the given color space, to the given framebuffer.
-   fn render_slider(framebuffer: &mut Framebuffer, color_space: ColorSpace) {
+   fn update_slider(framebuffer: &mut Framebuffer, color_space: ColorSpace) {
       let (width, height) = framebuffer.size();
       let image = match color_space {
          ColorSpace::Hsv => RgbaImage::from_fn(width, height, |_x, y| {
@@ -210,7 +242,7 @@ impl PickerWindow {
    }
 
    /// Renders the canvas for the given hue and color space, to the given framebuffer.
-   fn render_canvas(framebuffer: &mut Framebuffer, hue: f32, color_space: ColorSpace) {
+   fn update_canvas(framebuffer: &mut Framebuffer, hue: f32, color_space: ColorSpace) {
       let (width, height) = framebuffer.size();
       let image = match color_space {
          ColorSpace::Hsv => RgbaImage::from_fn(width, height, |x, y| {
@@ -226,6 +258,105 @@ impl PickerWindow {
          }),
       };
       framebuffer.upload_rgba((0, 0), (width, height), &image);
+   }
+
+   /// Processes the hue slider.
+   fn process_slider(&mut self, ui: &mut Ui, input: &Input, data: &mut PickerWindowData) {
+      ui.push((24.0, ui.height()), Layout::Freeform);
+      let rect = ui.rect();
+      ui.render().framebuffer(rect, &self.slider_image);
+
+      ui.draw(|ui| {
+         let y = f32::round(
+            match data.color_space {
+               ColorSpace::Hsv => Hsv::from(data.color).h / 6.0,
+            } * ui.height(),
+         );
+         let width = ui.width();
+         let indicator_radius = 4.0;
+         ui.render().outline(
+            Rect::new(
+               point(-2.0, y - indicator_radius - 1.0),
+               vector(width + 4.0, indicator_radius * 2.0 + 2.0),
+            ),
+            Color::BLACK,
+            2.0,
+            1.0,
+         );
+         ui.render().outline(
+            Rect::new(
+               point(-1.0, y - indicator_radius),
+               vector(width + 2.0, indicator_radius * 2.0),
+            ),
+            Color::WHITE,
+            2.0,
+            1.0,
+         );
+      });
+
+      match input.action(MouseButton::Left) {
+         (true, ButtonState::Pressed) if ui.hover(input) => self.slider_sliding = true,
+         (_, ButtonState::Released) => self.slider_sliding = false,
+         _ => (),
+      }
+
+      if self.slider_sliding {
+         let y = ui.mouse_position(input).y / ui.height();
+         let y = y.clamp(0.0, 1.0 - f32::EPSILON);
+         let previous_color = data.color;
+         data.color = match data.color_space {
+            ColorSpace::Hsv => {
+               let Hsv { s, v, .. } = Hsv::from(data.color);
+               let h = y * 6.0;
+               AnyColor::from(Hsv { h, s, v })
+            }
+         };
+      }
+
+      ui.pop();
+   }
+
+   /// Processes the color canvas.
+   fn process_canvas(&mut self, ui: &mut Ui, input: &Input, data: &mut PickerWindowData) {
+      ui.push((ui.height(), ui.height()), Layout::Freeform);
+      let rect = ui.rect();
+      ui.render().framebuffer(rect, &self.canvas_image);
+
+      ui.draw(|ui| {
+         let x = f32::round(
+            match data.color_space {
+               ColorSpace::Hsv => Hsv::from(data.color).s,
+            } * ui.width(),
+         );
+         let y = f32::round(
+            match data.color_space {
+               ColorSpace::Hsv => 1.0 - Hsv::from(data.color).v,
+            } * ui.height(),
+         );
+         let radius = 4.0;
+         ui.render().outline_circle(point(x, y), radius + 1.0, Color::BLACK, 1.0);
+         ui.render().outline_circle(point(x, y), radius, Color::WHITE, 1.0);
+      });
+
+      match input.action(MouseButton::Left) {
+         (true, ButtonState::Pressed) if ui.hover(input) => self.canvas_sliding = true,
+         (_, ButtonState::Released) => self.canvas_sliding = false,
+         _ => (),
+      }
+
+      if self.canvas_sliding {
+         let Vector { x, y } = ui.mouse_position(input) / ui.size();
+         let (x, y) = (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
+         data.color = match data.color_space {
+            ColorSpace::Hsv => {
+               let (s, v) = (x, 1.0 - y);
+               let h = Hsv::from(data.color).h;
+               AnyColor::from(Hsv { h, s, v })
+            }
+         };
+      }
+
+      ui.pop();
    }
 }
 
@@ -245,18 +376,22 @@ impl WindowContent for PickerWindow {
       ui.push(ui.size(), Layout::Horizontal);
 
       // The color canvas.
-      ui.push((ui.height(), ui.height()), Layout::Freeform);
-      let canvas_rect = ui.rect();
-      ui.render().framebuffer(canvas_rect, &self.canvas_image);
-      ui.pop();
-      ui.space(8.0);
+      self.process_canvas(ui, input, data);
+      ui.space(12.0);
 
       // The color slider.
-      ui.push((24.0, ui.height()), Layout::Freeform);
-      let slider_rect = ui.rect();
-      ui.render().framebuffer(slider_rect, &self.slider_image);
-      ui.pop();
+      self.process_slider(ui, input, data);
+
+      if data.color != self.previous_color {
+         Self::update_canvas(
+            &mut self.canvas_image,
+            Hsv::from(data.color).h,
+            data.color_space,
+         );
+         self.previous_color = data.color;
+      }
 
       ui.pop();
+      self.previous_color = data.color;
    }
 }

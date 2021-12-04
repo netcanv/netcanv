@@ -165,16 +165,19 @@ impl From<Srgb> for Hsv {
       let v = f32::max(r, f32::max(g, b));
       let c = v - f32::min(r, f32::min(g, b));
       Self {
-         h: if r > g && r > b {
+         h: if c <= 0.001 {
+            0.0
+         } else if v == r {
             (g - b) / c
-         } else if g > r && g > b {
+         } else if v == g {
             2.0 + (b - r) / c
-         } else if b > r && b > g {
+         } else if v == b {
             4.0 + (r - g) / c
          } else {
             // R = G = B
             0.0
-         },
+         }
+         .rem_euclid(6.0),
          s: if v == 0.0 { 0.0 } else { c / v },
          v,
       }

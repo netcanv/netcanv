@@ -39,6 +39,14 @@ impl WindowManager {
       }
    }
 
+   /// Returns an immutable reference to the given window's data.
+   pub fn window_data<D>(&self, id: &WindowId<D>) -> &D
+   where
+      D: Any,
+   {
+      self.windows.get(&id.0).unwrap().data.downcast_ref().unwrap()
+   }
+
    /// Returns a mutable reference to the given window's data.
    pub fn window_data_mut<D>(&mut self, id: &WindowId<D>) -> &mut D
    where
