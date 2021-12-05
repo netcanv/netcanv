@@ -7,12 +7,14 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::assets::Assets;
+use crate::common::VectorMath;
 use crate::token::Token;
 
 use super::view::View;
-use super::{Input, Ui};
+use super::{input, ButtonState, Input, Ui};
 
 use netcanv_renderer::paws::Layout;
+use netcanv_renderer_opengl::winit::event::MouseButton;
 pub use windows::WindowContentWrappers;
 
 /// A window.
@@ -20,6 +22,9 @@ struct Window {
    view: View,
    content: Box<dyn UntypedWindowContent>,
    data: Box<dyn Any>,
+   pinned: bool,
+   close_requested: bool,
+   dragging: bool,
 }
 
 /// A window manager.
@@ -55,6 +60,11 @@ impl WindowManager {
       self.windows.get_mut(&id.0).unwrap().data.downcast_mut().unwrap()
    }
 
+   /// Returns whether the window should close.
+   pub fn should_close<D>(&mut self, id: &WindowId<D>) -> bool {
+      self.windows.get(&id.0).unwrap().close_requested
+   }
+
    /// Opens a new window in the manager, and returns a handle for modifying it.
    pub fn open_window<C, D>(&mut self, view: View, content: C, data: D) -> WindowId<D>
    where
@@ -69,6 +79,9 @@ impl WindowManager {
             view,
             content,
             data: Box::new(data),
+            pinned: false,
+            close_requested: false,
+            dragging: false,
          },
       );
       self.stack.push(id);
@@ -91,18 +104,53 @@ impl WindowManager {
          let window_id = &self.stack[stack_index];
          let window = self.windows.get_mut(window_id).unwrap();
          let mut hit_test = Default::default();
-         window.view.begin(ui, input, Layout::Freeform);
+
+         let mut view = window.view.clone();
+         view.position = view.position.floor();
+         view.begin(ui, input, Layout::Freeform);
          window.content.process(
-            WindowContentArgs {
+            &mut WindowContentArgs {
                ui,
                input,
                assets,
-               view: &window.view,
+               view: &view,
                hit_test: &mut hit_test,
+               pinned: window.pinned,
             },
             &mut window.data,
          );
-         window.view.end(ui);
+         view.end(ui);
+
+         let mouse_is_outside_of_window = (input
+            .global_mouse_button_just_pressed(MouseButton::Left)
+            || input.global_mouse_button_just_pressed(MouseButton::Right))
+            && !window.pinned
+            && !window.view.has_mouse(input);
+         let close_button_clicked = hit_test == HitTest::CloseButton
+            && input.action(MouseButton::Left) == (true, ButtonState::Released);
+         if mouse_is_outside_of_window || close_button_clicked {
+            window.close_requested = true;
+         }
+
+         if hit_test == HitTest::PinButton
+            && input.action(MouseButton::Left) == (true, ButtonState::Released)
+         {
+            window.pinned = !window.pinned;
+         }
+
+         match input.action(MouseButton::Left) {
+            (true, ButtonState::Pressed) if hit_test == HitTest::Draggable => {
+               window.dragging = true;
+               window.pinned = true;
+            }
+            (_, ButtonState::Released) => {
+               window.dragging = false;
+            }
+            _ => (),
+         }
+         if window.dragging {
+            window.view.position += input.mouse_position() - input.previous_mouse_position();
+         }
       }
    }
 }
@@ -121,7 +169,7 @@ pub trait WindowContent {
    /// An arbitrarily-defined data value that's stored in the window.
    type Data;
 
-   fn process(&mut self, args: WindowContentArgs, data: &mut Self::Data);
+   fn process(&mut self, args: &mut WindowContentArgs, data: &mut Self::Data);
 }
 
 /// Arguments passed to [`WindowContent::process`].
@@ -135,11 +183,13 @@ pub struct WindowContentArgs<'ui, 'input, 'process> {
    /// This can be set to determine the type of area the mouse cursor is under.
    /// See [`HitTest`]'s documentation for more information.
    pub hit_test: &'process mut HitTest,
+   /// Whether the window is pinned.
+   pub pinned: bool,
 }
 
 /// Window content, with the `Data` type erased.
 trait UntypedWindowContent {
-   fn process(&mut self, args: WindowContentArgs, data: &mut Box<dyn Any>);
+   fn process(&mut self, args: &mut WindowContentArgs, data: &mut Box<dyn Any>);
 }
 
 /// Wraps a typed `WindowContent` in an `UntypedWindowContent`.
@@ -157,7 +207,7 @@ where
       C: WindowContent<Data = D> + 'static,
       D: Any,
    {
-      fn process(&mut self, args: WindowContentArgs, data: &mut Box<dyn Any>) {
+      fn process(&mut self, args: &mut WindowContentArgs, data: &mut Box<dyn Any>) {
          let data: &mut D = data.downcast_mut().expect("downcasting window data failed");
          self.inner.process(args, data);
       }
@@ -172,6 +222,7 @@ where
 /// The hit test is used to determine what certain parts of a window are; for instance, whether
 /// an area of the window is responsible for dragging the window around, or whether an area
 /// is the close button of the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HitTest {
    /// Window content. This is the default value of the hit test.
    Content,
@@ -179,6 +230,8 @@ pub enum HitTest {
    Draggable,
    /// A button that can be clicked to close the window.
    CloseButton,
+   /// A button that can be clicked to pin/unpin the window.
+   PinButton,
 }
 
 impl Default for HitTest {

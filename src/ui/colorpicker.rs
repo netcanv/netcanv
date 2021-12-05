@@ -13,7 +13,10 @@ use crate::common::ColorMath;
 use crate::ui::ValueSlider;
 
 use super::view::{Dimension, Dimensions, View};
-use super::wm::{WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager};
+use super::wm::windows::WindowButtonStyle;
+use super::wm::{
+   HitTest, WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager,
+};
 use super::{
    Button, ButtonArgs, ButtonState, Focus, Input, RadioButton, RadioButtonArgs, SliderStep,
    TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs,
@@ -124,7 +127,13 @@ impl ColorPicker {
       )
       .clicked()
       {
-         self.toggle_picker_window(ui, wm, window_view)
+         self.toggle_picker_window(ui, wm, window_view.clone())
+      }
+      // Close the window, if we should.
+      if let Some(PickerWindowState::Open(window_id)) = &self.window_state {
+         if wm.should_close(window_id) {
+            self.toggle_picker_window(ui, wm, window_view);
+         }
       }
 
       // The color variable, cached from what was chosen in the picker window.
@@ -139,7 +148,10 @@ impl ColorPicker {
             self.window_state = Some(PickerWindowState::Closed(data));
          }
          PickerWindowState::Closed(data) => {
-            let content = PickerWindow::new(renderer, &data).background();
+            let content =
+               PickerWindow::new(renderer, &data).background().buttons(WindowButtonStyle {
+                  padding: Padding::even(12.0),
+               });
             let window_id = wm.open_window(view, content, data);
             self.window_state = Some(PickerWindowState::Open(window_id));
          }
@@ -212,7 +224,7 @@ impl PickerWindow {
    /// The dimensions of the picker window.
    const DIMENSIONS: Dimensions = Dimensions {
       horizontal: Dimension::Constant(448.0),
-      vertical: Dimension::Constant(260.0),
+      vertical: Dimension::Constant(268.0),
    };
 
    // The three sliders "I", "J", and "K" are called like that to represent their dual purpose.
@@ -652,16 +664,23 @@ impl WindowContent for PickerWindow {
    fn process(
       &mut self,
       WindowContentArgs {
-         ui, input, assets, ..
-      }: WindowContentArgs,
+         ui,
+         input,
+         assets,
+         hit_test,
+         ..
+      }: &mut WindowContentArgs,
       data: &mut Self::Data,
    ) {
       ui.push(ui.size(), Layout::Vertical);
 
       // The title bar and color space selector.
-      ui.push((ui.width(), 40.0), Layout::Horizontal);
-      ui.pad((12.0, 0.0));
-      ui.offset(vector(0.0, 8.0));
+      ui.push((ui.width(), 48.0), Layout::Freeform);
+      ui.push(ui.size(), Layout::Horizontal);
+      let mouse_on_title_bar = ui.hover(input);
+
+      ui.pad((12.0, 12.0));
+      ui.push((0.0, ui.height()), Layout::Horizontal);
       self.color_space.with_text(
          ui,
          input,
@@ -673,7 +692,16 @@ impl WindowContent for PickerWindow {
          &assets.sans,
       );
       data.color_space = *self.color_space.selected();
+      ui.fit();
+      let mouse_on_title_bar = mouse_on_title_bar && !ui.hover(input);
       ui.pop();
+
+      ui.pop();
+      ui.pop();
+
+      if mouse_on_title_bar {
+         **hit_test = HitTest::Draggable;
+      }
 
       // Process the group encompassing the color canvas and slider.
       ui.push(ui.remaining_size(), Layout::Horizontal);

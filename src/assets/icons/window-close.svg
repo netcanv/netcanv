@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Gravit.io -->
+
+<svg
+   style="isolation:isolate"
+   viewBox="0 0 24 24"
+   width="24"
+   height="24"
+   version="1.1"
+   id="svg1002"
+   sodipodi:docname="window-close.svg"
+   inkscape:version="1.1.1 (3bf5ae0, 2021-09-20)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1004"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:pageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="31.041667"
+     inkscape:cx="12"
+     inkscape:cy="11.983893"
+     inkscape:window-width="1920"
+     inkscape:window-height="1013"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g1000" />
+  <defs
+     id="defs994">
+    <clipPath
+       id="_clipPath_gUSudkgeyN3NX2ZLThcWR5Owpgwrmgub">
+      <rect
+         width="24"
+         height="24"
+         id="rect991" />
+    </clipPath>
+  </defs>
+  <g
+     clip-path="url(#_clipPath_gUSudkgeyN3NX2ZLThcWR5Owpgwrmgub)"
+     id="g1000">
+    <line
+       x1="8"
+       y1="8"
+       x2="16"
+       y2="16"
+       stroke-width="2"
+       stroke="rgb(0,0,0)"
+       stroke-linejoin="miter"
+       stroke-linecap="square"
+       stroke-miterlimit="3"
+       id="line996" />
+    <line
+       x1="16"
+       y1="8"
+       x2="8"
+       y2="16"
+       stroke-width="2"
+       stroke="rgb(0,0,0)"
+       stroke-linejoin="miter"
+       stroke-linecap="square"
+       stroke-miterlimit="3"
+       id="line998" />
+  </g>
+</svg>

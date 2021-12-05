@@ -318,10 +318,12 @@ impl TextField {
       };
 
       if input.action(MouseButton::Left) == (true, ButtonState::Pressed) {
+         let was_focused = self.focused;
          self.focused = ui.hover(input);
          if self.focused {
             self.reset_blink(input);
-         } else {
+         }
+         if !self.focused && was_focused {
             process_result.unfocused = true;
          }
       }

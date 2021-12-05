@@ -4,6 +4,7 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
+use crate::ui::wm::windows::{WindowButtonColors, WindowButtonsColors};
 use crate::ui::{
    ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, RadioButtonColors,
    TextFieldColors,
@@ -25,6 +26,9 @@ const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
+const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
+const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
+const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
 /// A color scheme.
 #[derive(Clone)]
@@ -43,6 +47,7 @@ pub struct ColorScheme {
    pub slider: Color,
    pub text_field: TextFieldColors,
    pub context_menu: ContextMenuColors,
+   pub window_buttons: WindowButtonsColors,
 
    pub titlebar: TitlebarColors,
 }
@@ -76,6 +81,12 @@ pub struct ColorSwitcherIcons {
    pub light: Image,
 }
 
+pub struct WindowIcons {
+   pub close: Image,
+   pub pin: Image,
+   pub pinned: Image,
+}
+
 /// Icons, rendered to images at startup.
 pub struct Icons {
    // Control-specific
@@ -88,6 +99,7 @@ pub struct Icons {
    pub status: StatusIcons,
    pub file: FileIcons,
    pub peer: PeerIcons,
+   pub window: WindowIcons,
 }
 
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
@@ -151,6 +163,11 @@ impl Assets {
             peer: PeerIcons {
                client: Self::load_icon(renderer, PEER_CLIENT_SVG),
                host: Self::load_icon(renderer, PEER_HOST_SVG),
+            },
+            window: WindowIcons {
+               close: Self::load_icon(renderer, WINDOW_CLOSE_SVG),
+               pin: Self::load_icon(renderer, WINDOW_PIN_SVG),
+               pinned: Self::load_icon(renderer, WINDOW_PINNED_SVG),
             },
          },
       }
@@ -229,6 +246,33 @@ impl ColorScheme {
          context_menu: ContextMenuColors {
             background: Color::argb(0xffeeeeee),
          },
+         window_buttons: WindowButtonsColors {
+            close: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xff000000),
+               hover_fill: Color::argb(0xff7f0000),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff3f0000),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+            pin: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xff000000),
+               hover_fill: Color::argb(0x40000000),
+               hover_icon: Color::argb(0xff000000),
+               pressed_fill: Color::argb(0x70000000),
+               pressed_icon: Color::argb(0xff000000),
+            },
+            pinned: WindowButtonColors {
+               normal_fill: Color::argb(0xff0397fb),
+               normal_icon: Color::argb(0xffffffff),
+               hover_fill: Color::argb(0xff32aafa),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff007ccf),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+         },
+
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xffffffff),
             separator: Color::argb(0x7f000000),
@@ -278,14 +322,14 @@ impl ColorScheme {
          },
          radio_button: RadioButtonColors {
             normal: ButtonColors {
-               fill: Color::argb(0x20a0a0a0),
-               outline: Color::argb(0x00000000),
+               fill: Color::TRANSPARENT,
+               outline: Color::argb(0x30b0b0b0),
                text: Color::argb(0xffb7b7b7),
                hover: Color::argb(0x20ffffff),
                pressed: Color::argb(0x05ffffff),
             },
             selected: ButtonColors {
-               fill: Color::argb(0xffa0a0a0),
+               fill: Color::argb(0xffb0b0b0),
                outline: Color::argb(0x00000000),
                text: Color::argb(0xff1f1f1f),
                hover: Color::argb(0x20ffffff),
@@ -311,6 +355,33 @@ impl ColorScheme {
          context_menu: ContextMenuColors {
             background: Color::argb(0xff1f1f1f),
          },
+         window_buttons: WindowButtonsColors {
+            close: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xffb7b7b7),
+               hover_fill: Color::argb(0xfffc9292),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xffb56969),
+               pressed_icon: Color::argb(0xffffffff),
+            },
+            pin: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xffb7b7b7),
+               hover_fill: Color::argb(0x20ffffff),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0x05ffffff),
+               pressed_icon: Color::argb(0xffffffff),
+            },
+            pinned: WindowButtonColors {
+               normal_fill: Color::argb(0xff268ed4),
+               normal_icon: Color::argb(0xffffffff),
+               hover_fill: Color::argb(0xff55a9e0),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff1b7fc2),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+         },
+
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xff383838),
             separator: Color::argb(0x7f939393),
