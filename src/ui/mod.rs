@@ -10,6 +10,7 @@ mod colorpicker;
 mod contextmenu;
 mod expand;
 mod input;
+mod radiobutton;
 mod slider;
 mod textfield;
 pub mod view;
@@ -20,6 +21,7 @@ pub use colorpicker::*;
 pub use contextmenu::*;
 pub use expand::*;
 pub use input::*;
+pub use radiobutton::*;
 pub use slider::*;
 pub use textfield::*;
 

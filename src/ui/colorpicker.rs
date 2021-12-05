@@ -1,11 +1,10 @@
 //! Color picker with palettes and multiple color spaces.
 
 use image::{Rgba, RgbaImage};
-use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Color, Layout, Padding, Rect, Renderer, Vector,
-};
+use netcanv_renderer::paws::{point, vector, Color, Layout, Padding, Rect, Renderer, Vector};
 use netcanv_renderer::{Font, Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
 use netcanv_renderer_opengl::winit::event::MouseButton;
+use strum::{EnumIter, EnumMessage};
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Framebuffer, Image};
@@ -16,8 +15,8 @@ use crate::ui::ValueSlider;
 use super::view::{Dimension, Dimensions, View};
 use super::wm::{WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager};
 use super::{
-   Button, ButtonArgs, ButtonState, Focus, Input, Slider, SliderStep, TextField, TextFieldArgs,
-   TextFieldColors, Ui, UiElements, UiInput, ValueSliderArgs,
+   Button, ButtonArgs, ButtonState, Focus, Input, RadioButton, RadioButtonArgs, SliderStep,
+   TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs,
 };
 
 /// Arguments for processing the color picker.
@@ -171,9 +170,12 @@ enum PickerWindowState {
    Closed(PickerWindowData),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, EnumMessage)]
 enum ColorSpace {
+   #[strum(message = "HSV")]
    Hsv,
+   #[strum(message = "Oklab")]
+   Oklab,
 }
 
 struct PickerWindowData {
@@ -182,6 +184,9 @@ struct PickerWindowData {
 }
 
 struct PickerWindow {
+   /// The color space selector.
+   color_space: RadioButton<ColorSpace>,
+
    /// The image of the color canvas - the large rectangular area that's used to pick
    /// a saturation and value (lightness).
    canvas_image: Framebuffer,
@@ -191,19 +196,22 @@ struct PickerWindow {
    canvas_sliding: bool,
    /// Whether the user is currently sliding the hue value on the vertical slider.
    slider_sliding: bool,
+
+   /// The text field containing the color's `#RRGGBB` hex code.
+   hex_code: TextField,
+   /// The channel and HSV sliders.
+   sliders: [ValueSlider; 6],
+
    /// The previously selected color. If different from the previous frame, the widgets are
    /// updated to reflect the changes.
    previous_color: AnyColor,
-
-   hex_code: TextField,
-   sliders: [ValueSlider; 6],
 }
 
 impl PickerWindow {
    /// The dimensions of the picker window.
    const DIMENSIONS: Dimensions = Dimensions {
       horizontal: Dimension::Constant(448.0),
-      vertical: Dimension::Constant(256.0),
+      vertical: Dimension::Constant(260.0),
    };
 
    /// The red channel adjustment slider.
@@ -225,14 +233,17 @@ impl PickerWindow {
       const CANVAS_RESOLUTION: u32 = 32;
       const SLIDER_RESOLUTION: (u32, u32) = (1, 64);
       let mut this = Self {
+         color_space: RadioButton::new(data.color_space),
+
          canvas_image: renderer.create_framebuffer(CANVAS_RESOLUTION, CANVAS_RESOLUTION),
          slider_image: renderer.create_framebuffer(SLIDER_RESOLUTION.0, SLIDER_RESOLUTION.1),
          canvas_sliding: false,
          slider_sliding: false,
-         previous_color: data.color,
 
          hex_code: TextField::new(None),
          sliders: Self::rgb_sliders(Srgb::from(data.color).to_color(1.0)),
+
+         previous_color: data.color,
       };
       this.slider_image.set_scaling_filter(ScalingFilter::Linear);
       this.canvas_image.set_scaling_filter(ScalingFilter::Linear);
@@ -254,7 +265,7 @@ impl PickerWindow {
       }
    }
 
-   /// Creates a set of RGB and HSV sliders.
+   /// Creates a set of RGB and HSV sliders for the given color.
    fn rgb_sliders(color: Color) -> [ValueSlider; 6] {
       let Color { r, g, b, .. } = color;
       let (r, g, b) = (r as f32, g as f32, b as f32);
@@ -284,6 +295,7 @@ impl PickerWindow {
             .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
+         ColorSpace::Oklab => todo!(),
       };
       framebuffer.upload_rgba((0, 0), (width, height), &image);
    }
@@ -303,6 +315,7 @@ impl PickerWindow {
             .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
+         ColorSpace::Oklab => todo!(),
       };
       framebuffer.upload_rgba((0, 0), (width, height), &image);
    }
@@ -317,6 +330,7 @@ impl PickerWindow {
          let y = f32::round(
             match data.color_space {
                ColorSpace::Hsv => Hsv::from(data.color).h / 6.0,
+               ColorSpace::Oklab => todo!(),
             } * ui.height(),
          );
          let width = ui.width();
@@ -356,6 +370,7 @@ impl PickerWindow {
                let h = y * 6.0;
                AnyColor::from(Hsv { h, s, v })
             }
+            ColorSpace::Oklab => todo!(),
          };
       }
 
@@ -372,11 +387,13 @@ impl PickerWindow {
          let x = f32::round(
             match data.color_space {
                ColorSpace::Hsv => Hsv::from(data.color).s,
+               ColorSpace::Oklab => todo!(),
             } * ui.width(),
          );
          let y = f32::round(
             match data.color_space {
                ColorSpace::Hsv => 1.0 - Hsv::from(data.color).v,
+               ColorSpace::Oklab => todo!(),
             } * ui.height(),
          );
          let radius = 4.0;
@@ -399,6 +416,7 @@ impl PickerWindow {
                let h = Hsv::from(data.color).h;
                AnyColor::from(Hsv { h, s, v })
             }
+            ColorSpace::Oklab => todo!(),
          };
       }
 
@@ -559,13 +577,18 @@ impl WindowContent for PickerWindow {
       ui.push(ui.size(), Layout::Vertical);
 
       // The title bar and color space selector.
-      ui.push((ui.width(), 36.0), Layout::Horizontal);
+      ui.push((ui.width(), 40.0), Layout::Horizontal);
       ui.pad((12.0, 0.0));
-      ui.text(
+      ui.offset(vector(0.0, 8.0));
+      self.color_space.with_text(
+         ui,
+         input,
+         RadioButtonArgs {
+            height: 24.0,
+            colors: &assets.colors.radio_button,
+            corner_radius: 11.5,
+         },
          &assets.sans,
-         "Color picker",
-         assets.colors.text,
-         (AlignH::Left, AlignV::Middle),
       );
       ui.pop();
 

@@ -5,7 +5,8 @@ use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
 use crate::ui::{
-   ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, TextFieldColors,
+   ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, RadioButtonColors,
+   TextFieldColors,
 };
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
@@ -37,6 +38,7 @@ pub struct ColorScheme {
    pub action_button: ButtonColors,
    pub toolbar_button: ButtonColors,
    pub selected_toolbar_button: ButtonColors,
+   pub radio_button: RadioButtonColors,
    pub expand: ExpandColors,
    pub slider: Color,
    pub text_field: TextFieldColors,
@@ -192,6 +194,22 @@ impl ColorScheme {
             hover: Color::argb(0x40ffffff),
             pressed: Color::argb(0x70000000),
          },
+         radio_button: RadioButtonColors {
+            normal: ButtonColors {
+               fill: Color::TRANSPARENT,
+               outline: Color::argb(0x40000000),
+               text: Color::argb(0xff000000),
+               hover: Color::argb(0x40000000),
+               pressed: Color::argb(0x70000000),
+            },
+            selected: ButtonColors {
+               fill: Color::argb(0xff333333),
+               outline: Color::argb(0x00000000),
+               text: Color::argb(0xffeeeeee),
+               hover: Color::argb(0x40ffffff),
+               pressed: Color::argb(0x70000000),
+            },
+         },
          slider: Color::argb(0xff000000),
          expand: ExpandColors {
             icon: Color::argb(0xff000000),
@@ -257,6 +275,22 @@ impl ColorScheme {
             text: Color::argb(0xff1f1f1f),
             hover: Color::argb(0x20ffffff),
             pressed: Color::argb(0x05ffffff),
+         },
+         radio_button: RadioButtonColors {
+            normal: ButtonColors {
+               fill: Color::argb(0x20a0a0a0),
+               outline: Color::argb(0x00000000),
+               text: Color::argb(0xffb7b7b7),
+               hover: Color::argb(0x20ffffff),
+               pressed: Color::argb(0x05ffffff),
+            },
+            selected: ButtonColors {
+               fill: Color::argb(0xffa0a0a0),
+               outline: Color::argb(0x00000000),
+               text: Color::argb(0xff1f1f1f),
+               hover: Color::argb(0x20ffffff),
+               pressed: Color::argb(0x05ffffff),
+            },
          },
          slider: Color::argb(0xff979797),
          expand: ExpandColors {
