@@ -74,7 +74,13 @@ pub trait UiElements {
    ///
    /// Intended for use with horizontal layouts. Will not work all that well with vertical.
    /// Use [`UiElements::vertical_label`] instead.
-   fn horizontal_label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
+   fn horizontal_label(
+      &mut self,
+      font: &Font,
+      text: &str,
+      color: Color,
+      constraint: Option<(f32, AlignH)>,
+   );
 
    /// Draws a paragraph of text. Each string in `text` is treated as a new group.
    fn paragraph(
@@ -105,10 +111,16 @@ impl UiElements for Ui {
       self.pop();
    }
 
-   fn horizontal_label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
-      let width = width.unwrap_or_else(|| font.text_width(text));
+   fn horizontal_label(
+      &mut self,
+      font: &Font,
+      text: &str,
+      color: Color,
+      width: Option<(f32, AlignH)>,
+   ) {
+      let (width, alignment) = width.unwrap_or_else(|| (font.text_width(text), AlignH::Left));
       self.push((width, self.height()), Layout::Freeform);
-      self.text(font, text, color, (AlignH::Center, AlignV::Middle));
+      self.text(font, text, color, (alignment, AlignV::Middle));
       self.pop();
    }
 

@@ -474,7 +474,7 @@ impl Tool for SelectionTool {
          &assets.sans,
          &mouse_position,
          assets.colors.text,
-         Some(label_width(&assets.sans, &mouse_position)),
+         Some((label_width(&assets.sans, &mouse_position), AlignH::Center)),
       );
 
       if let Some(rect) = self.selection.normalized_rect() {
@@ -486,7 +486,7 @@ impl Tool for SelectionTool {
             &assets.sans,
             &anchor,
             assets.colors.text,
-            Some(label_width(&assets.sans, &anchor)),
+            Some((label_width(&assets.sans, &anchor), AlignH::Center)),
          );
          let size = format!("{:.0} × {:.0}", rect.width(), rect.height());
          ui.icon(&self.icons.rectangle, assets.colors.text, Some(icon_size));
@@ -494,7 +494,7 @@ impl Tool for SelectionTool {
             &assets.sans,
             &size,
             assets.colors.text,
-            Some(label_width(&assets.sans, &size)),
+            Some((label_width(&assets.sans, &size), AlignH::Center)),
          );
       }
    }

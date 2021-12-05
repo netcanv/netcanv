@@ -586,7 +586,7 @@ impl State {
             &self.assets.monospace.with_size(24.0),
             &id_text,
             self.assets.colors.text,
-            Some(ui.remaining_width()),
+            Some((ui.remaining_width(), AlignH::Center)),
          );
          ui.pop();
 

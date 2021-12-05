@@ -1,17 +1,24 @@
 //! Color picker with palettes and multiple color spaces.
 
 use image::{Rgba, RgbaImage};
-use netcanv_renderer::paws::{point, vector, Color, Layout, Rect, Renderer, Vector};
-use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Color, Layout, Padding, Rect, Renderer, Vector,
+};
+use netcanv_renderer::{Font, Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
 use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Framebuffer, Image};
 use crate::color::{AnyColor, Hsv, Srgb};
+use crate::common::ColorMath;
+use crate::ui::ValueSlider;
 
 use super::view::{Dimension, Dimensions, View};
 use super::wm::{WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager};
-use super::{Button, ButtonArgs, ButtonState, Input, Ui, UiInput};
+use super::{
+   Button, ButtonArgs, ButtonState, Focus, Input, Slider, SliderStep, TextField, TextFieldArgs,
+   TextFieldColors, Ui, UiElements, UiInput, ValueSliderArgs,
+};
 
 /// Arguments for processing the color picker.
 pub struct ColorPickerArgs<'a, 'wm> {
@@ -180,18 +187,38 @@ struct PickerWindow {
    canvas_image: Framebuffer,
    /// The image of the color slider - the vertical slider used to pick hues.
    slider_image: Framebuffer,
-
+   /// Whether the user is currently sliding the color values on the canvas.
    canvas_sliding: bool,
+   /// Whether the user is currently sliding the hue value on the vertical slider.
    slider_sliding: bool,
+   /// The previously selected color. If different from the previous frame, the widgets are
+   /// updated to reflect the changes.
    previous_color: AnyColor,
+
+   hex_code: TextField,
+   sliders: [ValueSlider; 6],
 }
 
 impl PickerWindow {
    /// The dimensions of the picker window.
    const DIMENSIONS: Dimensions = Dimensions {
-      horizontal: Dimension::Constant(512.0),
+      horizontal: Dimension::Constant(448.0),
       vertical: Dimension::Constant(256.0),
    };
+
+   /// The red channel adjustment slider.
+   const R_SLIDER: usize = 0;
+   /// The green channel adjustment slider.
+   const G_SLIDER: usize = 1;
+   /// The blue channel adjustment slider.
+   const B_SLIDER: usize = 2;
+
+   /// The hue adjustment slider.
+   const H_SLIDER: usize = 3;
+   /// The saturation adjustment slider.
+   const S_SLIDER: usize = 4;
+   /// The value adjustment slider.
+   const V_SLIDER: usize = 5;
 
    /// Creates the picker window's inner data.
    fn new(renderer: &mut Backend, data: &PickerWindowData) -> Self {
@@ -203,6 +230,9 @@ impl PickerWindow {
          canvas_sliding: false,
          slider_sliding: false,
          previous_color: data.color,
+
+         hex_code: TextField::new(None),
+         sliders: Self::rgb_sliders(Srgb::from(data.color).to_color(1.0)),
       };
       this.slider_image.set_scaling_filter(ScalingFilter::Linear);
       this.canvas_image.set_scaling_filter(ScalingFilter::Linear);
@@ -212,6 +242,7 @@ impl PickerWindow {
          Hsv::from(data.color).h,
          data.color_space,
       );
+      this.update_widgets(data);
       this
    }
 
@@ -221,6 +252,22 @@ impl PickerWindow {
          color: default_color,
          color_space: ColorSpace::Hsv,
       }
+   }
+
+   /// Creates a set of RGB and HSV sliders.
+   fn rgb_sliders(color: Color) -> [ValueSlider; 6] {
+      let Color { r, g, b, .. } = color;
+      let (r, g, b) = (r as f32, g as f32, b as f32);
+      let Hsv { h, s, v } = Hsv::from(Srgb::from_color(color));
+      let h = h * 60.0;
+      [
+         ValueSlider::new("R", r, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("G", g, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("B", b, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("H", h, 0.0, 360.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("S", s, 0.0, 1.0, SliderStep::Smooth),
+         ValueSlider::new("V", v, 0.0, 1.0, SliderStep::Smooth),
+      ]
    }
 
    /// Renders the slider for the given color space, to the given framebuffer.
@@ -303,7 +350,6 @@ impl PickerWindow {
       if self.slider_sliding {
          let y = ui.mouse_position(input).y / ui.height();
          let y = y.clamp(0.0, 1.0 - f32::EPSILON);
-         let previous_color = data.color;
          data.color = match data.color_space {
             ColorSpace::Hsv => {
                let Hsv { s, v, .. } = Hsv::from(data.color);
@@ -358,6 +404,146 @@ impl PickerWindow {
 
       ui.pop();
    }
+
+   /// Processes the value display of the color picker.
+   fn process_values(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      assets: &Assets,
+      data: &mut PickerWindowData,
+   ) {
+      ui.push((ui.remaining_width(), ui.height()), Layout::Vertical);
+      let color = Srgb::from(data.color).to_color(1.0);
+
+      // The hex code text field.
+      let text_color = if color.brightness() > 0.5 {
+         Color::BLACK
+      } else {
+         Color::WHITE
+      };
+      let hex_code = self.hex_code.process(
+         ui,
+         input,
+         TextFieldArgs {
+            width: ui.width(),
+            font: &assets.monospace.with_size(16.0),
+            colors: &TextFieldColors {
+               outline: Color::TRANSPARENT,
+               outline_focus: Color::TRANSPARENT,
+               fill: color,
+               text: text_color.with_alpha(220),
+               text_hint: text_color.with_alpha(127),
+               ..assets.colors.text_field
+            },
+            hint: Some("RGB hex code"),
+         },
+      );
+      if hex_code.done() || hex_code.unfocused() {
+         if let Some(color) = Self::parse_hex_code(self.hex_code.text()) {
+            let color = AnyColor::from(Srgb::from_color(color));
+            data.color = color;
+         }
+         self.update_widgets(data);
+      }
+      ui.space(12.0);
+
+      // The value sliders below the text field.
+      let value_slider = ValueSliderArgs {
+         color: assets.colors.slider,
+         font: &assets.sans,
+         label_width: Some(16.0),
+      };
+      let mut sliders_changed = [false; 6];
+      for (i, slider) in self.sliders[Self::R_SLIDER..=Self::B_SLIDER].iter_mut().enumerate() {
+         if slider.process(ui, input, value_slider).changed() {
+            sliders_changed[i] = true;
+         }
+      }
+      ui.space(8.0);
+      for (i, slider) in self.sliders[Self::H_SLIDER..=Self::V_SLIDER].iter_mut().enumerate() {
+         if slider.process(ui, input, value_slider).changed() {
+            sliders_changed[i + Self::H_SLIDER] = true;
+         }
+      }
+
+      macro_rules! update_color_channel {
+         ($index:expr, $color_space:tt, $channel:tt, $max:expr) => {
+            if sliders_changed[$index] {
+               data.color = AnyColor::from($color_space {
+                  $channel: self.sliders[$index].value() / $max,
+                  ..$color_space::from(data.color)
+               });
+            }
+         };
+      }
+
+      update_color_channel!(Self::R_SLIDER, Srgb, r, 255.0);
+      update_color_channel!(Self::G_SLIDER, Srgb, g, 255.0);
+      update_color_channel!(Self::B_SLIDER, Srgb, b, 255.0);
+      update_color_channel!(Self::H_SLIDER, Hsv, h, 60.0);
+      update_color_channel!(Self::S_SLIDER, Hsv, s, 1.0);
+      update_color_channel!(Self::V_SLIDER, Hsv, v, 1.0);
+
+      if sliders_changed.iter().any(|&changed| changed) {
+         self.update_widgets(data);
+      }
+
+      ui.pop();
+   }
+
+   /// Parses a hex code into a color. If the given text is not a valid hex code, returns `None`.
+   fn parse_hex_code(text: &str) -> Option<Color> {
+      // Empty string? Not a hex code.
+      if text.len() == 0 {
+         return None;
+      }
+      // Strip the optional, leading #.
+      let text = text.strip_prefix('#').unwrap_or(text);
+      match text.len() {
+         3 => {
+            // With #RGB colors, we do some byte manipulation to repeat the R, G, B quartets
+            // such that we end up with an #RRGGBB color.
+            let hex = u32::from_str_radix(text, 16).ok()?;
+            let (r, g, b) = (hex & 0xF, (hex >> 4) & 0xF, (hex >> 8) & 0xF);
+            let (r, g, b) = (r | (r << 4), g | (g << 4), b | (b << 4));
+            let hex = r | (g << 8) | (b << 16);
+            Some(Color::rgb(hex))
+         }
+         6 => {
+            // With #RRGGBB colors no manipulation needs to be done, so we just parse and
+            // interpret the color literally.
+            let hex = u32::from_str_radix(text, 16).ok()?;
+            Some(Color::rgb(hex))
+         }
+         _ => None,
+      }
+   }
+
+   /// Updates the widgets to reflect the currently picked color.
+   fn update_widgets(&mut self, data: &PickerWindowData) {
+      let color = Srgb::from(data.color).to_color(1.0);
+
+      // Make sure the color canvas shows the correct hue.
+      Self::update_canvas(
+         &mut self.canvas_image,
+         Hsv::from(data.color).h,
+         data.color_space,
+      );
+
+      // Update the hex code in the text field.
+      if !self.hex_code.focused() {
+         self.hex_code.set_text(format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b));
+      }
+
+      // Update the sliders.
+      self.sliders[Self::R_SLIDER].set_value(Srgb::from(data.color).r * 255.0);
+      self.sliders[Self::G_SLIDER].set_value(Srgb::from(data.color).g * 255.0);
+      self.sliders[Self::B_SLIDER].set_value(Srgb::from(data.color).b * 255.0);
+      self.sliders[Self::H_SLIDER].set_value(Hsv::from(data.color).h * 60.0);
+      self.sliders[Self::S_SLIDER].set_value(Hsv::from(data.color).s);
+      self.sliders[Self::V_SLIDER].set_value(Hsv::from(data.color).v);
+   }
 }
 
 impl WindowContent for PickerWindow {
@@ -370,28 +556,39 @@ impl WindowContent for PickerWindow {
       }: WindowContentArgs,
       data: &mut Self::Data,
    ) {
-      ui.pad(12.0);
+      ui.push(ui.size(), Layout::Vertical);
 
-      // The group encompassing the color canvas and slider.
-      ui.push(ui.size(), Layout::Horizontal);
+      // The title bar and color space selector.
+      ui.push((ui.width(), 36.0), Layout::Horizontal);
+      ui.pad((12.0, 0.0));
+      ui.text(
+         &assets.sans,
+         "Color picker",
+         assets.colors.text,
+         (AlignH::Left, AlignV::Middle),
+      );
+      ui.pop();
 
-      // The color canvas.
+      // Process the group encompassing the color canvas and slider.
+      ui.push(ui.remaining_size(), Layout::Horizontal);
+      ui.pad(Padding {
+         top: 0.0,
+         ..Padding::even(12.0)
+      });
+
       self.process_canvas(ui, input, data);
       ui.space(12.0);
-
-      // The color slider.
       self.process_slider(ui, input, data);
-
-      if data.color != self.previous_color {
-         Self::update_canvas(
-            &mut self.canvas_image,
-            Hsv::from(data.color).h,
-            data.color_space,
-         );
-         self.previous_color = data.color;
-      }
+      ui.space(12.0);
+      self.process_values(ui, input, assets, data);
 
       ui.pop();
+
+      ui.pop();
+
+      if data.color != self.previous_color {
+         self.update_widgets(data);
+      }
       self.previous_color = data.color;
    }
 }

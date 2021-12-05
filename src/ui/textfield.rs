@@ -208,6 +208,12 @@ impl TextField {
       &self.text
    }
 
+   /// Sets the text in the text field.
+   pub fn set_text(&mut self, text: String) {
+      self.text = text;
+      self.selection.move_to(TextPosition(self.text.len()));
+   }
+
    /// Returns the selection contents.
    fn selection_text(&self) -> &str {
       &self.text[self.selection.normalize()]
@@ -306,12 +312,17 @@ impl TextField {
 
    /// Processes input events.
    fn process_events(&mut self, ui: &Ui, input: &Input) -> TextFieldProcessResult {
-      let mut process_result = TextFieldProcessResult { done: false };
+      let mut process_result = TextFieldProcessResult {
+         unfocused: false,
+         done: false,
+      };
 
       if input.action(MouseButton::Left) == (true, ButtonState::Pressed) {
          self.focused = ui.hover(input);
          if self.focused {
             self.reset_blink(input);
+         } else {
+            process_result.unfocused = true;
          }
       }
 
@@ -430,12 +441,18 @@ impl Focus for TextField {
 /// The result of processing a text field.
 pub struct TextFieldProcessResult {
    done: bool,
+   unfocused: bool,
 }
 
 impl TextFieldProcessResult {
    /// Returns whether the user pressed the Return key while editing text.
    pub fn done(&self) -> bool {
       self.done
+   }
+
+   /// Returns whether the text field was unfocused.
+   pub fn unfocused(&self) -> bool {
+      self.unfocused
    }
 }
 

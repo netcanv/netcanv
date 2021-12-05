@@ -353,7 +353,7 @@ impl Tool for BrushTool {
          &assets.sans_bold,
          &self.thickness().to_string(),
          assets.colors.text,
-         Some(ui.height()),
+         Some((ui.height(), AlignH::Center)),
       );
    }
 

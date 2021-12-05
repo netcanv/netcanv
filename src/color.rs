@@ -165,7 +165,7 @@ impl From<Srgb> for Hsv {
       let v = f32::max(r, f32::max(g, b));
       let c = v - f32::min(r, f32::min(g, b));
       Self {
-         h: if c <= 0.001 {
+         h: if c < f32::EPSILON {
             0.0
          } else if v == r {
             (g - b) / c
@@ -174,7 +174,8 @@ impl From<Srgb> for Hsv {
          } else if v == b {
             4.0 + (r - g) / c
          } else {
-            // R = G = B
+            // This should have already been caught by the first branch, but the Rust
+            // compiler wants us to specify an else branch just in case.
             0.0
          }
          .rem_euclid(6.0),
