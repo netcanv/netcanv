@@ -15,6 +15,8 @@ pub enum AnyColor {
    Srgb(Srgb),
    LinearRgb(LinearRgb),
    Hsv(Hsv),
+   Oklab(Oklab),
+   Okhsv(Okhsv),
 }
 
 impl From<Srgb> for AnyColor {
@@ -29,6 +31,8 @@ impl From<AnyColor> for Srgb {
          AnyColor::Srgb(srgb) => srgb,
          AnyColor::LinearRgb(linear_rgb) => Srgb::from(linear_rgb),
          AnyColor::Hsv(hsv) => Srgb::from(hsv),
+         AnyColor::Oklab(lab) => Srgb::from(LinearRgb::from(lab)),
+         AnyColor::Okhsv(hsv) => Srgb::from(LinearRgb::from(Oklab::from(hsv))),
       }
    }
 }
@@ -45,6 +49,8 @@ impl From<AnyColor> for LinearRgb {
          AnyColor::Srgb(srgb) => LinearRgb::from(srgb),
          AnyColor::LinearRgb(linear_rgb) => linear_rgb,
          AnyColor::Hsv(hsv) => LinearRgb::from(Srgb::from(hsv)),
+         AnyColor::Oklab(lab) => LinearRgb::from(lab),
+         AnyColor::Okhsv(hsv) => LinearRgb::from(Oklab::from(hsv)),
       }
    }
 }
@@ -61,6 +67,44 @@ impl From<AnyColor> for Hsv {
          AnyColor::Srgb(srgb) => Hsv::from(srgb),
          AnyColor::LinearRgb(linear_rgb) => Hsv::from(Srgb::from(linear_rgb)),
          AnyColor::Hsv(hsv) => hsv,
+         AnyColor::Oklab(lab) => Hsv::from(Srgb::from(LinearRgb::from(lab))),
+         AnyColor::Okhsv(hsv) => Hsv::from(Srgb::from(LinearRgb::from(Oklab::from(hsv)))),
+      }
+   }
+}
+
+impl From<Oklab> for AnyColor {
+   fn from(color: Oklab) -> Self {
+      Self::Oklab(color)
+   }
+}
+
+impl From<AnyColor> for Oklab {
+   fn from(color: AnyColor) -> Self {
+      match color {
+         AnyColor::Srgb(srgb) => Oklab::from(LinearRgb::from(srgb)),
+         AnyColor::LinearRgb(linear_rgb) => Oklab::from(linear_rgb),
+         AnyColor::Hsv(hsv) => Oklab::from(LinearRgb::from(Srgb::from(hsv))),
+         AnyColor::Oklab(lab) => lab,
+         AnyColor::Okhsv(hsv) => Oklab::from(hsv),
+      }
+   }
+}
+
+impl From<Okhsv> for AnyColor {
+   fn from(color: Okhsv) -> Self {
+      Self::Okhsv(color)
+   }
+}
+
+impl From<AnyColor> for Okhsv {
+   fn from(color: AnyColor) -> Self {
+      match color {
+         AnyColor::Srgb(srgb) => Okhsv::from(Oklab::from(LinearRgb::from(srgb))),
+         AnyColor::LinearRgb(linear_rgb) => Okhsv::from(Oklab::from(linear_rgb)),
+         AnyColor::Hsv(hsv) => Okhsv::from(Oklab::from(LinearRgb::from(Srgb::from(hsv)))),
+         AnyColor::Oklab(lab) => Okhsv::from(lab),
+         AnyColor::Okhsv(hsv) => hsv,
       }
    }
 }
@@ -212,6 +256,7 @@ impl From<Hsv> for Srgb {
 }
 
 /// An Oklab color.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Oklab {
    /// The L (lightness) component of the color.
    pub l: f32,
@@ -290,6 +335,7 @@ impl From<Lc> for St {
 }
 
 /// An Okhsv color.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Okhsv {
    /// The hue.
    pub h: f32,
