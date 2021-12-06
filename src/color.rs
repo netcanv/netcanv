@@ -350,6 +350,8 @@ pub struct Okhsv {
 }
 
 impl Okhsv {
+   const MAGIC_WHITE_MULTIPLIER: f32 = 1.030651;
+
    fn compute_max_saturation(a: f32, b: f32) -> f32 {
       // Max saturation will be when one of r, g or b goes below zero.
 
@@ -519,12 +521,16 @@ impl From<Oklab> for Okhsv {
       };
       let v = if l != 0.0 { l / l_v } else { 0.0 };
 
+      let v = v / Okhsv::MAGIC_WHITE_MULTIPLIER;
+
       return Okhsv { h, s, v };
    }
 }
 
 impl From<Okhsv> for Oklab {
    fn from(Okhsv { h, s, v }: Okhsv) -> Self {
+      let v = v * Okhsv::MAGIC_WHITE_MULTIPLIER;
+
       let a_ = (2.0 * std::f32::consts::PI * h).cos();
       let b_ = (2.0 * std::f32::consts::PI * h).sin();
 
