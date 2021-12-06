@@ -8,7 +8,7 @@ use strum::{EnumIter, EnumMessage};
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Framebuffer, Image};
-use crate::color::{AnyColor, Hsv, Okhsv, Oklab, Srgb};
+use crate::color::{AnyColor, Hsv, Okhsv, Srgb};
 use crate::common::ColorMath;
 use crate::ui::ValueSlider;
 
@@ -476,7 +476,7 @@ impl PickerWindow {
 
       if self.canvas_sliding {
          let Vector { x, y } = ui.mouse_position(input) / ui.size();
-         let (x, y) = (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0 - f32::EPSILON));
+         let (x, y) = (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
          let (s, v) = (x, 1.0 - y);
          data.color = match data.color_space {
             ColorSpace::Rgb => {

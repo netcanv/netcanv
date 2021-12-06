@@ -11,7 +11,7 @@ use crate::common::VectorMath;
 use crate::token::Token;
 
 use super::view::View;
-use super::{input, ButtonState, Input, Ui};
+use super::{ButtonState, Input, Ui};
 
 use netcanv_renderer::paws::Layout;
 use netcanv_renderer_opengl::winit::event::MouseButton;

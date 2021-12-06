@@ -51,12 +51,9 @@ where
          corner_radius,
       }: RadioButtonArgs,
       font: &Font,
-   ) -> RadioButtonProcessResult
-   where
+   ) where
       C: EnumMessage,
    {
-      let mut process_result = RadioButtonProcessResult { changed: false };
-
       ui.push((0.0, height), Layout::Horizontal);
 
       for item in C::iter() {
@@ -78,31 +75,16 @@ where
          .clicked()
          {
             self.selected = item;
-            process_result.changed = true;
          }
          ui.space(4.0);
       }
 
       ui.fit();
       ui.pop();
-
-      process_result
    }
 
    /// Returns the selected variant.
    pub fn selected(&self) -> &C {
       &self.selected
-   }
-}
-
-/// The result of processing a radio button.
-pub struct RadioButtonProcessResult {
-   changed: bool,
-}
-
-impl RadioButtonProcessResult {
-   /// Returns whether the value was changed.
-   pub fn changed(&self) -> bool {
-      self.changed
    }
 }
