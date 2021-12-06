@@ -19,7 +19,7 @@ A screenshot of my imaginary friend and I painting things together using NetCanv
   derivatives must remain free, as well.
 - **Open source.** _You_ can be a part of NetCanv's development! If you have a feature you'd like
   to see added, or you think you've found a bug, head over to the [Issues](https://github.com/liquidev/netcanv/issues)
-  tab.
+  tab. If you know how to code, feel free to send in [Pull Requests](https://github.com/liquidev/netcanv/pulls)!
 - **Made with 💙** by a high school student with too much time on his hands.
 
 ## Compiling
