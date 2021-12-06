@@ -316,6 +316,9 @@ impl From<Oklab> for LinearRgb {
 //
 // So all credit goes to him. Please go check out his work.
 
+// Update: I added a bunch of failsafes around divisions by zero, so it's not entirely just a
+// port of the C++ code. Still, it's not my math so I don't take credit.
+
 struct Lc {
    l: f32,
    c: f32,
