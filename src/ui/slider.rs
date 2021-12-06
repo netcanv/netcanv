@@ -1,5 +1,8 @@
 //! A slider control.
 
+use std::fmt::Write;
+use std::ops::{Deref, DerefMut};
+
 use paws::{point, Color, Layout, Rect, Renderer};
 
 use crate::common::quantize;
@@ -51,11 +54,18 @@ impl Slider {
    }
 
    /// Processes a slider.
-   pub fn process(&mut self, ui: &mut Ui, input: &Input, SliderArgs { width, color }: SliderArgs) {
+   pub fn process(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      SliderArgs { width, color }: SliderArgs,
+   ) -> SliderProcessResult {
+      let previous_value = self.value();
+
       ui.push((width, ui.height()), Layout::Freeform);
 
       match input.action(MouseButton::Left) {
-         (true, ButtonState::Pressed) if ui.has_mouse(input) => self.sliding = true,
+         (true, ButtonState::Pressed) if ui.hover(input) => self.sliding = true,
          (_, ButtonState::Released) => self.sliding = false,
          _ => (),
       }
@@ -64,7 +74,7 @@ impl Slider {
          self.value = ui.mouse_position(input).x / ui.width();
       }
 
-      if ui.has_mouse(input) {
+      if ui.hover(input) {
          if let (true, Some(scroll)) = input.action(MouseScroll) {
             let scroll_amount = match self.step {
                SliderStep::Discrete(increment) => increment / self.step_count() as f32 * 2.0,
@@ -106,6 +116,10 @@ impl Slider {
       });
 
       ui.pop();
+
+      SliderProcessResult {
+         changed: self.value() != previous_value,
+      }
    }
 
    /// Returns the slider's raw (normalized – unmapped) value (range [0.0; 1.0]).
@@ -132,5 +146,123 @@ impl Slider {
    /// Returns whether the slider is currently being slid around.
    pub fn is_sliding(&self) -> bool {
       self.sliding
+   }
+}
+
+/// The result of processing a slider.
+pub struct SliderProcessResult {
+   changed: bool,
+}
+
+impl SliderProcessResult {
+   /// Returns whether the slider's value has changed.
+   pub fn changed(&self) -> bool {
+      self.changed
+   }
+}
+
+#[derive(Clone)]
+pub struct ValueUnit {
+   pub text: String,
+   pub precision: usize,
+}
+
+impl ValueUnit {
+   pub fn new(text: &str, precision: usize) -> Self {
+      Self {
+         text: text.to_owned(),
+         precision,
+      }
+   }
+}
+
+/// Arguments for processing a value slider.
+#[derive(Clone, Copy)]
+pub struct ValueSliderArgs<'f> {
+   pub color: Color,
+   pub font: &'f Font,
+   pub label_width: Option<f32>,
+   pub value_width: Option<f32>,
+}
+
+/// A value slider. That is, a slider with a label and a numeric input box.
+pub struct ValueSlider {
+   label: String,
+   unit: ValueUnit,
+   slider: Slider,
+}
+
+impl ValueSlider {
+   /// Creates a new value slider.
+   pub fn new(
+      label: &str,
+      unit: ValueUnit,
+      value: f32,
+      min: f32,
+      max: f32,
+      step: SliderStep,
+   ) -> Self {
+      Self {
+         label: label.to_owned(),
+         unit,
+         slider: Slider::new(value, min, max, step),
+      }
+   }
+
+   /// Processes the value slider.
+   pub fn process(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      ValueSliderArgs {
+         color,
+         font,
+         label_width,
+         value_width,
+      }: ValueSliderArgs,
+   ) -> SliderProcessResult {
+      ui.push((ui.width(), 24.0), Layout::Horizontal);
+      // Hopefully enough to fit any value.
+      let mut value = heapless::String::<32>::new();
+      let _ = write!(
+         value,
+         "{:.precision$}{}",
+         self.value(),
+         self.unit.text,
+         precision = self.unit.precision,
+      );
+      let value_width = value_width.unwrap_or_else(|| font.text_width(&value));
+      ui.horizontal_label(
+         font,
+         &self.label,
+         color,
+         label_width.map(|w| (w, AlignH::Left)),
+      );
+      let process_result = self.slider.process(
+         ui,
+         input,
+         SliderArgs {
+            width: ui.remaining_width() - value_width,
+            color,
+         },
+      );
+      ui.horizontal_label(font, &value, color, Some((value_width, AlignH::Right)));
+      ui.pop();
+
+      process_result
+   }
+}
+
+impl Deref for ValueSlider {
+   type Target = Slider;
+
+   fn deref(&self) -> &Self::Target {
+      &self.slider
+   }
+}
+
+impl DerefMut for ValueSlider {
+   fn deref_mut(&mut self) -> &mut Self::Target {
+      &mut self.slider
    }
 }

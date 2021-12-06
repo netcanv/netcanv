@@ -6,14 +6,22 @@ use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
 use crate::backend::{Backend, Font, Image};
 
 mod button;
+mod colorpicker;
+mod contextmenu;
 mod expand;
 mod input;
+mod radiobutton;
 mod slider;
 mod textfield;
+pub mod view;
+pub mod wm;
 
 pub use button::*;
+pub use colorpicker::*;
+pub use contextmenu::*;
 pub use expand::*;
 pub use input::*;
+pub use radiobutton::*;
 pub use slider::*;
 pub use textfield::*;
 
@@ -28,6 +36,10 @@ pub trait UiInput {
 
    /// Returns whether the mouse position is in the current group's rectangle.
    fn has_mouse(&self, input: &Input) -> bool;
+
+   /// Returns whether the mouse position is in the current group's rectangle, and the mouse
+   /// is currently active.
+   fn hover(&self, input: &Input) -> bool;
 }
 
 impl UiInput for Ui {
@@ -47,6 +59,10 @@ impl UiInput for Ui {
       } = self.size();
       mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
    }
+
+   fn hover(&self, input: &Input) -> bool {
+      input.mouse_active() && self.has_mouse(input)
+   }
 }
 
 pub trait UiElements {
@@ -54,9 +70,19 @@ pub trait UiElements {
    fn icon(&mut self, image: &Image, color: Color, size: Option<Vector>);
 
    /// Draws text in a new group.
+   fn vertical_label(&mut self, font: &Font, text: &str, color: Color, alignment: AlignH);
+
+   /// Draws text in a new group.
    ///
    /// Intended for use with horizontal layouts. Will not work all that well with vertical.
-   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>);
+   /// Use [`UiElements::vertical_label`] instead.
+   fn horizontal_label(
+      &mut self,
+      font: &Font,
+      text: &str,
+      color: Color,
+      constraint: Option<(f32, AlignH)>,
+   );
 
    /// Draws a paragraph of text. Each string in `text` is treated as a new group.
    fn paragraph(
@@ -81,10 +107,22 @@ impl UiElements for Ui {
       self.pop();
    }
 
-   fn label(&mut self, font: &Font, text: &str, color: Color, width: Option<f32>) {
-      let width = width.unwrap_or_else(|| font.text_width(text));
+   fn vertical_label(&mut self, font: &Font, text: &str, color: Color, alignment: AlignH) {
+      self.push((self.width(), font.height()), Layout::Freeform);
+      self.text(font, text, color, (alignment, AlignV::Top));
+      self.pop();
+   }
+
+   fn horizontal_label(
+      &mut self,
+      font: &Font,
+      text: &str,
+      color: Color,
+      width: Option<(f32, AlignH)>,
+   ) {
+      let (width, alignment) = width.unwrap_or_else(|| (font.text_width(text), AlignH::Left));
       self.push((width, self.height()), Layout::Freeform);
-      self.text(font, text, color, (AlignH::Center, AlignV::Middle));
+      self.text(font, text, color, (alignment, AlignV::Middle));
       self.pop();
    }
 

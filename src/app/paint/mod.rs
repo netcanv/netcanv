@@ -1,5 +1,6 @@
 //! The paint state. This is the screen where you paint on the canvas with other people.
 
+mod actions;
 mod tools;
 
 use std::cell::RefCell;
@@ -8,26 +9,31 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use native_dialog::FileDialog;
 use netcanv_protocol::matchmaker::PeerId;
 use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
+   point, vector, AlignH, AlignV, Alignment, Color, Layout, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 
+use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
+use crate::clipboard;
 use crate::common::*;
 use crate::config::{ToolbarPosition, UserConfig};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
+use crate::ui::view::layout::DirectionV;
+use crate::ui::view::{Dimension, View};
+use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
 
+use self::actions::SaveToFileAction;
 use self::tools::{BrushTool, Net, SelectionTool, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
@@ -66,13 +72,13 @@ pub struct State {
    tools_by_name: HashMap<String, usize>,
    current_tool: usize,
 
+   actions: Vec<Box<dyn actions::Action>>,
+   save_to_file: Option<PathBuf>,
+   last_autosave: Instant,
+
    peer: Peer,
    update_timer: Timer,
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
-
-   load_from_file: Option<PathBuf>,
-   save_to_file: Option<PathBuf>,
-   last_autosave: Instant,
 
    fatal_error: bool,
    log: Log,
@@ -80,6 +86,13 @@ pub struct State {
 
    panning: bool,
    viewport: Viewport,
+
+   canvas_view: View,
+   bottom_bar_view: View,
+   toolbar_view: View,
+
+   overflow_menu: ContextMenu,
+   wm: WindowManager,
 }
 
 macro_rules! log {
@@ -89,14 +102,18 @@ macro_rules! log {
 }
 
 impl State {
-   /// The interval of automatic saving.
-   const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3 * 60);
+   /// The network communication tick interval.
+   pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
+
    /// The height of the bottom bar.
    const BOTTOM_BAR_SIZE: f32 = 32.0;
    /// The width of the toolbar.
    const TOOLBAR_SIZE: f32 = 40.0;
-   /// The network communication tick interval.
-   pub const TIME_PER_UPDATE: Duration = Duration::from_millis(50);
+   /// The width and height of a tool button.
+   const TOOL_SIZE: f32 = Self::TOOLBAR_SIZE - 8.0;
+
+   /// The amount of padding applied around the canvas area, when laying out elements on top of it.
+   const CANVAS_INNER_PADDING: f32 = 8.0;
 
    /// Creates a new paint state.
    pub fn new(
@@ -105,7 +122,7 @@ impl State {
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
-   ) -> Self {
+   ) -> Result<Self, (anyhow::Error, Assets, UserConfig)> {
       let mut this = Self {
          assets,
          config,
@@ -115,11 +132,12 @@ impl State {
          tools_by_name: HashMap::new(),
          current_tool: 0,
 
+         actions: Vec::new(),
+
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
 
-         load_from_file: image_path,
          save_to_file: None,
          last_autosave: Instant::now(),
 
@@ -133,8 +151,22 @@ impl State {
 
          panning: false,
          viewport: Viewport::new(),
+
+         canvas_view: View::new((Dimension::Percentage(1.0), Dimension::Rest(1.0))),
+         bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
+         toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
+
+         overflow_menu: ContextMenu::new((256.0, 0.0)), // Vertical is filled in later
+         wm: WindowManager::new(),
       };
       this.register_tools(renderer);
+      this.register_actions(renderer);
+
+      if let Some(path) = image_path {
+         if let Err(error) = this.paint_canvas.load(renderer, &path) {
+            return Err((error, this.assets, this.config));
+         }
+      }
 
       if this.peer.is_host() {
          log!(this.log, "Welcome to your room!");
@@ -144,7 +176,7 @@ impl State {
          );
       }
 
-      this
+      Ok(this)
    }
 
    /// Registers a tool.
@@ -160,6 +192,21 @@ impl State {
       // Set the default tool to the brush.
       self.current_tool = self.tools.borrow().len();
       self.register_tool(Box::new(BrushTool::new(renderer)));
+   }
+
+   /// Registers all the actions and calculates the layout height of the overflow menu.
+   fn register_actions(&mut self, renderer: &mut Backend) {
+      self.actions.push(Box::new(SaveToFileAction::new(renderer)));
+
+      let room_id_height = 108.0;
+      let separator_height = 8.0 * 2.0;
+      let action_height = 32.0;
+      let action_margin = 4.0;
+      let actions_height = action_height * self.actions.len() as f32
+         + action_margin * (self.actions.len() - 1) as f32
+         + 4.0;
+      self.overflow_menu.view.dimensions.vertical =
+         Dimension::Constant(room_id_height + separator_height + actions_height);
    }
 
    /// Executes the given callback with the currently selected tool.
@@ -234,10 +281,17 @@ impl State {
    fn process_tool_key_shortcuts(&mut self, ui: &mut Ui, input: &mut Input) {
       let mut tools = self.tools.borrow_mut();
 
+      // If any of the WM's windows are focused, skip keyboard shortcuts.
+      if self.wm.has_focus() {
+         return;
+      }
+
       match tools[self.current_tool].active_key_shortcuts(
          ToolArgs {
             ui,
             input,
+            wm: &mut self.wm,
+            canvas_view: &self.canvas_view,
             assets: &mut self.assets,
             net: Net::new(&self.peer),
          },
@@ -250,11 +304,13 @@ impl State {
       }
 
       let mut switch_tool = None;
-      'tools: for (i, tool) in tools.iter_mut().enumerate() {
+      for (i, tool) in tools.iter_mut().enumerate() {
          match tool.global_key_shortcuts(
             ToolArgs {
                ui,
                input,
+               wm: &mut self.wm,
+               canvas_view: &self.canvas_view,
                assets: &mut self.assets,
                net: Net::new(&self.peer),
             },
@@ -265,7 +321,7 @@ impl State {
             KeyShortcutAction::Success => return,
             KeyShortcutAction::SwitchToThisTool => {
                switch_tool = Some(i);
-               break 'tools;
+               break;
             }
          }
       }
@@ -280,11 +336,7 @@ impl State {
 
    /// Processes the paint canvas.
    fn process_canvas(&mut self, ui: &mut Ui, input: &mut Input) {
-      ui.push(
-         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
-         Layout::Freeform,
-      );
-      input.set_mouse_area(mouse_areas::CANVAS, ui.has_mouse(input));
+      self.canvas_view.begin(ui, input, Layout::Freeform);
       let canvas_size = ui.size();
 
       //
@@ -294,7 +346,7 @@ impl State {
       // Panning and zooming
 
       match input.action(MouseButton::Middle) {
-         (true, ButtonState::Pressed) if ui.has_mouse(input) => self.panning = true,
+         (true, ButtonState::Pressed) if ui.hover(input) => self.panning = true,
          (_, ButtonState::Released) => self.panning = false,
          _ => (),
       }
@@ -323,6 +375,8 @@ impl State {
             ToolArgs {
                ui,
                input,
+               wm: &mut p.wm,
+               canvas_view: &p.canvas_view,
                assets: &p.assets,
                net: Net::new(&mut p.peer),
             },
@@ -357,6 +411,8 @@ impl State {
                      ToolArgs {
                         ui,
                         input,
+                        wm: &mut self.wm,
+                        canvas_view: &self.canvas_view,
                         assets: &self.assets,
                         net: Net::new(&self.peer),
                      },
@@ -373,6 +429,8 @@ impl State {
                ToolArgs {
                   ui,
                   input,
+                  wm: &mut p.wm,
+                  canvas_view: &p.canvas_view,
                   assets: &p.assets,
                   net: Net::new(&mut p.peer),
                },
@@ -397,7 +455,7 @@ impl State {
 
       self.process_log(ui);
 
-      ui.pop();
+      self.canvas_view.end(ui);
 
       //
       // Networking
@@ -436,9 +494,8 @@ impl State {
 
    /// Processes the bottom bar.
    fn process_bar(&mut self, ui: &mut Ui, input: &mut Input) {
-      ui.push((ui.width(), Self::BOTTOM_BAR_SIZE), Layout::Horizontal);
-      ui.align((AlignH::Left, AlignV::Bottom));
-      input.set_mouse_area(mouse_areas::BOTTOM_BAR, ui.has_mouse(input));
+      self.bottom_bar_view.begin(ui, input, Layout::Horizontal);
+
       ui.fill(self.assets.colors.panel);
       ui.pad((8.0, 0.0));
 
@@ -448,6 +505,8 @@ impl State {
          tool.process_bottom_bar(ToolArgs {
             ui,
             input,
+            wm: &mut p.wm,
+            canvas_view: &p.canvas_view,
             assets: &p.assets,
             net: Net::new(&mut p.peer),
          });
@@ -458,115 +517,220 @@ impl State {
       // Note that elements in HorizontalRev go from right to left rather than left to right.
       //
 
-      // Room ID display
+      // TODO: move this to an overflow menu
 
       ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
+
       if Button::with_icon(
          ui,
          input,
          ButtonArgs {
-            height: 32.0,
+            height: ui.height(),
             colors: &self.assets.colors.action_button,
             corner_radius: 0.0,
          },
-         &self.assets.icons.file.save,
+         &self.assets.icons.navigation.menu,
       )
       .clicked()
       {
-         match FileDialog::new()
-            .set_filename("canvas.png")
-            .add_filter("PNG image", &["png"])
-            .add_filter("NetCanv canvas", &["netcanv", "toml"])
-            .show_save_single_file()
-         {
-            Ok(Some(path)) => {
-               self.save_to_file = Some(path);
-            }
-            Err(error) => log!(self.log, "Error while selecting file: {}", error),
-            _ => (),
-         }
+         self.overflow_menu.toggle();
       }
 
-      // The room ID itself
-      let id_text = format!("{}", self.peer.room_id().unwrap());
-      ui.push((72.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.monospace.with_size(15.0),
-         &id_text,
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
       ui.pop();
 
-      // "Room ID" text
-      ui.push((64.0, ui.height()), Layout::Freeform);
-      ui.text(
-         &self.assets.sans,
-         "Room ID",
-         self.assets.colors.text,
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
-      ui.space(8.0);
-
-      // Role icon
-      ui.icon(
-         if self.peer.is_host() {
-            &self.assets.icons.peer.host
-         } else {
-            &self.assets.icons.peer.client
-         },
-         self.assets.colors.text,
-         Some(vector(ui.height(), ui.height())),
-      );
-
-      ui.pop();
-
-      ui.pop();
+      self.bottom_bar_view.end(ui);
    }
 
-   /// Processes the toolbar.
-   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
-      // The outer group, to add some padding.
-      ui.push(
-         (ui.width(), ui.height() - Self::BOTTOM_BAR_SIZE),
-         Layout::Freeform,
-      );
-      ui.pad(8.0);
+   /// Processes the overflow menu.
+   fn process_overflow_menu(&mut self, ui: &mut Ui, input: &mut Input) {
+      if self
+         .overflow_menu
+         .begin(
+            ui,
+            input,
+            ContextMenuArgs {
+               colors: &self.assets.colors.context_menu,
+            },
+         )
+         .is_open()
+      {
+         ui.pad(8.0);
 
-      // The inner group, that actually contains the bar.
-      let tool_size = Self::TOOLBAR_SIZE - 8.0;
-      let length = 4.0 + self.tools.borrow().len() as f32 * (tool_size + 4.0);
-      ui.push(
-         match self.config.ui.toolbar_position {
-            ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
-            ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
-         },
-         match self.config.ui.toolbar_position {
-            ToolbarPosition::Left | ToolbarPosition::Right => Layout::Vertical,
-            ToolbarPosition::Top | ToolbarPosition::Bottom => Layout::Horizontal,
-         },
-      );
-      ui.align(match self.config.ui.toolbar_position {
-         ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
-         ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
-         ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
-         ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
-      });
-      input.set_mouse_area(mouse_areas::TOOLBAR, ui.has_mouse(input));
-      ui.fill_rounded(self.assets.colors.panel, ui.width().min(ui.height()) / 2.0);
-      ui.pad(4.0);
+         // Room ID display
 
-      let tools = self.tools.borrow_mut();
+         ui.push((ui.width(), 0.0), Layout::Vertical);
+         ui.pad((8.0, 0.0));
+         ui.space(8.0);
 
-      let mut selected_tool = None;
-      for (i, tool) in tools.iter().enumerate() {
-         ui.push((tool_size, tool_size), Layout::Freeform);
+         ui.vertical_label(
+            &self.assets.sans,
+            "Room ID",
+            self.assets.colors.text,
+            AlignH::Left,
+         );
+         ui.space(8.0);
+
+         let id_text = format!("{}", self.peer.room_id().unwrap());
+         ui.push((ui.width(), 32.0), Layout::HorizontalRev);
          if Button::with_icon(
             ui,
             input,
             ButtonArgs {
-               height: tool_size,
+               height: ui.height(),
+               colors: &self.assets.colors.action_button,
+               corner_radius: 0.0,
+            },
+            &self.assets.icons.navigation.copy,
+         )
+         .clicked()
+         {
+            log!(self.log, "Room ID copied to clipboard");
+            catch!(clipboard::copy_string(id_text.clone()));
+         }
+         ui.horizontal_label(
+            &self.assets.monospace.with_size(24.0),
+            &id_text,
+            self.assets.colors.text,
+            Some((ui.remaining_width(), AlignH::Center)),
+         );
+         ui.pop();
+
+         ui.fit();
+         ui.pop();
+         ui.space(4.0);
+
+         // Room host display
+
+         ui.push((ui.width(), 32.0), Layout::Horizontal);
+         ui.icon(
+            if self.peer.is_host() {
+               &self.assets.icons.peer.host
+            } else {
+               &self.assets.icons.peer.client
+            },
+            self.assets.colors.text,
+            Some(vector(ui.height(), ui.height())),
+         );
+         ui.space(4.0);
+         if self.peer.is_host() {
+            ui.horizontal_label(
+               &self.assets.sans,
+               "You are the host",
+               self.assets.colors.text,
+               None,
+            );
+         } else {
+            ui.push(
+               (ui.remaining_width(), self.assets.sans.height() * 2.0 + 4.0),
+               Layout::Vertical,
+            );
+            ui.align((AlignH::Right, AlignV::Middle));
+            let name = truncate_text(
+               &self.assets.sans_bold,
+               ui.width(),
+               self.peer.host_name().unwrap_or("<unknown>"),
+            );
+            ui.vertical_label(
+               &self.assets.sans_bold,
+               &name,
+               self.assets.colors.text,
+               AlignH::Left,
+            );
+            ui.space(4.0);
+            ui.vertical_label(
+               &self.assets.sans,
+               "is your host",
+               self.assets.colors.text,
+               AlignH::Left,
+            );
+            ui.pop();
+         }
+         ui.pop();
+
+         ui.space(8.0);
+         ui.push((ui.width(), 0.0), Layout::Freeform);
+         ui.border_top(self.assets.colors.separator, 1.0);
+         ui.pop();
+         ui.space(8.0);
+
+         for action in &mut self.actions {
+            if Button::process(
+               ui,
+               input,
+               ButtonArgs {
+                  height: 32.0,
+                  colors: &self.assets.colors.action_button,
+                  corner_radius: 2.0,
+               },
+               Some(ui.width()),
+               |ui| {
+                  ui.push(ui.size(), Layout::Horizontal);
+                  ui.icon(
+                     action.icon(),
+                     self.assets.colors.text,
+                     Some(vector(ui.height(), ui.height())),
+                  );
+                  ui.space(4.0);
+                  ui.horizontal_label(
+                     &self.assets.sans,
+                     action.name(),
+                     self.assets.colors.text,
+                     None,
+                  );
+                  ui.pop();
+               },
+            )
+            .clicked()
+            {
+               if let Err(error) = action.perform(ActionArgs {
+                  paint_canvas: &mut self.paint_canvas,
+               }) {
+                  log!(self.log, "error while performing action: {}", error);
+               }
+            }
+            ui.space(4.0);
+         }
+
+         self.overflow_menu.end(ui);
+      }
+   }
+
+   /// Reflows the toolbar's size.
+   fn resize_toolbar(&mut self) {
+      let length = 4.0 + self.tools.borrow().len() as f32 * (Self::TOOL_SIZE + 4.0);
+      self.toolbar_view.dimensions = match self.config.ui.toolbar_position {
+         ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
+         ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
+      }
+      .into();
+   }
+
+   /// Returns the toolbar's alignment inside the canvas view.
+   fn toolbar_alignment(&self) -> Alignment {
+      match self.config.ui.toolbar_position {
+         ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
+         ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
+         ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
+         ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
+      }
+   }
+
+   /// Processes the toolbar.
+   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
+      self.toolbar_view.begin(ui, input, Layout::Vertical);
+
+      ui.fill_rounded(self.assets.colors.panel, ui.width().min(ui.height()) / 2.0);
+      ui.pad(4.0);
+
+      let tools = self.tools.borrow_mut();
+      let mut selected_tool = None;
+      for (i, tool) in tools.iter().enumerate() {
+         ui.push((Self::TOOL_SIZE, Self::TOOL_SIZE), Layout::Freeform);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: Self::TOOL_SIZE,
                colors: if self.current_tool == i {
                   &self.assets.colors.selected_toolbar_button
                } else {
@@ -583,15 +747,13 @@ impl State {
          ui.pop();
          ui.space(4.0);
       }
-
       drop(tools);
+
       if let Some(selected_tool) = selected_tool {
          self.set_current_tool(ui, selected_tool);
       }
 
-      ui.pop();
-
-      ui.pop();
+      self.toolbar_view.end(ui);
    }
 
    fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
@@ -717,27 +879,50 @@ impl State {
 
       Ok(())
    }
+
+   fn reflow_layout(&mut self, root_view: &View) -> () {
+      // The bottom bar and the canvas.
+      view::layout::vertical(
+         root_view,
+         &mut [&mut self.bottom_bar_view, &mut self.canvas_view],
+         DirectionV::BottomToTop,
+      );
+      let padded_canvas = view::layout::padded(&self.canvas_view, Self::CANVAS_INNER_PADDING);
+
+      // The toolbar.
+      self.resize_toolbar();
+      let toolbar_alignment = self.toolbar_alignment();
+      view::layout::align(&padded_canvas, &mut self.toolbar_view, toolbar_alignment);
+
+      // The overflow menu.
+      view::layout::align(
+         &padded_canvas,
+         &mut self.overflow_menu.view,
+         (AlignH::Right, AlignV::Bottom),
+      );
+   }
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+   fn process(
+      &mut self,
+      StateArgs {
+         ui,
+         input,
+         root_view,
+      }: StateArgs,
+   ) {
       ui.clear(Color::WHITE);
-
-      // Loading from file
-
-      if self.load_from_file.is_some() {
-         catch!(self.paint_canvas.load(ui, &self.load_from_file.take().unwrap()))
-      }
 
       // Autosaving
 
-      if self.paint_canvas.filename().is_some()
-         && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
-      {
-         eprintln!("autosaving chunks");
-         catch!(self.paint_canvas.save(None));
-         eprintln!("autosave complete");
-         self.last_autosave = Instant::now();
+      for action in &mut self.actions {
+         match action.process(ActionArgs {
+            paint_canvas: &mut self.paint_canvas,
+         }) {
+            Ok(()) => (),
+            Err(error) => log!(self.log, "error while processing action: {}", error),
+         }
       }
 
       // Network
@@ -770,12 +955,18 @@ impl AppState for State {
          self.fatal_error = true;
       }
 
+      // Layout
+      self.reflow_layout(&root_view);
+
       // Paint canvas
       self.process_canvas(ui, input);
 
       // Bars
       self.process_toolbar(ui, input);
+      // Draw windows over the toolbar, but below the bottom bar.
+      self.wm.process(ui, input, &self.assets);
       self.process_bar(ui, input);
+      self.process_overflow_menu(ui, input);
    }
 
    fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {
@@ -785,10 +976,4 @@ impl AppState for State {
          self
       }
    }
-}
-
-mod mouse_areas {
-   pub const CANVAS: u32 = 0;
-   pub const BOTTOM_BAR: u32 = 1;
-   pub const TOOLBAR: u32 = 2;
 }

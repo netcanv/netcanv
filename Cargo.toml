@@ -26,6 +26,7 @@ renderer-opengl = ["netcanv-renderer-opengl"]
 anyhow = "1.0.40"
 heapless = { version = "0.7.7", default-features = false }
 lazy_static = "1.4.0"
+strum = { version = "0.23.0", features = ["derive"] }
 
 # Windowing and graphics
 native-dialog = "0.5.5"

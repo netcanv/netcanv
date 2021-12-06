@@ -1,12 +1,15 @@
 //! The trait all app states must implement.
 
 use crate::backend::Backend;
+use crate::ui::view::View;
 use crate::ui::{Input, Ui};
 
 /// Arguments passed to app states.
+#[non_exhaustive]
 pub struct StateArgs<'a, 'b> {
    pub ui: &'a mut Ui,
    pub input: &'b mut Input,
+   pub root_view: View,
 }
 
 /// Trait implemented by all app states.

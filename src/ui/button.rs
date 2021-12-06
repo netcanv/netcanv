@@ -23,9 +23,9 @@ pub struct ButtonColors {
 
 /// The layout and color scheme arguments for processing the button.
 #[derive(Clone, Copy)]
-pub struct ButtonArgs<'colors> {
+pub struct ButtonArgs<'c> {
    pub height: f32,
-   pub colors: &'colors ButtonColors,
+   pub colors: &'c ButtonColors,
    pub corner_radius: f32,
 }
 
@@ -61,7 +61,7 @@ impl Button {
 
       let mut clicked = false;
       ui.outline_rounded(colors.outline, corner_radius, 1.0);
-      if ui.has_mouse(input) {
+      if ui.hover(input) {
          let fill_color = match input.action(MouseButton::Left) {
             (true, ButtonState::Pressed | ButtonState::Down) => colors.pressed,
             _ => colors.hover,
@@ -83,10 +83,9 @@ impl Button {
       font: &Font,
       text: &str,
    ) -> ButtonProcessResult {
-      Self::process(ui, input, args, None, |ui| {
-         let text_width = font.text_width(text);
-         let padding = args.height;
-         ui.push((text_width + padding, ui.height()), Layout::Freeform);
+      let width = font.text_width(text) + args.height;
+      Self::process(ui, input, args, Some(width), |ui| {
+         ui.push((width, ui.height()), Layout::Freeform);
          ui.text(
             font,
             text,

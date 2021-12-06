@@ -20,6 +20,21 @@ pub trait Font {
    fn text_width(&self, text: &str) -> f32;
 }
 
+/// Image and framebuffer scaling filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScalingFilter {
+   /// Nearest neighbor. The default filter.
+   Nearest,
+   /// Bilinear.
+   Linear,
+}
+
+impl Default for ScalingFilter {
+   fn default() -> Self {
+      Self::Nearest
+   }
+}
+
 /// An image.
 pub trait Image {
    /// _Colorizes_ an image by replacing all of its color with a single, solid color.
@@ -77,6 +92,9 @@ pub trait Framebuffer {
 
    /// Downloads RGBA pixels from the framebuffer into a buffer.
    fn download_rgba(&self, dest: &mut [u8]);
+
+   /// Sets the filter used for upscaling and downscaling the framebuffer.
+   fn set_scaling_filter(&mut self, filter: ScalingFilter);
 }
 
 /// Blending modes.

@@ -21,9 +21,9 @@ pub struct Input {
    mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
-   active_mouse_area: u32,
-   processed_mouse_area: u32,
-   frame_mouse_area: u32,
+   active_mouse_area: usize,
+   processed_mouse_area: usize,
+   frame_mouse_area: usize,
 
    // keyboard input
    char_buffer: Vec<char>,
@@ -87,11 +87,9 @@ impl Input {
       !self.mouse_buttons_locked()
    }
 
-   /// Returns whether the given mouse button is being held down.
-   pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked() {
-         return false;
-      }
+   /// Returns whether the given mouse button is being held down, globally (independent of
+   /// the current mouse area).
+   pub fn global_mouse_button_is_down(&self, button: MouseButton) -> bool {
       if let Some(i) = Self::mouse_button_index(button) {
          self.mouse_button_is_down[i]
       } else {
@@ -99,16 +97,24 @@ impl Input {
       }
    }
 
-   /// Returns whether the given mouse button has just been clicked.
-   pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
-      if self.mouse_buttons_locked() {
-         return false;
-      }
+   /// Returns whether the given mouse button is being held down.
+   pub fn mouse_button_is_down(&self, button: MouseButton) -> bool {
+      !self.mouse_buttons_locked() && self.global_mouse_button_is_down(button)
+   }
+
+   /// Returns whether the given mouse button has just been pressed, globally (independent of
+   /// the current mouse area).
+   pub fn global_mouse_button_just_pressed(&self, button: MouseButton) -> bool {
       if let Some(i) = Self::mouse_button_index(button) {
          self.mouse_button_just_pressed[i]
       } else {
          false
       }
+   }
+
+   /// Returns whether the given mouse button has just been clicked.
+   pub fn mouse_button_just_pressed(&self, button: MouseButton) -> bool {
+      !self.mouse_buttons_locked() && self.global_mouse_button_just_pressed(button)
    }
 
    /// Returns whether the given mouse button has just been released.
@@ -124,7 +130,7 @@ impl Input {
    ///
    /// Mouse events are only received if the mouse area at the end of the previous frame was the
    /// same as the mouse area that's currently active.
-   pub fn set_mouse_area(&mut self, area: u32, active: bool) {
+   pub fn set_mouse_area(&mut self, area: usize, active: bool) {
       self.active_mouse_area = area;
       if active {
          self.processed_mouse_area = area;

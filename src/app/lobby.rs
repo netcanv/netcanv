@@ -390,7 +390,7 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input }: StateArgs) {
+   fn process(&mut self, StateArgs { ui, input, .. }: StateArgs) {
       ui.clear(self.assets.colors.panel);
 
       // The lobby does not use mouse areas.
@@ -468,13 +468,19 @@ impl AppState for State {
       if connected {
          let mut this = *self;
          this.save_config();
-         Box::new(paint::State::new(
+         match paint::State::new(
             this.assets,
             this.config,
             this.peer.unwrap(),
             this.image_file,
             renderer,
-         ))
+         ) {
+            Ok(state) => Box::new(state),
+            Err((error, assets, config)) => {
+               bus::push(Fatal(error));
+               Box::new(Self::new(assets, config))
+            }
+         }
       } else {
          self
       }

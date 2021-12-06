@@ -4,7 +4,11 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
 
 use crate::backend::{Backend, Font, Image};
-use crate::ui::{ButtonColors, ExpandColors, ExpandIcons, TextFieldColors};
+use crate::ui::wm::windows::{WindowButtonColors, WindowButtonsColors};
+use crate::ui::{
+   ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, RadioButtonColors,
+   TextFieldColors,
+};
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
@@ -12,6 +16,9 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
+const PALETTE_SVG: &[u8] = include_bytes!("assets/icons/palette.svg");
+const MENU_SVG: &[u8] = include_bytes!("assets/icons/menu.svg");
+const COPY_SVG: &[u8] = include_bytes!("assets/icons/copy.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
@@ -19,6 +26,9 @@ const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
+const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
+const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
+const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
 /// A color scheme.
 #[derive(Clone)]
@@ -32,11 +42,20 @@ pub struct ColorScheme {
    pub action_button: ButtonColors,
    pub toolbar_button: ButtonColors,
    pub selected_toolbar_button: ButtonColors,
+   pub radio_button: RadioButtonColors,
    pub expand: ExpandColors,
    pub slider: Color,
    pub text_field: TextFieldColors,
+   pub context_menu: ContextMenuColors,
+   pub window_buttons: WindowButtonsColors,
 
    pub titlebar: TitlebarColors,
+}
+
+/// Icons for navigation.
+pub struct NavigationIcons {
+   pub menu: Image,
+   pub copy: Image,
 }
 
 /// Icons for status messages.
@@ -62,13 +81,25 @@ pub struct ColorSwitcherIcons {
    pub light: Image,
 }
 
+pub struct WindowIcons {
+   pub close: Image,
+   pub pin: Image,
+   pub pinned: Image,
+}
+
 /// Icons, rendered to images at startup.
 pub struct Icons {
+   // Control-specific
    pub expand: ExpandIcons,
+   pub color_picker: ColorPickerIcons,
+   pub color_switcher: ColorSwitcherIcons,
+
+   // Generic
+   pub navigation: NavigationIcons,
    pub status: StatusIcons,
    pub file: FileIcons,
    pub peer: PeerIcons,
-   pub color_switcher: ColorSwitcherIcons,
+   pub window: WindowIcons,
 }
 
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
@@ -110,6 +141,18 @@ impl Assets {
                expand: Self::load_icon(renderer, CHEVRON_RIGHT_SVG),
                shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
             },
+            color_picker: ColorPickerIcons {
+               palette: Self::load_icon(renderer, PALETTE_SVG),
+            },
+            color_switcher: ColorSwitcherIcons {
+               dark: Self::load_icon(renderer, DARK_MODE_SVG),
+               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
+            },
+
+            navigation: NavigationIcons {
+               menu: Self::load_icon(renderer, MENU_SVG),
+               copy: Self::load_icon(renderer, COPY_SVG),
+            },
             status: StatusIcons {
                info: Self::load_icon(renderer, INFO_SVG),
                error: Self::load_icon(renderer, ERROR_SVG),
@@ -121,9 +164,10 @@ impl Assets {
                client: Self::load_icon(renderer, PEER_CLIENT_SVG),
                host: Self::load_icon(renderer, PEER_HOST_SVG),
             },
-            color_switcher: ColorSwitcherIcons {
-               dark: Self::load_icon(renderer, DARK_MODE_SVG),
-               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
+            window: WindowIcons {
+               close: Self::load_icon(renderer, WINDOW_CLOSE_SVG),
+               pin: Self::load_icon(renderer, WINDOW_PIN_SVG),
+               pinned: Self::load_icon(renderer, WINDOW_PINNED_SVG),
             },
          },
       }
@@ -136,7 +180,7 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xff000000),
          panel: Color::argb(0xffeeeeee),
-         separator: Color::argb(0xff202020),
+         separator: Color::argb(0x30202020),
          error: Color::argb(0xff7f0000),
 
          button: ButtonColors {
@@ -167,6 +211,22 @@ impl ColorScheme {
             hover: Color::argb(0x40ffffff),
             pressed: Color::argb(0x70000000),
          },
+         radio_button: RadioButtonColors {
+            normal: ButtonColors {
+               fill: Color::TRANSPARENT,
+               outline: Color::argb(0x40000000),
+               text: Color::argb(0xff000000),
+               hover: Color::argb(0x40000000),
+               pressed: Color::argb(0x70000000),
+            },
+            selected: ButtonColors {
+               fill: Color::argb(0xff333333),
+               outline: Color::argb(0x00000000),
+               text: Color::argb(0xffeeeeee),
+               hover: Color::argb(0x40ffffff),
+               pressed: Color::argb(0x70000000),
+            },
+         },
          slider: Color::argb(0xff000000),
          expand: ExpandColors {
             icon: Color::argb(0xff000000),
@@ -183,6 +243,36 @@ impl ColorScheme {
             label: Color::argb(0xff000000),
             selection: Color::argb(0x33000000),
          },
+         context_menu: ContextMenuColors {
+            background: Color::argb(0xffeeeeee),
+         },
+         window_buttons: WindowButtonsColors {
+            close: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xff000000),
+               hover_fill: Color::argb(0xff7f0000),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff3f0000),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+            pin: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xff000000),
+               hover_fill: Color::argb(0x40000000),
+               hover_icon: Color::argb(0xff000000),
+               pressed_fill: Color::argb(0x70000000),
+               pressed_icon: Color::argb(0xff000000),
+            },
+            pinned: WindowButtonColors {
+               normal_fill: Color::argb(0xff0397fb),
+               normal_icon: Color::argb(0xffffffff),
+               hover_fill: Color::argb(0xff32aafa),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff007ccf),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+         },
+
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xffffffff),
             separator: Color::argb(0x7f000000),
@@ -199,7 +289,7 @@ impl ColorScheme {
       Self {
          text: Color::argb(0xffb7b7b7),
          panel: Color::argb(0xff1f1f1f),
-         separator: Color::argb(0xff202020),
+         separator: Color::argb(0x50b7b7b7),
          error: Color::argb(0xfffc9292),
 
          button: ButtonColors {
@@ -230,6 +320,22 @@ impl ColorScheme {
             hover: Color::argb(0x20ffffff),
             pressed: Color::argb(0x05ffffff),
          },
+         radio_button: RadioButtonColors {
+            normal: ButtonColors {
+               fill: Color::TRANSPARENT,
+               outline: Color::argb(0x30b0b0b0),
+               text: Color::argb(0xffb7b7b7),
+               hover: Color::argb(0x20ffffff),
+               pressed: Color::argb(0x05ffffff),
+            },
+            selected: ButtonColors {
+               fill: Color::argb(0xffb0b0b0),
+               outline: Color::argb(0x00000000),
+               text: Color::argb(0xff1f1f1f),
+               hover: Color::argb(0x20ffffff),
+               pressed: Color::argb(0x05ffffff),
+            },
+         },
          slider: Color::argb(0xff979797),
          expand: ExpandColors {
             icon: Color::argb(0xffb7b7b7),
@@ -246,6 +352,36 @@ impl ColorScheme {
             label: Color::argb(0xffd5d5d5),
             selection: Color::argb(0x7f939393),
          },
+         context_menu: ContextMenuColors {
+            background: Color::argb(0xff1f1f1f),
+         },
+         window_buttons: WindowButtonsColors {
+            close: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xffb7b7b7),
+               hover_fill: Color::argb(0xfffc9292),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xffb56969),
+               pressed_icon: Color::argb(0xffffffff),
+            },
+            pin: WindowButtonColors {
+               normal_fill: Color::TRANSPARENT,
+               normal_icon: Color::argb(0xffb7b7b7),
+               hover_fill: Color::argb(0x20ffffff),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0x05ffffff),
+               pressed_icon: Color::argb(0xffffffff),
+            },
+            pinned: WindowButtonColors {
+               normal_fill: Color::argb(0xff268ed4),
+               normal_icon: Color::argb(0xffffffff),
+               hover_fill: Color::argb(0xff55a9e0),
+               hover_icon: Color::argb(0xffffffff),
+               pressed_fill: Color::argb(0xff1b7fc2),
+               pressed_icon: Color::argb(0xffaaaaaa),
+            },
+         },
+
          titlebar: TitlebarColors {
             titlebar: Color::argb(0xff383838),
             separator: Color::argb(0x7f939393),

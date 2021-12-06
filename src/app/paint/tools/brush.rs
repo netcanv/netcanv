@@ -18,7 +18,8 @@ use crate::backend::{Backend, Image};
 use crate::common::{lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{
-   ButtonState, Modifier, MouseScroll, Slider, SliderArgs, SliderStep, UiElements, UiInput,
+   view, ButtonState, ColorPicker, ColorPickerArgs, Modifier, MouseScroll, Slider, SliderArgs,
+   SliderStep, UiElements, UiInput,
 };
 use crate::viewport::Viewport;
 
@@ -36,7 +37,7 @@ pub struct BrushTool {
 
    state: BrushState,
    thickness_slider: Slider,
-   color: Color,
+   color_picker: ColorPicker,
 
    mouse_position: Point,
    previous_mouse_position: Point,
@@ -54,7 +55,7 @@ impl BrushTool {
          icon: Assets::load_icon(renderer, include_bytes!("../../../assets/icons/brush.svg")),
          state: BrushState::Idle,
          thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
-         color: COLOR_PALETTE[0],
+         color_picker: ColorPicker::new(),
          mouse_position: point(0.0, 0.0),
          previous_mouse_position: point(0.0, 0.0),
          stroke_points: Vec::new(),
@@ -118,11 +119,16 @@ impl BrushTool {
                previous_mouse_position: point(0.0, 0.0),
                last_cursor_packet: Instant::now(),
                thickness: 4.0,
-               color: COLOR_PALETTE[0],
+               color: Color::BLACK,
             },
          );
       }
       self.peers.get_mut(&peer_id).unwrap()
+   }
+
+   /// Returns the color currently selected in the color picker.
+   pub fn color(&self) -> Color {
+      self.color_picker.color()
    }
 }
 
@@ -184,7 +190,7 @@ impl Tool for BrushTool {
             a,
             b,
             match self.state {
-               BrushState::Drawing => Some(self.color),
+               BrushState::Drawing => Some(self.color()),
                BrushState::Erasing => None,
                _ => unreachable!(),
             },
@@ -192,9 +198,12 @@ impl Tool for BrushTool {
          );
          self.stroke_points.push(Stroke {
             color: match self.state {
-               BrushState::Drawing => {
-                  Some((self.color.r, self.color.g, self.color.b, self.color.a))
-               }
+               BrushState::Drawing => Some((
+                  self.color().r,
+                  self.color().g,
+                  self.color().b,
+                  self.color().a,
+               )),
                BrushState::Erasing => None,
                _ => unreachable!(),
             },
@@ -279,36 +288,33 @@ impl Tool for BrushTool {
    fn process_bottom_bar(
       &mut self,
       ToolArgs {
-         ui, input, assets, ..
+         ui,
+         input,
+         assets,
+         wm,
+         canvas_view,
+         ..
       }: ToolArgs,
    ) {
       // Draw the palette.
-
-      for &color in COLOR_PALETTE {
-         ui.push((16.0, ui.height()), Layout::Freeform);
-         let y_offset = ui.height()
-            * if self.color == color {
-               0.5
-            } else if ui.has_mouse(&input) {
-               0.7
-            } else {
-               0.8
-            };
-         let y_offset = y_offset.round();
-         if ui.has_mouse(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-            self.color = color;
-         }
-         ui.draw(|ui| {
-            let rect = Rect::new(point(0.0, y_offset), ui.size());
-            ui.render().fill(rect, color, 4.0);
-         });
-         ui.pop();
-      }
+      let mut picker_window = ColorPicker::picker_window_view();
+      view::layout::align(
+         &view::layout::padded(canvas_view, 16.0),
+         &mut picker_window,
+         (AlignH::Left, AlignV::Bottom),
+      );
+      self.color_picker.process(
+         ui,
+         input,
+         ColorPickerArgs {
+            wm,
+            window_view: picker_window,
+         },
+      );
       ui.space(16.0);
 
       // Draw the thickness: its slider and value display.
-
-      ui.label(&assets.sans, "Thickness", assets.colors.text, None);
+      ui.horizontal_label(&assets.sans, "Thickness", assets.colors.text, None);
       ui.space(16.0);
 
       ui.push((192.0, ui.height()), Layout::Freeform);
@@ -320,6 +326,7 @@ impl Tool for BrushTool {
             color: assets.colors.slider,
          },
       );
+
       // Draw the size indicator above the slider.
       if self.thickness_slider.is_sliding() {
          ui.draw(|ui| {
@@ -340,11 +347,12 @@ impl Tool for BrushTool {
       ui.pop();
       ui.space(8.0);
 
-      ui.label(
+      // Draw the thickness text.
+      ui.horizontal_label(
          &assets.sans_bold,
          &self.thickness().to_string(),
          assets.colors.text,
-         Some(ui.height()),
+         Some((ui.height(), AlignH::Center)),
       );
    }
 
@@ -355,7 +363,7 @@ impl Tool for BrushTool {
       }
       if self.mouse_position != self.previous_mouse_position {
          let Point { x, y } = self.mouse_position;
-         let Color { r, g, b, a } = self.color;
+         let Color { r, g, b, a } = self.color();
          net.send(
             self,
             PeerId::BROADCAST,
@@ -461,16 +469,3 @@ impl PeerBrush {
       lerp_point(self.previous_mouse_position, self.mouse_position, t)
    }
 }
-
-/// The palette of colors at the bottom of the screen.
-const COLOR_PALETTE: &[Color] = &[
-   Color::rgb(0x100820), // black
-   Color::rgb(0xff003e), // red
-   Color::rgb(0xff7b00), // orange
-   Color::rgb(0xffff00), // yellow
-   Color::rgb(0x2dd70e), // green
-   Color::rgb(0x03cbfb), // aqua
-   Color::rgb(0x0868eb), // blue
-   Color::rgb(0xa315d7), // purple
-   Color::rgb(0xffffff), // white
-];
