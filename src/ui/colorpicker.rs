@@ -18,13 +18,12 @@ use super::wm::{
    HitTest, WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager,
 };
 use super::{
-   Button, ButtonArgs, ButtonColors, ButtonState, Focus, Input, RadioButton, RadioButtonArgs,
-   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
+   ButtonState, Focus, Input, RadioButton, RadioButtonArgs, SliderStep, TextField, TextFieldArgs,
+   TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
 };
 
 /// Arguments for processing the color picker.
-pub struct ColorPickerArgs<'a, 'wm> {
-   pub assets: &'a Assets,
+pub struct ColorPickerArgs<'wm> {
    pub wm: &'wm mut WindowManager,
    pub window_view: View,
 }
@@ -85,11 +84,7 @@ impl ColorPicker {
       &mut self,
       ui: &mut Ui,
       input: &Input,
-      ColorPickerArgs {
-         assets,
-         wm,
-         window_view,
-      }: ColorPickerArgs,
+      ColorPickerArgs { wm, window_view }: ColorPickerArgs,
    ) {
       // The palette.
       for (index, &color) in self.palette.clone().iter().enumerate() {

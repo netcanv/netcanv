@@ -1378,9 +1378,9 @@ dependencies = [
 
 [[package]]
 name = "paws"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "953ae96dab02edcd1845707767765afc3e50e0af5f405a5bead5fef0ed820e48"
+checksum = "74b0c06bf503ce0ea42ac3069275f007ded33828a2d633b21039431a27102a11"
 
 [[package]]
 name = "percent-encoding"
