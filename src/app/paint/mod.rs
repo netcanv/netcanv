@@ -281,6 +281,11 @@ impl State {
    fn process_tool_key_shortcuts(&mut self, ui: &mut Ui, input: &mut Input) {
       let mut tools = self.tools.borrow_mut();
 
+      // If any of the WM's windows are focused, skip keyboard shortcuts.
+      if self.wm.has_focus() {
+         return;
+      }
+
       match tools[self.current_tool].active_key_shortcuts(
          ToolArgs {
             ui,
@@ -299,7 +304,7 @@ impl State {
       }
 
       let mut switch_tool = None;
-      'tools: for (i, tool) in tools.iter_mut().enumerate() {
+      for (i, tool) in tools.iter_mut().enumerate() {
          match tool.global_key_shortcuts(
             ToolArgs {
                ui,
@@ -316,7 +321,7 @@ impl State {
             KeyShortcutAction::Success => return,
             KeyShortcutAction::SwitchToThisTool => {
                switch_tool = Some(i);
-               break 'tools;
+               break;
             }
          }
       }

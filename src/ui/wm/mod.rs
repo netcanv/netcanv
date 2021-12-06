@@ -19,12 +19,21 @@ pub use windows::WindowContentWrappers;
 
 /// A window.
 struct Window {
+   /// The window's view.
    view: View,
+   /// The window content.
    content: Box<dyn UntypedWindowContent>,
+   /// The data shared between the window and its owner.
    data: Box<dyn Any>,
+
+   /// Whether the window is pinned (won't be closed after you click away from it).
    pinned: bool,
+   /// Whether the window was requested to be closed, by using the close button.
    close_requested: bool,
+   /// Whether the window is currently being dragged.
    dragging: bool,
+   /// Whether the window is the currently focused window.
+   focused: bool,
 }
 
 /// A window manager.
@@ -75,6 +84,19 @@ impl WindowManager {
       &mut self.windows.get_mut(&id.0).unwrap().view
    }
 
+   /// Steals the focus of the window manager, and focuses the window with the given ID.
+   fn steal_focus(&mut self, id: UntypedWindowId) {
+      for window_id in &self.stack {
+         let window = self.windows.get_mut(window_id).unwrap();
+         window.focused = &id == window_id;
+      }
+   }
+
+   /// Returns whether any of the windows has focus.
+   pub fn has_focus(&self) -> bool {
+      self.stack.iter().map(|id| self.windows.get(id).unwrap()).any(|window| window.focused)
+   }
+
    /// Opens a new window in the manager, and returns a handle for modifying it.
    pub fn open_window<C, D>(&mut self, view: View, content: C, data: D) -> WindowId<D>
    where
@@ -92,9 +114,11 @@ impl WindowManager {
             pinned: false,
             close_requested: false,
             dragging: false,
+            focused: true,
          },
       );
       self.stack.push(id);
+      self.steal_focus(id);
       WindowId(id, PhantomData)
    }
 
@@ -110,11 +134,15 @@ impl WindowManager {
 
    /// Processes windows inside the window manager.
    pub fn process(&mut self, ui: &mut Ui, input: &mut Input, assets: &Assets) {
+      let mut steal_focus = None;
       for stack_index in 0..self.stack.len() {
-         let window_id = &self.stack[stack_index];
-         let window = self.windows.get_mut(window_id).unwrap();
+         let window_id = self.stack[stack_index];
+         let window = self.windows.get_mut(&window_id).unwrap();
          let mut hit_test = Default::default();
 
+         // Clone the view and floor its position such that the window renders perfectly on the
+         // pixel grid. Winit may support subpixel precision with mouse coordinates, but that's
+         // unwanted here.
          let mut view = window.view.clone();
          view.position = view.position.floor();
          view.begin(ui, input, Layout::Freeform);
@@ -131,23 +159,31 @@ impl WindowManager {
          );
          view.end(ui);
 
-         let mouse_is_outside_of_window = (input
-            .global_mouse_button_just_pressed(MouseButton::Left)
-            || input.global_mouse_button_just_pressed(MouseButton::Right))
-            && !window.pinned
-            && !window.view.has_mouse(input);
+         // Steal focus if the window was clicked.
+         let mouse_clicked = input.global_mouse_button_just_pressed(MouseButton::Left)
+            || input.global_mouse_button_just_pressed(MouseButton::Right);
+         let mouse_clicked_inside_window = mouse_clicked && window.view.has_mouse(input);
+         if mouse_clicked_inside_window {
+            steal_focus = Some(window_id);
+         }
+
+         // Close the window if the user clicked away and it was unpinned, or if they
+         // clicked the close button.
+         let mouse_clicked_outside_window = mouse_clicked && !window.view.has_mouse(input);
          let close_button_clicked = hit_test == HitTest::CloseButton
             && input.action(MouseButton::Left) == (true, ButtonState::Released);
-         if mouse_is_outside_of_window || close_button_clicked {
+         if (mouse_clicked_outside_window && !window.pinned) || close_button_clicked {
             window.close_requested = true;
          }
 
+         // If the pin button was clicked, toggle the window's pin state.
          if hit_test == HitTest::PinButton
             && input.action(MouseButton::Left) == (true, ButtonState::Released)
          {
             window.pinned = !window.pinned;
          }
 
+         // Perform dragging if the mouse is over the draggable area.
          match input.action(MouseButton::Left) {
             (true, ButtonState::Pressed) if hit_test == HitTest::Draggable => {
                window.dragging = true;
@@ -161,6 +197,15 @@ impl WindowManager {
          if window.dragging {
             window.view.position += input.mouse_position() - input.previous_mouse_position();
          }
+      }
+
+      // The last window to write to steal_focus will get its focus state.
+      // The order of operations here matters; we want the _last_ clicked window to steal focus as
+      // that's the last one that got rendered to the screen.
+      //
+      // Do note that _no_ window could have been clicked.
+      if let Some(window_id) = steal_focus {
+         self.steal_focus(window_id);
       }
    }
 }
@@ -179,6 +224,7 @@ pub trait WindowContent {
    /// An arbitrarily-defined data value that's stored in the window.
    type Data;
 
+   /// Processes the window content.
    fn process(&mut self, args: &mut WindowContentArgs, data: &mut Self::Data);
 }
 
