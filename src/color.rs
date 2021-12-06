@@ -155,6 +155,7 @@ impl From<LinearRgb> for Srgb {
 
 /// The linear RGB to sRGB mapping function.
 fn linear_to_srgb(x: f32) -> f32 {
+   let x = x.abs();
    if x >= 0.0031308 {
       ((1.055) * x).powf(1.0 / 2.4) - 0.055
    } else {
@@ -463,8 +464,8 @@ impl Okhsv {
 impl From<Oklab> for Okhsv {
    fn from(Oklab { l, a, b }: Oklab) -> Self {
       let c = (a * a + b * b).sqrt();
-      let a_ = a / c;
-      let b_ = b / c;
+      let a_ = if c != 0.0 { a / c } else { 1.0 };
+      let b_ = if c != 0.0 { b / c } else { 1.0 };
 
       let h = 0.5 + 0.5 * (-b).atan2(-a) / std::f32::consts::PI;
 
@@ -475,12 +476,16 @@ impl From<Oklab> for Okhsv {
 
       // first we find L_v, C_v, L_vt and C_vt
 
-      let t = t_max / (c + l * t_max);
+      let t = if c != 0.0 && l != 0.0 {
+         t_max / (c + l * t_max)
+      } else {
+         0.0
+      };
       let l_v = t * l;
       let c_v = t * c;
 
       let l_vt = Self::toe_inv(l_v);
-      let c_vt = c_v * l_vt / l_v;
+      let c_vt = if l_v != 0.0 { c_v * l_vt / l_v } else { 0.0 };
 
       // we can then use these to invert the step that compensates for the toe and the curved top part of the triangle:
       let rgb_scale = LinearRgb::from(Oklab {
@@ -499,12 +504,17 @@ impl From<Oklab> for Okhsv {
       // to be used? I removed it.
 
       let l = l / scale_l;
+      let c = ((c / scale_l) * Self::toe(l)) / l;
       let l = Self::toe(l);
 
       // we can now compute v and s:
 
-      let v = l / l_v;
-      let s = (s_0 + t_max) * c_v / ((t_max * s_0) + t_max * k * c_v);
+      let s = if c != 0.0 {
+         (s_0 + t_max) * c_v / ((t_max * s_0) + t_max * k * c_v)
+      } else {
+         0.0
+      };
+      let v = if l != 0.0 { l / l_v } else { 0.0 };
 
       return Okhsv { h, s, v };
    }
@@ -534,7 +544,7 @@ impl From<Okhsv> for Oklab {
       let c_vt = c_v * l_vt / l_v;
 
       let l_new = Okhsv::toe_inv(l);
-      c = c * l_new / l;
+      c = if l != 0.0 { c * l_new / l } else { 0.0 };
       l = l_new;
 
       let rgb_scale = LinearRgb::from(Oklab {
@@ -542,12 +552,16 @@ impl From<Okhsv> for Oklab {
          a: a_ * c_vt,
          b: b_ * c_vt,
       });
-      let scale_l = (1.0
-         / f32::max(
-            f32::max(rgb_scale.r, rgb_scale.g),
-            f32::max(rgb_scale.b, 0.0),
-         ))
-      .cbrt();
+      let max_rgb = f32::max(
+         f32::max(rgb_scale.r, rgb_scale.g),
+         f32::max(rgb_scale.b, 0.0),
+      );
+      // Fail safe: when max_rgb is 0, the color is black and thus, is achromatic.
+      let scale_l = if max_rgb != 0.0 {
+         (1.0 / max_rgb).cbrt()
+      } else {
+         0.0
+      };
 
       l = l * scale_l;
       c = c * scale_l;

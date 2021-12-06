@@ -61,8 +61,18 @@ impl WindowManager {
    }
 
    /// Returns whether the window should close.
-   pub fn should_close<D>(&mut self, id: &WindowId<D>) -> bool {
+   pub fn should_close<D>(&self, id: &WindowId<D>) -> bool {
       self.windows.get(&id.0).unwrap().close_requested
+   }
+
+   /// Returns whether the window is pinned.
+   pub fn pinned<D>(&self, id: &WindowId<D>) -> bool {
+      self.windows.get(&id.0).unwrap().pinned
+   }
+
+   /// Returns a mutable reference to the window's view.
+   pub fn view_mut<D>(&mut self, id: &WindowId<D>) -> &mut View {
+      &mut self.windows.get_mut(&id.0).unwrap().view
    }
 
    /// Opens a new window in the manager, and returns a handle for modifying it.

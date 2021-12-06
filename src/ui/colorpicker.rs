@@ -18,8 +18,8 @@ use super::wm::{
    HitTest, WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager,
 };
 use super::{
-   Button, ButtonArgs, ButtonState, Focus, Input, RadioButton, RadioButtonArgs, SliderStep,
-   TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs,
+   Button, ButtonArgs, ButtonColors, ButtonState, Focus, Input, RadioButton, RadioButtonArgs,
+   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs,
 };
 
 /// Arguments for processing the color picker.
@@ -91,10 +91,12 @@ impl ColorPicker {
       }: ColorPickerArgs,
    ) {
       // The palette.
+      let mut current_color_is_from_palette = false;
       for color in self.palette {
          ui.push((16.0, ui.height()), Layout::Freeform);
          let y_offset = ui.height()
             * if self.color == color {
+               current_color_is_from_palette = true;
                0.5
             } else if ui.hover(&input) {
                0.7
@@ -114,13 +116,30 @@ impl ColorPicker {
       }
       ui.space(16.0);
 
+      // The color variable, cached from what was chosen in the picker window.
+      self.color = self.window_data(wm).color;
+      let color = Srgb::from(self.color).to_color(1.0);
+
       // The color picker button.
       if Button::with_icon(
          ui,
          input,
          ButtonArgs {
             height: ui.height(),
-            colors: &assets.colors.action_button,
+            colors: &if !current_color_is_from_palette {
+               ButtonColors {
+                  fill: color,
+                  text: if color.brightness() > 0.5 {
+                     Color::BLACK
+                  } else {
+                     Color::WHITE
+                  }
+                  .with_alpha(230),
+                  ..assets.colors.action_button
+               }
+            } else {
+               assets.colors.action_button.clone()
+            },
             corner_radius: 0.0,
          },
          &assets.icons.color_picker.palette,
@@ -129,15 +148,16 @@ impl ColorPicker {
       {
          self.toggle_picker_window(ui, wm, window_view.clone())
       }
-      // Close the window, if we should.
-      if let Some(PickerWindowState::Open(window_id)) = &self.window_state {
+      if let Some(window_id) = self.window_id() {
+         // If the window is unpinned, move it to the window_view.
+         if !wm.pinned(window_id) {
+            wm.view_mut(window_id).position = window_view.position;
+         }
+         // Close the window, if requested.
          if wm.should_close(window_id) {
             self.toggle_picker_window(ui, wm, window_view);
          }
       }
-
-      // The color variable, cached from what was chosen in the picker window.
-      self.color = self.window_data(wm).color;
    }
 
    /// Toggles the picker window on or off, depending on whether it's already open or not.
@@ -155,6 +175,15 @@ impl ColorPicker {
             let window_id = wm.open_window(view, content, data);
             self.window_state = Some(PickerWindowState::Open(window_id));
          }
+      }
+   }
+
+   /// Returns the ID of the window if it's open, or `None` if it's closed.
+   fn window_id(&self) -> Option<&WindowId<PickerWindowData>> {
+      let state = self.window_state.as_ref().unwrap();
+      match state {
+         PickerWindowState::Open(window_id) => Some(window_id),
+         PickerWindowState::Closed(_) => None,
       }
    }
 
@@ -229,12 +258,12 @@ impl PickerWindow {
 
    // The three sliders "I", "J", and "K" are called like that to represent their dual purpose.
 
-   /// The R or L channel adjustment slider.
-   const I_SLIDER: usize = 0;
-   /// The G or a channel adjustment slider.
-   const J_SLIDER: usize = 1;
-   /// The B or b channel adjustment slider.
-   const K_SLIDER: usize = 2;
+   /// The R channel adjustment slider.
+   const R_SLIDER: usize = 0;
+   /// The G channel adjustment slider.
+   const G_SLIDER: usize = 1;
+   /// The B channel adjustment slider.
+   const B_SLIDER: usize = 2;
 
    /// The hue adjustment slider.
    const H_SLIDER: usize = 3;
@@ -256,7 +285,7 @@ impl PickerWindow {
          slider_sliding: false,
 
          hex_code: TextField::new(None),
-         sliders: Self::lab_sliders(Oklab::from(data.color)),
+         sliders: Self::create_sliders(Srgb::from(data.color)),
 
          previous_color: data.color,
          previous_color_space: data.color_space,
@@ -278,7 +307,7 @@ impl PickerWindow {
    }
 
    /// Creates a set of RGB and HSV sliders for the given color.
-   fn rgb_sliders(color: Srgb) -> [ValueSlider; 6] {
+   fn create_sliders(color: Srgb) -> [ValueSlider; 6] {
       let Srgb { r, g, b } = color;
       let Hsv { h, s, v } = Hsv::from(color);
       let h = h * 60.0;
@@ -286,21 +315,6 @@ impl PickerWindow {
          ValueSlider::new("R", r, 0.0, 255.0, SliderStep::Discrete(1.0)),
          ValueSlider::new("G", g, 0.0, 255.0, SliderStep::Discrete(1.0)),
          ValueSlider::new("B", b, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("H", h, 0.0, 360.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("S", s, 0.0, 1.0, SliderStep::Smooth),
-         ValueSlider::new("V", v, 0.0, 1.0, SliderStep::Smooth),
-      ]
-   }
-
-   /// Creates a set of Lab and HSV sliders for the given color.
-   fn lab_sliders(color: Oklab) -> [ValueSlider; 6] {
-      let Oklab { l, a, b } = color;
-      let Okhsv { h, s, v } = Okhsv::from(color);
-      let h = h * 360.0;
-      [
-         ValueSlider::new("L", l, 0.0, 1.0, SliderStep::Smooth),
-         ValueSlider::new("a", a, -1.0, 1.0, SliderStep::Smooth),
-         ValueSlider::new("b", b, -1.0, 1.0, SliderStep::Smooth),
          ValueSlider::new("H", h, 0.0, 360.0, SliderStep::Discrete(1.0)),
          ValueSlider::new("S", s, 0.0, 1.0, SliderStep::Smooth),
          ValueSlider::new("V", v, 0.0, 1.0, SliderStep::Smooth),
@@ -529,7 +543,7 @@ impl PickerWindow {
          label_width: Some(16.0),
       };
       let mut sliders_changed = [false; 6];
-      for (i, slider) in self.sliders[Self::I_SLIDER..=Self::K_SLIDER].iter_mut().enumerate() {
+      for (i, slider) in self.sliders[Self::R_SLIDER..=Self::B_SLIDER].iter_mut().enumerate() {
          if slider.process(ui, input, value_slider).changed() {
             sliders_changed[i] = true;
          }
@@ -552,19 +566,16 @@ impl PickerWindow {
          };
       }
 
+      update_color_channel!(Self::R_SLIDER, Srgb, r, 255.0);
+      update_color_channel!(Self::G_SLIDER, Srgb, g, 255.0);
+      update_color_channel!(Self::B_SLIDER, Srgb, b, 255.0);
       match data.color_space {
          ColorSpace::Oklab => {
-            update_color_channel!(Self::I_SLIDER, Oklab, l, 1.0);
-            update_color_channel!(Self::J_SLIDER, Oklab, a, 1.0);
-            update_color_channel!(Self::K_SLIDER, Oklab, b, 1.0);
             update_color_channel!(Self::H_SLIDER, Okhsv, h, 360.0);
             update_color_channel!(Self::S_SLIDER, Okhsv, s, 1.0);
             update_color_channel!(Self::V_SLIDER, Okhsv, v, 1.0);
          }
          ColorSpace::Rgb => {
-            update_color_channel!(Self::I_SLIDER, Srgb, r, 255.0);
-            update_color_channel!(Self::J_SLIDER, Srgb, g, 255.0);
-            update_color_channel!(Self::K_SLIDER, Srgb, b, 255.0);
             update_color_channel!(Self::H_SLIDER, Hsv, h, 60.0);
             update_color_channel!(Self::S_SLIDER, Hsv, s, 1.0);
             update_color_channel!(Self::V_SLIDER, Hsv, v, 1.0);
@@ -572,16 +583,6 @@ impl PickerWindow {
       }
 
       if sliders_changed.iter().any(|&changed| changed) {
-         // When in Oklab mode, clamp the sliders to sensible values.
-         if data.color_space == ColorSpace::Oklab {
-            let Okhsv { h, s, v } = Okhsv::from(data.color);
-            data.color = Okhsv {
-               h: h.clamp(0.0, 1.0),
-               s: s.clamp(0.0, 1.0),
-               v: v.clamp(f32::EPSILON, 1.0),
-            }
-            .into();
-         }
          self.update_widgets(data);
       }
 
@@ -622,13 +623,9 @@ impl PickerWindow {
 
       // Make sure the color canvas shows the correct hue.
       Self::update_canvas(&mut self.canvas_image, data.color, data.color_space);
-      // And, make sure that the sliders are in the correct color space.
+      // And, make sure that the slider is in the correct color space.
       if self.previous_color_space != data.color_space {
          Self::update_slider(&mut self.slider_image, data.color_space);
-         self.sliders = match data.color_space {
-            ColorSpace::Oklab => Self::lab_sliders(Oklab::from(data.color)),
-            ColorSpace::Rgb => Self::rgb_sliders(Srgb::from(data.color)),
-         }
       }
 
       // Update the hex code in the text field.
@@ -637,22 +634,22 @@ impl PickerWindow {
       }
 
       // Update the sliders.
+      let Srgb { r, g, b } = Srgb::from(data.color);
+      self.sliders[Self::R_SLIDER].set_value(r * 255.0);
+      self.sliders[Self::G_SLIDER].set_value(g * 255.0);
+      self.sliders[Self::B_SLIDER].set_value(b * 255.0);
       match data.color_space {
          ColorSpace::Oklab => {
-            self.sliders[Self::I_SLIDER].set_value(Oklab::from(data.color).l);
-            self.sliders[Self::J_SLIDER].set_value(Oklab::from(data.color).a);
-            self.sliders[Self::K_SLIDER].set_value(Oklab::from(data.color).b);
-            self.sliders[Self::H_SLIDER].set_value(Okhsv::from(data.color).h * 360.0);
-            self.sliders[Self::S_SLIDER].set_value(Okhsv::from(data.color).s);
-            self.sliders[Self::V_SLIDER].set_value(Okhsv::from(data.color).v);
+            let Okhsv { h, s, v } = Okhsv::from(data.color);
+            self.sliders[Self::H_SLIDER].set_value(h * 360.0);
+            self.sliders[Self::S_SLIDER].set_value(s);
+            self.sliders[Self::V_SLIDER].set_value(v);
          }
          ColorSpace::Rgb => {
-            self.sliders[Self::I_SLIDER].set_value(Srgb::from(data.color).r * 255.0);
-            self.sliders[Self::J_SLIDER].set_value(Srgb::from(data.color).g * 255.0);
-            self.sliders[Self::K_SLIDER].set_value(Srgb::from(data.color).b * 255.0);
-            self.sliders[Self::H_SLIDER].set_value(Hsv::from(data.color).h * 60.0);
-            self.sliders[Self::S_SLIDER].set_value(Hsv::from(data.color).s);
-            self.sliders[Self::V_SLIDER].set_value(Hsv::from(data.color).v);
+            let Hsv { h, s, v } = Hsv::from(data.color);
+            self.sliders[Self::H_SLIDER].set_value(h * 60.0);
+            self.sliders[Self::S_SLIDER].set_value(s);
+            self.sliders[Self::V_SLIDER].set_value(v);
          }
       }
    }
