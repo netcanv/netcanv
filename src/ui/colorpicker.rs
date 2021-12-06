@@ -19,7 +19,7 @@ use super::wm::{
 };
 use super::{
    Button, ButtonArgs, ButtonColors, ButtonState, Focus, Input, RadioButton, RadioButtonArgs,
-   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs,
+   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
 };
 
 /// Arguments for processing the color picker.
@@ -37,18 +37,20 @@ pub struct ColorPickerIcons {
 /// A color picker.
 pub struct ColorPicker {
    palette: [AnyColor; Self::NUM_COLORS],
-   color: AnyColor,
+   index: usize,
    window_state: Option<PickerWindowState>,
 }
 
 impl ColorPicker {
    /// The number of colors in a palette.
-   const NUM_COLORS: usize = 9;
+   const NUM_COLORS: usize = 10;
 
    /// Creates a new color picker.
    pub fn new() -> Self {
       let palette = [
          0x100820, // black
+         0x665b78, // gray
+         0xeff5f0, // white
          0xff003e, // red
          0xff7b00, // orange
          0xffff00, // yellow
@@ -56,12 +58,11 @@ impl ColorPicker {
          0x03cbfb, // aqua
          0x0868eb, // blue
          0xa315d7, // purple
-         0xffffff, // white
       ]
       .map(|hex| Srgb::from_color(Color::rgb(hex)).into());
       Self {
          palette,
-         color: palette[0],
+         index: 0,
          window_state: Some(PickerWindowState::Closed(PickerWindow::new_data(
             palette[0],
          ))),
@@ -76,7 +77,7 @@ impl ColorPicker {
 
    /// Returns the (paws) color that's currently selected.
    pub fn color(&self) -> Color {
-      Srgb::from(self.color).to_color(1.0)
+      Srgb::from(self.palette[self.index]).to_color(1.0)
    }
 
    /// Processes the color palette.
@@ -91,12 +92,10 @@ impl ColorPicker {
       }: ColorPickerArgs,
    ) {
       // The palette.
-      let mut current_color_is_from_palette = false;
-      for color in self.palette {
+      for (index, &color) in self.palette.clone().iter().enumerate() {
          ui.push((16.0, ui.height()), Layout::Freeform);
          let y_offset = ui.height()
-            * if self.color == color {
-               current_color_is_from_palette = true;
+            * if index == self.index {
                0.5
             } else if ui.hover(&input) {
                0.7
@@ -105,7 +104,11 @@ impl ColorPicker {
             };
          let y_offset = y_offset.round();
          if ui.hover(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
-            self.window_data_mut(wm).color = color;
+            if self.index == index {
+               self.toggle_picker_window(ui, wm, window_view.clone());
+            }
+            self.index = index;
+            self.window_data_mut(wm).color = self.palette[self.index];
          }
          ui.draw(|ui| {
             let rect = Rect::new(point(0.0, y_offset), ui.size());
@@ -116,38 +119,9 @@ impl ColorPicker {
       }
       ui.space(16.0);
 
-      // The color variable, cached from what was chosen in the picker window.
-      self.color = self.window_data(wm).color;
-      let color = Srgb::from(self.color).to_color(1.0);
+      // The palette color, saved from what was chosen in the picker window.
+      self.palette[self.index] = self.window_data(wm).color;
 
-      // The color picker button.
-      if Button::with_icon(
-         ui,
-         input,
-         ButtonArgs {
-            height: ui.height(),
-            colors: &if !current_color_is_from_palette {
-               ButtonColors {
-                  fill: color,
-                  text: if color.brightness() > 0.5 {
-                     Color::BLACK
-                  } else {
-                     Color::WHITE
-                  }
-                  .with_alpha(230),
-                  ..assets.colors.action_button
-               }
-            } else {
-               assets.colors.action_button.clone()
-            },
-            corner_radius: 0.0,
-         },
-         &assets.icons.color_picker.palette,
-      )
-      .clicked()
-      {
-         self.toggle_picker_window(ui, wm, window_view.clone())
-      }
       if let Some(window_id) = self.window_id() {
          // If the window is unpinned, move it to the window_view.
          if !wm.pinned(window_id) {
@@ -311,13 +285,23 @@ impl PickerWindow {
       let Srgb { r, g, b } = color;
       let Hsv { h, s, v } = Hsv::from(color);
       let h = h * 60.0;
+      let rgb = ValueUnit::new("", 0);
+      let degrees = ValueUnit::new("°", 0);
+      let percent = ValueUnit::new("%", 0);
       [
-         ValueSlider::new("R", r, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("G", g, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("B", b, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("H", h, 0.0, 360.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("S", s, 0.0, 1.0, SliderStep::Smooth),
-         ValueSlider::new("V", v, 0.0, 1.0, SliderStep::Smooth),
+         ValueSlider::new("R", rgb.clone(), r, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("G", rgb.clone(), g, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("B", rgb.clone(), b, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new(
+            "H",
+            degrees.clone(),
+            h,
+            0.0,
+            360.0,
+            SliderStep::Discrete(1.0),
+         ),
+         ValueSlider::new("S", percent.clone(), s, 0.0, 100.0, SliderStep::Smooth),
+         ValueSlider::new("V", percent.clone(), v, 0.0, 100.0, SliderStep::Smooth),
       ]
    }
 
@@ -541,6 +525,7 @@ impl PickerWindow {
          color: assets.colors.slider,
          font: &assets.sans,
          label_width: Some(16.0),
+         value_width: Some(40.0),
       };
       let mut sliders_changed = [false; 6];
       for (i, slider) in self.sliders[Self::R_SLIDER..=Self::B_SLIDER].iter_mut().enumerate() {
@@ -572,13 +557,13 @@ impl PickerWindow {
       match data.color_space {
          ColorSpace::Oklab => {
             update_color_channel!(Self::H_SLIDER, Okhsv, h, 360.0);
-            update_color_channel!(Self::S_SLIDER, Okhsv, s, 1.0);
-            update_color_channel!(Self::V_SLIDER, Okhsv, v, 1.0);
+            update_color_channel!(Self::S_SLIDER, Okhsv, s, 100.0);
+            update_color_channel!(Self::V_SLIDER, Okhsv, v, 100.0);
          }
          ColorSpace::Rgb => {
             update_color_channel!(Self::H_SLIDER, Hsv, h, 60.0);
-            update_color_channel!(Self::S_SLIDER, Hsv, s, 1.0);
-            update_color_channel!(Self::V_SLIDER, Hsv, v, 1.0);
+            update_color_channel!(Self::S_SLIDER, Hsv, s, 100.0);
+            update_color_channel!(Self::V_SLIDER, Hsv, v, 100.0);
          }
       }
 
@@ -642,14 +627,14 @@ impl PickerWindow {
          ColorSpace::Oklab => {
             let Okhsv { h, s, v } = Okhsv::from(data.color);
             self.sliders[Self::H_SLIDER].set_value(h * 360.0);
-            self.sliders[Self::S_SLIDER].set_value(s);
-            self.sliders[Self::V_SLIDER].set_value(v);
+            self.sliders[Self::S_SLIDER].set_value(s * 100.0);
+            self.sliders[Self::V_SLIDER].set_value(v * 100.0);
          }
          ColorSpace::Rgb => {
             let Hsv { h, s, v } = Hsv::from(data.color);
             self.sliders[Self::H_SLIDER].set_value(h * 60.0);
-            self.sliders[Self::S_SLIDER].set_value(s);
-            self.sliders[Self::V_SLIDER].set_value(v);
+            self.sliders[Self::S_SLIDER].set_value(s * 100.0);
+            self.sliders[Self::V_SLIDER].set_value(v * 100.0);
          }
       }
    }
