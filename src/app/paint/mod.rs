@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use netcanv_protocol::matchmaker::PeerId;
+use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, Layout, Rect, Renderer, Vector,
 };

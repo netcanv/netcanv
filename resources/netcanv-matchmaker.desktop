@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Encoding=UTF-8
-Name=NetCanv Matchmaker
-Comment=Server for Multiplayer Paint
-Exec=netcanv-matchmaker
+Name=NetCanv Relay
+Comment=Relay server for NetCanv
+Exec=netcanv-relay
 Icon=netcanv
 Categories=Graphics;Network
 Terminal=true

@@ -15,7 +15,7 @@ mod brush;
 mod selection;
 
 pub use brush::*;
-use netcanv_protocol::matchmaker::PeerId;
+use netcanv_protocol::relay::PeerId;
 pub use selection::*;
 use serde::Serialize;
 

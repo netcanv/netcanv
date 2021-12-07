@@ -48,15 +48,14 @@ may be added after 1.0 is released.
 There used to be a Skia backend, but it was removed because it was an unsupported, unnecessary
 maintenance burden. The last tag to feature this backend is [0.5.0](https://github.com/liquidev/netcanv/tree/0.5.0).
 
-### Matchmaker
+### Relay
 
-NetCanv assumes that you have your own matchmaker up: currently the default value
-in the matchmaker textbox is `localhost`, for easy testing.
+NetCanv assumes that you have your own relay server up: currently the default value
+in the relay textbox is `localhost`, for easy testing.
 
-To run the matchmaker, simply do:
+To run the relay server, simply do:
 ```sh
-$ cd netcanv-matchmaker
-$ cargo run --release
+$ cargo run -p netcanv-relay
 ```
 
 This will allow you to host and join new rooms locally.

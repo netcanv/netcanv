@@ -12,7 +12,7 @@ edition = "2021"
 members = [
    "netcanv-renderer",
    "netcanv-renderer-opengl",
-   "netcanv-matchmaker",
+   "netcanv-relay",
    "netcanv-protocol",
 ]
 

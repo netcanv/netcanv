@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
-use netcanv_protocol::matchmaker::{PeerId, RoomId};
-use netcanv_protocol::{client as cl, matchmaker as mm};
+use netcanv_protocol::relay::{PeerId, RoomId};
+use netcanv_protocol::{client as cl, relay};
 use nysa::global as bus;
 
 use super::socket::{self, ConnectionToken, Socket, SocketSystem};
@@ -59,10 +59,10 @@ pub enum MessageKind {
 #[derive(Debug)]
 enum State {
    // No connection has been established yet. We're waiting on the socket subsystem to give us a socket.
-   WaitingForMatchmaker { token: ConnectionToken },
-   // We're connected to the matchmaker, but haven't obtained the other person's connection
+   WaitingForRelay { token: ConnectionToken },
+   // We're connected to the relay, but haven't obtained the other person's connection
    // details yet.
-   ConnectedToMatchmaker,
+   ConnectedToRelay,
    // We're connected to a host.
    InRoom,
 }
@@ -73,11 +73,11 @@ pub struct Mate {
    pub tool: Option<String>,
 }
 
-/// A connection to the matchmaker.
+/// A connection to the relay.
 pub struct Peer {
    token: PeerToken,
    state: State,
-   matchmaker_socket: Option<Socket<mm::Packet>>,
+   relay_socket: Option<Socket<relay::Packet>>,
 
    is_host: bool,
 
@@ -91,19 +91,19 @@ pub struct Peer {
 static PEER_TOKEN: Token = Token::new(0);
 
 impl Peer {
-   /// Host a new room on the given matchmaker.
+   /// Host a new room on the given relay server.
    pub fn host(
-      socksys: &Arc<SocketSystem<mm::Packet>>,
+      socksys: &Arc<SocketSystem<relay::Packet>>,
       nickname: &str,
-      matchmaker_address: &str,
+      relay_address: &str,
    ) -> anyhow::Result<Self> {
-      let connection_token = socksys.connect(matchmaker_address.to_owned(), mm::DEFAULT_PORT)?;
+      let connection_token = socksys.connect(relay_address.to_owned(), relay::DEFAULT_PORT)?;
       Ok(Self {
          token: PeerToken(PEER_TOKEN.next()),
-         state: State::WaitingForMatchmaker {
+         state: State::WaitingForRelay {
             token: connection_token,
          },
-         matchmaker_socket: None,
+         relay_socket: None,
          is_host: true,
          nickname: nickname.into(),
          room_id: None,
@@ -113,20 +113,20 @@ impl Peer {
       })
    }
 
-   /// Join an existing room on the given matchmaker.
+   /// Join an existing room on the given relay server.
    pub fn join(
-      socksys: &Arc<SocketSystem<mm::Packet>>,
+      socksys: &Arc<SocketSystem<relay::Packet>>,
       nickname: &str,
-      matchmaker_address: &str,
+      relay_address: &str,
       room_id: RoomId,
    ) -> anyhow::Result<Self> {
-      let connection_token = socksys.connect(matchmaker_address.to_owned(), mm::DEFAULT_PORT)?;
+      let connection_token = socksys.connect(relay_address.to_owned(), relay::DEFAULT_PORT)?;
       Ok(Self {
          token: PeerToken(PEER_TOKEN.next()),
-         state: State::WaitingForMatchmaker {
+         state: State::WaitingForRelay {
             token: connection_token,
          },
-         matchmaker_socket: None,
+         relay_socket: None,
          is_host: false,
          nickname: nickname.into(),
          room_id: Some(room_id),
@@ -136,19 +136,19 @@ impl Peer {
       })
    }
 
-   /// Returns the connection token of the matchmaker socket.
-   fn matchmaker_token(&self) -> Option<ConnectionToken> {
-      self.matchmaker_socket.as_ref().map(|socket| socket.token())
+   /// Returns the connection token of the relay socket.
+   fn relay_token(&self) -> Option<ConnectionToken> {
+      self.relay_socket.as_ref().map(|socket| socket.token())
    }
 
-   /// Sends a matchmaker packet to the currently connected matchmaker, or fails if there's no
-   /// matchmaker connection.
-   fn send_to_matchmaker(&self, packet: mm::Packet) -> anyhow::Result<()> {
+   /// Sends a relay packet to the currently connected relay, or fails if there's no
+   /// relay connection.
+   fn send_to_relay(&self, packet: relay::Packet) -> anyhow::Result<()> {
       match &self.state {
-         State::ConnectedToMatchmaker | State::InRoom => {
-            self.matchmaker_socket.as_ref().unwrap().send(packet)
+         State::ConnectedToRelay | State::InRoom => {
+            self.relay_socket.as_ref().unwrap().send(packet)
          }
-         _ => anyhow::bail!("cannot send packet: not connected to the matchmaker"),
+         _ => anyhow::bail!("cannot send packet: not connected to the relay"),
       }
       Ok(())
    }
@@ -157,7 +157,7 @@ impl Peer {
    fn send_to_client(&self, to: PeerId, packet: cl::Packet) -> anyhow::Result<()> {
       match &self.state {
          State::InRoom => {
-            self.send_to_matchmaker(mm::Packet::Relay(to, bincode::serialize(&packet)?))?;
+            self.send_to_relay(relay::Packet::Relay(to, bincode::serialize(&packet)?))?;
          }
          _ => anyhow::bail!("cannot send packet: not connected to the host"),
       }
@@ -174,13 +174,13 @@ impl Peer {
 
    /// Checks the message bus for any established connections.
    fn poll_for_new_connections(&mut self) -> anyhow::Result<()> {
-      for message in &bus::retrieve_all::<socket::Connected<mm::Packet>>() {
+      for message in &bus::retrieve_all::<socket::Connected<relay::Packet>>() {
          match self.state {
-            // If a new connection was established and we're trying to connect to a matchmaker, check if the
-            // connection is ours.
-            State::WaitingForMatchmaker { token } if message.token == token => {
+            // If a new connection was established and we're trying to connect to a relay, check if
+            // the connection is ours.
+            State::WaitingForRelay { token } if message.token == token => {
                let socket = message.consume().socket;
-               self.connected_to_matchmaker(socket)?;
+               self.connected_to_relay(socket)?;
             }
             _ => (),
          }
@@ -188,20 +188,20 @@ impl Peer {
       Ok(())
    }
 
-   /// Handles the state transition from connecting to the matchmaker to being connected to the
-   /// matchmaker.
+   /// Handles the state transition from connecting to the relay to being connected to the
+   /// relay.
    ///
-   /// In the process, sends the appropriate packet to the matchmaker - whether to host or join a
+   /// In the process, sends the appropriate packet to the relay - whether to host or join a
    /// room.
-   fn connected_to_matchmaker(&mut self, socket: Socket<mm::Packet>) -> anyhow::Result<()> {
-      let state = mem::replace(&mut self.state, State::ConnectedToMatchmaker);
-      println!("connected to matchmaker");
-      self.matchmaker_socket = Some(socket);
+   fn connected_to_relay(&mut self, socket: Socket<relay::Packet>) -> anyhow::Result<()> {
+      let state = mem::replace(&mut self.state, State::ConnectedToRelay);
+      println!("connected to relay");
+      self.relay_socket = Some(socket);
       match state {
-         State::WaitingForMatchmaker { .. } => self.send_to_matchmaker(if self.is_host {
-            mm::Packet::Host
+         State::WaitingForRelay { .. } => self.send_to_relay(if self.is_host {
+            relay::Packet::Host
          } else {
-            mm::Packet::Join(self.room_id.unwrap())
+            relay::Packet::Join(self.room_id.unwrap())
          }),
          _ => unreachable!(),
       }
@@ -209,16 +209,16 @@ impl Peer {
 
    /// Polls for any incoming packets.
    fn poll_for_incoming_packets(&mut self) -> anyhow::Result<()> {
-      for message in &bus::retrieve_all::<socket::IncomingPacket<mm::Packet>>() {
+      for message in &bus::retrieve_all::<socket::IncomingPacket<relay::Packet>>() {
          match &self.state {
             // Ignore incoming packets if no socket connection is open yet.
             // These packets may be coming in, but they're not for us.
-            State::WaitingForMatchmaker { .. } => (),
-            State::ConnectedToMatchmaker | State::InRoom
-               if Some(message.token) == self.matchmaker_token() =>
+            State::WaitingForRelay { .. } => (),
+            State::ConnectedToRelay | State::InRoom
+               if Some(message.token) == self.relay_token() =>
             {
                let packet = message.consume().data;
-               self.matchmaker_packet(packet)?;
+               self.relay_packet(packet)?;
             }
             _ => (),
          }
@@ -226,17 +226,17 @@ impl Peer {
       Ok(())
    }
 
-   /// Handles a matchmaker packet.
-   fn matchmaker_packet(&mut self, packet: mm::Packet) -> anyhow::Result<()> {
+   /// Handles a relay packet.
+   fn relay_packet(&mut self, packet: relay::Packet) -> anyhow::Result<()> {
       match packet {
-         mm::Packet::RoomCreated(room_id, peer_id) => {
+         relay::Packet::RoomCreated(room_id, peer_id) => {
             eprintln!("got free room ID: {:?}", room_id);
             self.room_id = Some(room_id);
             self.peer_id = Some(peer_id);
             self.state = State::InRoom;
             bus::push(Connected { peer: self.token });
          }
-         mm::Packet::Joined { peer_id, host_id } => {
+         relay::Packet::Joined { peer_id, host_id } => {
             eprintln!("got host ID: {:?}", host_id);
             self.peer_id = Some(peer_id);
             self.host = Some(host_id);
@@ -244,7 +244,7 @@ impl Peer {
             bus::push(Connected { peer: self.token });
             self.say_hello()?;
          }
-         mm::Packet::HostTransfer(host_id) => {
+         relay::Packet::HostTransfer(host_id) => {
             if self.peer_id == Some(host_id) {
                self.send_message(MessageKind::NowHosting);
                self.host = None;
@@ -256,11 +256,11 @@ impl Peer {
                self.host = Some(host_id);
             }
          }
-         mm::Packet::Relayed(author, payload) => {
+         relay::Packet::Relayed(author, payload) => {
             let client_packet: cl::Packet = bincode::deserialize(&payload)?;
             self.client_packet(author, client_packet)?;
          }
-         mm::Packet::Disconnected(address) => {
+         relay::Packet::Disconnected(address) => {
             if let Some(mate) = self.mates.remove(&address) {
                self.send_message(MessageKind::Left {
                   peer_id: address,
@@ -269,8 +269,8 @@ impl Peer {
                });
             }
          }
-         mm::Packet::Error(error) => anyhow::bail!("{}", matchmaker_error_to_string(error)),
-         other => anyhow::bail!("unexpected matchmaker packet: {:?}", other),
+         relay::Packet::Error(error) => anyhow::bail!("{}", relay_error_to_string(error)),
+         other => anyhow::bail!("unexpected relay packet: {:?}", other),
       }
       Ok(())
    }
@@ -419,15 +419,15 @@ impl Peer {
    }
 }
 
-fn matchmaker_error_to_string(error: mm::Error) -> &'static str {
+fn relay_error_to_string(error: relay::Error) -> &'static str {
    match error {
-      mm::Error::NoFreeRooms => "Could not find any more free rooms. Try again",
+      relay::Error::NoFreeRooms => "Could not find any more free rooms. Try again",
       // Hopefully this one never happens.
-      mm::Error::NoFreePeerIDs => "The matchmaker is full. Try a different server",
-      mm::Error::RoomDoesNotExist => {
+      relay::Error::NoFreePeerIDs => "The relay server is full. Try a different server",
+      relay::Error::RoomDoesNotExist => {
          "No room with the given ID. Check if you spelled the ID correctly"
       }
       // This one also shouldn't happen.
-      mm::Error::NoSuchPeer => "Internal error: No such peer",
+      relay::Error::NoSuchPeer => "Internal error: No such peer",
    }
 }

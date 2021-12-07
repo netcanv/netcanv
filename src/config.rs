@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize)]
 pub struct LobbyConfig {
    pub nickname: String,
-   pub matchmaker: String,
+   pub relay: String,
 }
 
 /// The color scheme variant.
@@ -115,7 +115,7 @@ impl Default for UserConfig {
       Self {
          lobby: LobbyConfig {
             nickname: "Anon".to_owned(),
-            matchmaker: "localhost".to_owned(),
+            relay: "localhost".to_owned(),
          },
          ui: UiConfig {
             color_scheme: ColorScheme::Light,

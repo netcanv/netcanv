@@ -1,10 +1,10 @@
-// matchmaker packets
+//! Relay packaets.
 
 use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
-/// The default matchmaker port.
+/// The default relay port.
 pub const DEFAULT_PORT: u16 = 62137;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -12,17 +12,17 @@ pub enum Packet {
    // ---
    // Initial hosting procedure
    // ---
-   /// Request from the host to the matchmaker for a free room ID.
+   /// Request from the host to the relay for a free room ID.
    Host,
-   /// Response from the matchmaker to the host containing the room ID, and the peer ID inside the
+   /// Response from the relay to the host containing the room ID, and the peer ID inside the
    /// room.
    RoomCreated(RoomId, PeerId),
    /// Request sent from a client, to join a room with the given ID.
    Join(RoomId),
-   /// Response from the matchmaker to the client containing the client's peer ID and the host's
+   /// Response from the relay to the client containing the client's peer ID and the host's
    /// peer ID.
    Joined { peer_id: PeerId, host_id: PeerId },
-   /// Message from the matchmaker that the host has disconnected, and that the host role now
+   /// Message from the relay that the host has disconnected, and that the host role now
    /// belongs to the peer with the given ID.
    HostTransfer(PeerId),
 

@@ -23,8 +23,8 @@ jobs:
 
     - name: Compile application
       run: cargo build --release
-    - name: Compile matchmaker
-      working-directory: netcanv-matchmaker
+    - name: Compile relay
+      working-directory: netcanv-relay
       run: cargo build --release
 
     - name: Build AppImages
@@ -44,8 +44,8 @@ jobs:
 
     - name: Compile application
       run: cargo build --release
-    - name: Compile matchmaker
-      working-directory: netcanv-matchmaker
+    - name: Compile relay
+      working-directory: netcanv-relay
       run: cargo build --release
 
     - name: Apply icons to executables
@@ -57,7 +57,7 @@ jobs:
         name: netcanv-nightly-windows
         path: |
           target/release/netcanv.exe
-          target/release/netcanv-matchmaker.exe
+          target/release/netcanv-relay.exe
 
   release:
     runs-on: ubuntu-latest

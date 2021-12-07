@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use native_dialog::FileDialog;
-use netcanv_protocol::matchmaker::{self, RoomId};
+use netcanv_protocol::relay::{self, RoomId};
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Layout};
 use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
@@ -39,11 +39,11 @@ pub struct State {
    config: UserConfig,
 
    // Subsystems
-   matchmaker_socksys: Arc<SocketSystem<matchmaker::Packet>>,
+   relay_socksys: Arc<SocketSystem<relay::Packet>>,
 
    // UI elements
    nickname_field: TextField,
-   matchmaker_field: TextField,
+   relay_field: TextField,
    room_id_field: TextField,
 
    join_expand: Expand,
@@ -59,15 +59,15 @@ impl State {
    /// Creates and initializes the lobby state.
    pub fn new(assets: Assets, config: UserConfig) -> Self {
       let nickname_field = TextField::new(Some(&config.lobby.nickname));
-      let matchmaker_field = TextField::new(Some(&config.lobby.matchmaker));
+      let relay_field = TextField::new(Some(&config.lobby.relay));
       Self {
          assets,
          config,
 
-         matchmaker_socksys: SocketSystem::new(),
+         relay_socksys: SocketSystem::new(),
 
          nickname_field,
-         matchmaker_field,
+         relay_field,
          room_id_field: TextField::new(None),
 
          join_expand: Expand::new(true),
@@ -104,7 +104,7 @@ impl State {
       ui.pop();
    }
 
-   /// Processes the connection menu (nickname and matchmaker fields and two Expands with options
+   /// Processes the connection menu (nickname and relay fields and two Expands with options
    /// for joining or hosting a room).
    fn process_menu(&mut self, ui: &mut Ui, input: &mut Input) -> Option<Box<dyn AppState>> {
       ui.push((ui.width(), ui.remaining_height()), Layout::Vertical);
@@ -127,7 +127,7 @@ impl State {
          colors: &self.assets.colors.expand,
       };
 
-      // nickname, matchmaker
+      // nickname, relay
       ui.push(
          (ui.width(), TextField::labelled_height(textfield.font)),
          Layout::Horizontal,
@@ -143,11 +143,11 @@ impl State {
          },
       );
       ui.space(16.0);
-      self.matchmaker_field.with_label(
+      self.relay_field.with_label(
          ui,
          input,
          &self.assets.sans,
-         "Matchmaker",
+         "Relay server",
          TextFieldArgs {
             hint: Some("IP address"),
             ..textfield
@@ -204,9 +204,9 @@ impl State {
             || room_id_field.done()
          {
             match Self::join_room(
-               &self.matchmaker_socksys,
+               &self.relay_socksys,
                self.nickname_field.text(),
-               self.matchmaker_field.text(),
+               self.relay_field.text(),
                self.room_id_field.text(),
             ) {
                Ok(peer) => {
@@ -256,9 +256,9 @@ impl State {
             () => {
                self.status = Status::Info("Connecting…".into());
                match Self::host_room(
-                  &self.matchmaker_socksys,
+                  &self.relay_socksys,
                   self.nickname_field.text(),
-                  self.matchmaker_field.text(),
+                  self.relay_field.text(),
                ) {
                   Ok(peer) => self.peer = Some(peer),
                   Err(status) => self.status = status,
@@ -298,7 +298,7 @@ impl State {
          input,
          &mut [
             &mut self.nickname_field,
-            &mut self.matchmaker_field,
+            &mut self.relay_field,
             &mut self.room_id_field,
          ],
       );
@@ -351,21 +351,21 @@ impl State {
       Ok(())
    }
 
-   /// Establishes a connection to the matchmaker and hosts a new room.
+   /// Establishes a connection to the relay and hosts a new room.
    fn host_room(
-      socksys: &Arc<SocketSystem<matchmaker::Packet>>,
+      socksys: &Arc<SocketSystem<relay::Packet>>,
       nickname: &str,
-      matchmaker_addr_str: &str,
+      relay_addr_str: &str,
    ) -> Result<Peer, Status> {
       Self::validate_nickname(nickname)?;
-      Ok(Peer::host(socksys, nickname, matchmaker_addr_str)?)
+      Ok(Peer::host(socksys, nickname, relay_addr_str)?)
    }
 
-   /// Establishes a connection to the matchmaker and joins an existing room.
+   /// Establishes a connection to the relay and joins an existing room.
    fn join_room(
-      socksys: &Arc<SocketSystem<matchmaker::Packet>>,
+      socksys: &Arc<SocketSystem<relay::Packet>>,
       nickname: &str,
-      matchmaker_addr_str: &str,
+      relay_addr_str: &str,
       room_id_str: &str,
    ) -> Result<Peer, Status> {
       if room_id_str.len() != 6 {
@@ -375,13 +375,13 @@ impl State {
       }
       Self::validate_nickname(nickname)?;
       let room_id = RoomId::try_from(room_id_str)?;
-      Ok(Peer::join(socksys, nickname, matchmaker_addr_str, room_id)?)
+      Ok(Peer::join(socksys, nickname, relay_addr_str, room_id)?)
    }
 
    /// Saves the user configuration.
    fn save_config(&mut self) {
       self.config.lobby.nickname = self.nickname_field.text().to_owned();
-      self.config.lobby.matchmaker = self.matchmaker_field.text().to_owned();
+      self.config.lobby.relay = self.relay_field.text().to_owned();
       self.status = match self.config.save() {
          Ok(..) => Status::None,
          Err(error) => error.into(),

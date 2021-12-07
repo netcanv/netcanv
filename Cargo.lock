@@ -1130,7 +1130,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "netcanv-matchmaker"
+name = "netcanv-protocol"
+version = "0.5.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "netcanv-relay"
 version = "2.0.0"
 dependencies = [
  "anyhow",
@@ -1141,13 +1148,6 @@ dependencies = [
  "serde",
  "structopt",
  "tokio",
-]
-
-[[package]]
-name = "netcanv-protocol"
-version = "0.5.0"
-dependencies = [
- "serde",
 ]
 
 [[package]]

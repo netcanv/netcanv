@@ -1,6 +1,6 @@
 # Modify these if the executable location ever changes.
 $app_executable = "target/release/netcanv.exe"
-$matchmaker_executable = "target/release/netcanv-matchmaker.exe"
+$relay_executable = "target/release/netcanv-relay.exe"
 
 # Helper for retrieving the version of the crate. This is used to set the product version.
 function Get-CrateVersion {
@@ -10,11 +10,11 @@ function Get-CrateVersion {
 
 Write-Output "Obtaining crate versions"
 $app_version = Get-CrateVersion
-Set-Location netcanv-matchmaker
-$matchmaker_version = Get-CrateVersion
+Set-Location netcanv-relay
+$relay_version = Get-CrateVersion
 Set-Location ..
 Write-Output "netcanv: $app_version"
-Write-Output "netcanv-matchmaker: $matchmaker_version"
+Write-Output "netcanv-relay: $relay_version"
 
 # Generate the copyright info according to the current year.
 $company_name = "liquidev"
@@ -54,7 +54,7 @@ Set-Resources -Executable $app_executable `
    -Version "$app_version" `
    -Description "Online collaborative paint canvas"
 
-Set-Resources -Executable $matchmaker_executable `
-   -Name "NetCanv Matchmaker" `
-   -Version "$matchmaker_version" `
-   -Description "Matchmaker and packet relay server for NetCanv"
+Set-Resources -Executable $relay_executable `
+   -Name "NetCanv Relay" `
+   -Version "$relay_version" `
+   -Description "Relay server for NetCanv"
