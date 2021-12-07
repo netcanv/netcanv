@@ -16,7 +16,7 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
-const PALETTE_SVG: &[u8] = include_bytes!("assets/icons/palette.svg");
+const ERASER_SVG: &[u8] = include_bytes!("assets/icons/eraser.svg");
 const MENU_SVG: &[u8] = include_bytes!("assets/icons/menu.svg");
 const COPY_SVG: &[u8] = include_bytes!("assets/icons/copy.svg");
 const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
@@ -120,7 +120,7 @@ impl Assets {
                shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
             },
             color_picker: ColorPickerIcons {
-               palette: Self::load_icon(renderer, PALETTE_SVG),
+               eraser: Self::load_icon(renderer, ERASER_SVG),
             },
             color_switcher: ColorSwitcherIcons {
                dark: Self::load_icon(renderer, DARK_MODE_SVG),

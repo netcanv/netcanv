@@ -20,25 +20,28 @@ use super::wm::{
    HitTest, WindowContent, WindowContentArgs, WindowContentWrappers, WindowId, WindowManager,
 };
 use super::{
-   ButtonState, Focus, Input, RadioButton, RadioButtonArgs, SliderStep, TextField, TextFieldArgs,
-   TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
+   Button, ButtonArgs, ButtonColors, ButtonState, Focus, Input, RadioButton, RadioButtonArgs,
+   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
 };
 
 /// Arguments for processing the color picker.
-pub struct ColorPickerArgs<'wm> {
+pub struct ColorPickerArgs<'a, 'wm> {
+   pub assets: &'a Assets,
    pub wm: &'wm mut WindowManager,
    pub window_view: View,
 }
 
 /// Icons used by the color picker.
 pub struct ColorPickerIcons {
-   pub palette: Image,
+   pub eraser: Image,
 }
 
 /// A color picker.
 pub struct ColorPicker {
    palette: [AnyColor; Self::NUM_COLORS],
    index: usize,
+   eraser: bool,
+
    window_state: Option<PickerWindowState>,
 }
 
@@ -65,6 +68,7 @@ impl ColorPicker {
       Self {
          palette,
          index: 0,
+         eraser: false,
          window_state: Some(PickerWindowState::Closed(PickerWindow::new_data(
             palette[0],
          ))),
@@ -79,7 +83,11 @@ impl ColorPicker {
 
    /// Returns the (paws) color that's currently selected.
    pub fn color(&self) -> Color {
-      Srgb::from(self.palette[self.index]).to_color(1.0)
+      if self.eraser {
+         Color::TRANSPARENT
+      } else {
+         Srgb::from(self.palette[self.index]).to_color(1.0)
+      }
    }
 
    /// Processes the color palette.
@@ -87,7 +95,11 @@ impl ColorPicker {
       &mut self,
       ui: &mut Ui,
       input: &Input,
-      ColorPickerArgs { wm, window_view }: ColorPickerArgs,
+      ColorPickerArgs {
+         assets,
+         wm,
+         window_view,
+      }: ColorPickerArgs,
    ) {
       // The palette.
       for (index, &color) in self.palette.clone().iter().enumerate() {
@@ -116,6 +128,25 @@ impl ColorPicker {
          ui.pop();
       }
       ui.space(16.0);
+
+      if Button::with_icon(
+         ui,
+         input,
+         ButtonArgs {
+            height: ui.height(),
+            colors: ButtonColors::toggle(
+               self.eraser,
+               &assets.colors.toolbar_button,
+               &assets.colors.selected_toolbar_button,
+            ),
+            corner_radius: 0.0,
+         },
+         &assets.icons.color_picker.eraser,
+      )
+      .clicked()
+      {
+         self.eraser = !self.eraser;
+      }
 
       // The palette color, saved from what was chosen in the picker window.
       self.palette[self.index] = self.window_data(wm).color;

@@ -21,6 +21,17 @@ pub struct ButtonColors {
    pub pressed: Color,
 }
 
+impl ButtonColors {
+   /// Selects button colors for a togglable button.
+   pub fn toggle<'c>(cond: bool, off: &'c ButtonColors, on: &'c ButtonColors) -> &'c ButtonColors {
+      if cond {
+         on
+      } else {
+         off
+      }
+   }
+}
+
 /// The layout and color scheme arguments for processing the button.
 #[derive(Clone, Copy)]
 pub struct ButtonArgs<'c> {

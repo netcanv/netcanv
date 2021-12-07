@@ -303,6 +303,7 @@ impl Tool for BrushTool {
          ui,
          input,
          ColorPickerArgs {
+            assets,
             wm,
             window_view: picker_window,
          },
