@@ -76,7 +76,7 @@ impl UiInput for Ui {
    }
 
    fn clicked(&self, input: &Input, button: MouseButton) -> bool {
-      input.mouse_button_just_released(button) && self.has_point(dbg!(input.click_position(button)))
+      input.mouse_button_just_released(button) && self.has_point(input.click_position(button))
    }
 }
 

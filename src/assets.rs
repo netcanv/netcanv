@@ -30,28 +30,6 @@ const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
 const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
-/// A color scheme.
-#[derive(Clone)]
-pub struct ColorScheme {
-   pub text: Color,
-   pub panel: Color,
-   pub separator: Color,
-   pub error: Color,
-
-   pub button: ButtonColors,
-   pub action_button: ButtonColors,
-   pub toolbar_button: ButtonColors,
-   pub selected_toolbar_button: ButtonColors,
-   pub radio_button: RadioButtonColors,
-   pub expand: ExpandColors,
-   pub slider: Color,
-   pub text_field: TextFieldColors,
-   pub context_menu: ContextMenuColors,
-   pub window_buttons: WindowButtonsColors,
-
-   pub titlebar: TitlebarColors,
-}
-
 /// Icons for navigation.
 pub struct NavigationIcons {
    pub menu: Image,
@@ -174,221 +152,232 @@ impl Assets {
    }
 }
 
+/// A "rough overview" of a color scheme. Contains only the essential colors, and forms the basis
+/// for a precise [`ColorScheme`].
+struct CommonColors {
+   gray_00: Color,
+   gray_20: Color,
+   gray_50: Color,
+   gray_60: Color,
+   gray_80: Color,
+   gray_90: Color,
+
+   red_10: Color,
+   red_30: Color,
+
+   blue_30: Color,
+   blue_50: Color,
+   blue_70: Color,
+
+   white: Color,
+}
+
+impl CommonColors {
+   /// The common colors for the light theme.
+   fn light() -> Self {
+      Self {
+         gray_00: Color::BLACK,
+         gray_20: Color::rgb(0x333333),
+         gray_50: Color::rgb(0x7f7f7f),
+         gray_60: Color::rgb(0xa9a9a9),
+         gray_80: Color::rgb(0xeeeeee),
+         gray_90: Color::WHITE,
+
+         red_10: Color::rgb(0x3d0011),
+         red_30: Color::rgb(0x7d0023),
+
+         blue_30: Color::rgb(0x007ccf),
+         blue_50: Color::rgb(0x0397fb),
+         blue_70: Color::rgb(0x32aafa),
+
+         white: Color::WHITE,
+      }
+   }
+
+   /// The common colors for the dark theme.
+   fn dark() -> Self {
+      Self {
+         gray_00: Color::rgb(0xb7b7b7),
+         gray_20: Color::rgb(0xa0a0a0),
+         gray_50: Color::rgb(0x6f6f6f),
+         gray_60: Color::rgb(0x343434),
+         gray_80: Color::rgb(0x1f1f1f),
+         gray_90: Color::rgb(0x383838),
+
+         red_10: Color::rgb(0xdb325a),
+         red_30: Color::rgb(0xff7593),
+
+         blue_30: Color::rgb(0x007ccf),
+         blue_50: Color::rgb(0x0397fb),
+         blue_70: Color::rgb(0x32aafa),
+
+         white: Color::WHITE,
+      }
+   }
+}
+
+/// A color scheme.
+#[derive(Clone)]
+pub struct ColorScheme {
+   pub text: Color,
+   pub panel: Color,
+   pub separator: Color,
+   pub error: Color,
+
+   pub button: ButtonColors,
+   pub action_button: ButtonColors,
+   pub toolbar_button: ButtonColors,
+   pub selected_toolbar_button: ButtonColors,
+   pub radio_button: RadioButtonColors,
+   pub expand: ExpandColors,
+   pub slider: Color,
+   pub text_field: TextFieldColors,
+   pub context_menu: ContextMenuColors,
+   pub window_buttons: WindowButtonsColors,
+
+   pub titlebar: TitlebarColors,
+}
+
 impl ColorScheme {
    /// Constructs and returns the light color scheme.
    pub fn light() -> Self {
-      Self {
-         text: Color::argb(0xff000000),
-         panel: Color::argb(0xffeeeeee),
-         separator: Color::argb(0x30202020),
-         error: Color::argb(0xff7f0000),
-
-         button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0x60000000),
-            text: Color::argb(0xff000000),
-            hover: Color::argb(0x40000000),
-            pressed: Color::argb(0x70000000),
-         },
-         action_button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xff000000),
-            hover: Color::argb(0x40000000),
-            pressed: Color::argb(0x70000000),
-         },
-         toolbar_button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xff333333),
-            hover: Color::argb(0x40000000),
-            pressed: Color::argb(0x70000000),
-         },
-         selected_toolbar_button: ButtonColors {
-            fill: Color::argb(0xff333333),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xffeeeeee),
-            hover: Color::argb(0x40ffffff),
-            pressed: Color::argb(0x70000000),
-         },
-         radio_button: RadioButtonColors {
-            normal: ButtonColors {
-               fill: Color::TRANSPARENT,
-               outline: Color::argb(0x40000000),
-               text: Color::argb(0xff000000),
-               hover: Color::argb(0x40000000),
-               pressed: Color::argb(0x70000000),
-            },
-            selected: ButtonColors {
-               fill: Color::argb(0xff333333),
-               outline: Color::argb(0x00000000),
-               text: Color::argb(0xffeeeeee),
-               hover: Color::argb(0x40ffffff),
-               pressed: Color::argb(0x70000000),
-            },
-         },
-         slider: Color::argb(0xff000000),
-         expand: ExpandColors {
-            icon: Color::argb(0xff000000),
-            text: Color::argb(0xff000000),
-            hover: Color::argb(0x40000000),
-            pressed: Color::argb(0x70000000),
-         },
-         text_field: TextFieldColors {
-            outline: Color::argb(0xff808080),
-            outline_focus: Color::argb(0xff303030),
-            fill: Color::argb(0xffffffff),
-            text: Color::argb(0xff000000),
-            text_hint: Color::argb(0x7f000000),
-            label: Color::argb(0xff000000),
-            selection: Color::argb(0x33000000),
-         },
-         context_menu: ContextMenuColors {
-            background: Color::argb(0xffeeeeee),
-         },
-         window_buttons: WindowButtonsColors {
-            close: WindowButtonColors {
-               normal_fill: Color::TRANSPARENT,
-               normal_icon: Color::argb(0xff000000),
-               hover_fill: Color::argb(0xff7f0000),
-               hover_icon: Color::argb(0xffffffff),
-               pressed_fill: Color::argb(0xff3f0000),
-               pressed_icon: Color::argb(0xffaaaaaa),
-            },
-            pin: WindowButtonColors {
-               normal_fill: Color::TRANSPARENT,
-               normal_icon: Color::argb(0xff000000),
-               hover_fill: Color::argb(0x40000000),
-               hover_icon: Color::argb(0xff000000),
-               pressed_fill: Color::argb(0x70000000),
-               pressed_icon: Color::argb(0xff000000),
-            },
-            pinned: WindowButtonColors {
-               normal_fill: Color::argb(0xff0397fb),
-               normal_icon: Color::argb(0xffffffff),
-               hover_fill: Color::argb(0xff32aafa),
-               hover_icon: Color::argb(0xffffffff),
-               pressed_fill: Color::argb(0xff007ccf),
-               pressed_icon: Color::argb(0xffaaaaaa),
-            },
-         },
-
-         titlebar: TitlebarColors {
-            titlebar: Color::argb(0xffffffff),
-            separator: Color::argb(0x7f000000),
-            text: Color::argb(0xff000000),
-
-            foreground_hover: Color::argb(0xffeeeeee),
-            button: Color::argb(0xff000000),
-         },
-      }
+      Self::from(CommonColors::light())
    }
 
    /// Constructs and returns the dark color scheme.
    pub fn dark() -> Self {
+      Self::from(CommonColors::dark())
+   }
+}
+
+impl From<CommonColors> for ColorScheme {
+   fn from(
+      CommonColors {
+         gray_00,
+         gray_20,
+         gray_50,
+         gray_60,
+         gray_80,
+         gray_90,
+         red_10,
+         red_30,
+         blue_30,
+         blue_50,
+         blue_70,
+         white,
+      }: CommonColors,
+   ) -> Self {
+      let black_hover = gray_00.with_alpha(48);
+      let black_pressed = gray_00.with_alpha(96);
+      let white_hover = gray_90.with_alpha(48);
+      let white_pressed = gray_90.with_alpha(16);
+
+      let separator = gray_60;
+
       Self {
-         text: Color::argb(0xffb7b7b7),
-         panel: Color::argb(0xff1f1f1f),
-         separator: Color::argb(0x50b7b7b7),
-         error: Color::argb(0xfffc9292),
+         text: gray_00,
+         panel: gray_80,
+         separator,
+         error: red_30,
 
          button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0xff444444),
-            text: Color::argb(0xffd2d2d2),
-            hover: Color::argb(0x10ffffff),
-            pressed: Color::argb(0x05ffffff),
+            fill: Color::TRANSPARENT,
+            outline: gray_50,
+            text: gray_00,
+            hover: black_hover,
+            pressed: black_pressed,
          },
          action_button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xffb7b7b7),
-            hover: Color::argb(0x20ffffff),
-            pressed: Color::argb(0x05ffffff),
+            fill: Color::TRANSPARENT,
+            outline: Color::TRANSPARENT,
+            text: gray_00,
+            hover: black_hover,
+            pressed: black_pressed,
          },
          toolbar_button: ButtonColors {
-            fill: Color::argb(0x00000000),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xffb7b7b7),
-            hover: Color::argb(0x20ffffff),
-            pressed: Color::argb(0x05ffffff),
+            fill: Color::TRANSPARENT,
+            outline: Color::TRANSPARENT,
+            text: gray_20,
+            hover: black_hover,
+            pressed: black_pressed,
          },
          selected_toolbar_button: ButtonColors {
-            fill: Color::argb(0xffa0a0a0),
-            outline: Color::argb(0x00000000),
-            text: Color::argb(0xff1f1f1f),
-            hover: Color::argb(0x20ffffff),
-            pressed: Color::argb(0x05ffffff),
+            fill: gray_20,
+            outline: Color::TRANSPARENT,
+            text: gray_80,
+            hover: white_hover,
+            pressed: white_pressed,
          },
          radio_button: RadioButtonColors {
             normal: ButtonColors {
                fill: Color::TRANSPARENT,
-               outline: Color::argb(0x30b0b0b0),
-               text: Color::argb(0xffb7b7b7),
-               hover: Color::argb(0x20ffffff),
-               pressed: Color::argb(0x05ffffff),
+               outline: gray_50,
+               text: gray_00,
+               hover: black_hover,
+               pressed: black_pressed,
             },
             selected: ButtonColors {
-               fill: Color::argb(0xffb0b0b0),
-               outline: Color::argb(0x00000000),
-               text: Color::argb(0xff1f1f1f),
-               hover: Color::argb(0x20ffffff),
-               pressed: Color::argb(0x05ffffff),
+               fill: gray_20,
+               outline: Color::TRANSPARENT,
+               text: gray_80,
+               hover: white_hover,
+               pressed: white_pressed,
             },
          },
-         slider: Color::argb(0xff979797),
+         slider: gray_00,
          expand: ExpandColors {
-            icon: Color::argb(0xffb7b7b7),
-            text: Color::argb(0xffb7b7b7),
-            hover: Color::argb(0x30ffffff),
-            pressed: Color::argb(0x15ffffff),
+            icon: gray_00,
+            text: gray_00,
+            hover: black_hover,
+            pressed: black_pressed,
          },
          text_field: TextFieldColors {
-            outline: Color::argb(0xff595959),
-            outline_focus: Color::argb(0xff9a9a9a),
-            fill: Color::argb(0xff383838),
-            text: Color::argb(0xffd5d5d5),
-            text_hint: Color::argb(0x7f939393),
-            label: Color::argb(0xffd5d5d5),
-            selection: Color::argb(0x7f939393),
+            outline: gray_50,
+            outline_focus: gray_20,
+            fill: gray_90,
+            text: gray_00,
+            text_hint: gray_50,
+            label: gray_00,
+            selection: blue_70,
          },
          context_menu: ContextMenuColors {
-            background: Color::argb(0xff1f1f1f),
+            background: gray_80,
          },
          window_buttons: WindowButtonsColors {
             close: WindowButtonColors {
                normal_fill: Color::TRANSPARENT,
-               normal_icon: Color::argb(0xffb7b7b7),
-               hover_fill: Color::argb(0xfffc9292),
-               hover_icon: Color::argb(0xffffffff),
-               pressed_fill: Color::argb(0xffb56969),
-               pressed_icon: Color::argb(0xffffffff),
+               normal_icon: gray_00,
+               hover_fill: red_30,
+               hover_icon: gray_90,
+               pressed_fill: red_10,
+               pressed_icon: gray_80,
             },
             pin: WindowButtonColors {
                normal_fill: Color::TRANSPARENT,
-               normal_icon: Color::argb(0xffb7b7b7),
-               hover_fill: Color::argb(0x20ffffff),
-               hover_icon: Color::argb(0xffffffff),
-               pressed_fill: Color::argb(0x05ffffff),
-               pressed_icon: Color::argb(0xffffffff),
+               normal_icon: gray_00,
+               hover_fill: black_hover,
+               hover_icon: gray_00,
+               pressed_fill: black_pressed,
+               pressed_icon: gray_00,
             },
             pinned: WindowButtonColors {
-               normal_fill: Color::argb(0xff268ed4),
-               normal_icon: Color::argb(0xffffffff),
-               hover_fill: Color::argb(0xff55a9e0),
-               hover_icon: Color::argb(0xffffffff),
-               pressed_fill: Color::argb(0xff1b7fc2),
-               pressed_icon: Color::argb(0xffaaaaaa),
+               normal_fill: blue_50,
+               normal_icon: white,
+               hover_fill: blue_70,
+               hover_icon: white,
+               pressed_fill: blue_30,
+               pressed_icon: white,
             },
          },
 
          titlebar: TitlebarColors {
-            titlebar: Color::argb(0xff383838),
-            separator: Color::argb(0x7f939393),
-            text: Color::argb(0xffd5d5d5),
+            titlebar: gray_90,
+            separator,
+            text: gray_00,
 
-            foreground_hover: Color::argb(0xff1f1f1f),
-            button: Color::argb(0xffb7b7b7),
+            foreground_hover: gray_80,
+            button: gray_00,
+            close_button: red_30,
          },
       }
    }
@@ -414,6 +403,7 @@ pub struct TitlebarColors {
 
    pub foreground_hover: Color,
    pub button: Color,
+   pub close_button: Color,
 }
 
 #[cfg(target_family = "unix")]
@@ -447,7 +437,7 @@ impl Theme for ColorScheme {
       _window_active: bool,
    ) -> ARGBColor {
       let color = match button {
-         Button::Close => winit_argb_from_skia_color(self.error),
+         Button::Close => winit_argb_from_skia_color(self.titlebar.close_button),
          Button::Maximize => winit_argb_from_skia_color(self.titlebar.button),
          Button::Minimize => winit_argb_from_skia_color(self.titlebar.button),
       };
