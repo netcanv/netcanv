@@ -189,7 +189,7 @@ impl<'peer> Net<'peer> {
 #[non_exhaustive]
 pub struct ToolArgs<'ui, 'input, 'state> {
    pub ui: &'ui mut Ui,
-   pub input: &'input Input,
+   pub input: &'input mut Input,
    pub wm: &'state mut WindowManager,
    pub canvas_view: &'state View,
    pub assets: &'state Assets,

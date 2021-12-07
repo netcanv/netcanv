@@ -11,6 +11,7 @@ use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, 
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
 };
+use netcanv_renderer_opengl::winit::window::CursorIcon;
 use serde::{Deserialize, Serialize};
 
 use crate::app::paint;
@@ -52,6 +53,16 @@ enum Action {
    Selecting,
    DraggingHandle(Handle),
    DraggingWhole,
+}
+
+impl Action {
+   fn or(self, rhs: Self) -> Self {
+      if self == Self::None {
+         rhs
+      } else {
+         self
+      }
+   }
 }
 
 /// The selection tool.
@@ -96,6 +107,29 @@ impl SelectionTool {
          action: Action::None,
          selection: Selection::new(),
          peer_selections: HashMap::new(),
+      }
+   }
+
+   /// Returns whether the mouse cursor is hovered over a handle.
+   fn hovered_handle(rect: Rect, point: Point, handle_radius: f32) -> Option<Handle> {
+      if point.is_in_circle(rect.top_left(), handle_radius) {
+         Some(Handle::TopLeft)
+      } else if point.is_in_circle(rect.top_center(), handle_radius) {
+         Some(Handle::Top)
+      } else if point.is_in_circle(rect.top_right(), handle_radius) {
+         Some(Handle::TopRight)
+      } else if point.is_in_circle(rect.right_center(), handle_radius) {
+         Some(Handle::Right)
+      } else if point.is_in_circle(rect.bottom_right(), handle_radius) {
+         Some(Handle::BottomRight)
+      } else if point.is_in_circle(rect.bottom_center(), handle_radius) {
+         Some(Handle::Bottom)
+      } else if point.is_in_circle(rect.bottom_left(), handle_radius) {
+         Some(Handle::BottomLeft)
+      } else if point.is_in_circle(rect.left_center(), handle_radius) {
+         Some(Handle::Left)
+      } else {
+         None
       }
    }
 
@@ -267,32 +301,13 @@ impl Tool for SelectionTool {
       // Store the mouse position for the bottom bar display.
       self.mouse_position = mouse_position;
 
+      let handle_radius = Self::HANDLE_RADIUS * 3.0 / viewport.zoom();
       self.potential_action = Action::Selecting;
       // Only let the user resize or drag the selection if they aren't doing anything at the moment.
       if matches!(self.action, Action::None | Action::DraggingWhole) {
          if let Some(rect) = self.selection.rect {
             // Check the handles.
-            let handle_radius = Self::HANDLE_RADIUS * 3.0 / viewport.zoom();
-            let handle = if mouse_position.is_in_circle(rect.top_left(), handle_radius) {
-               Some(Handle::TopLeft)
-            } else if mouse_position.is_in_circle(rect.top_center(), handle_radius) {
-               Some(Handle::Top)
-            } else if mouse_position.is_in_circle(rect.top_right(), handle_radius) {
-               Some(Handle::TopRight)
-            } else if mouse_position.is_in_circle(rect.right_center(), handle_radius) {
-               Some(Handle::Right)
-            } else if mouse_position.is_in_circle(rect.bottom_right(), handle_radius) {
-               Some(Handle::BottomRight)
-            } else if mouse_position.is_in_circle(rect.bottom_center(), handle_radius) {
-               Some(Handle::Bottom)
-            } else if mouse_position.is_in_circle(rect.bottom_left(), handle_radius) {
-               Some(Handle::BottomLeft)
-            } else if mouse_position.is_in_circle(rect.left_center(), handle_radius) {
-               Some(Handle::Left)
-            } else {
-               None
-            };
-            if let Some(handle) = handle {
+            if let Some(handle) = Self::hovered_handle(rect, mouse_position, handle_radius) {
                self.potential_action = Action::DraggingHandle(handle);
             } else {
                // Check the inside.
@@ -307,6 +322,34 @@ impl Tool for SelectionTool {
             }
          }
       }
+
+      input.set_cursor(match self.action.or(self.potential_action) {
+         Action::None => CursorIcon::Crosshair,
+         Action::Selecting => CursorIcon::Crosshair,
+         // Action::DraggingHandle(Handle::Left | Handle::Right) => CursorIcon::ColResize,
+         // Action::DraggingHandle(Handle::Top | Handle::Bottom) => CursorIcon::RowResize,
+         // Action::DraggingHandle(Handle::TopLeft | Handle::BottomRight) => CursorIcon::NwseResize,
+         // Action::DraggingHandle(Handle::BottomLeft | Handle::TopRight) => CursorIcon::NeswResize,
+         Action::DraggingHandle(_) => {
+            // We process the hovered handles for a second time, because the first time around the
+            // rectangle was not sorted.
+            if let Some(rect) = self.selection.normalized_rect() {
+               if let Some(handle) = Self::hovered_handle(rect, mouse_position, handle_radius) {
+                  match handle {
+                     Handle::Left | Handle::Right => CursorIcon::ColResize,
+                     Handle::Top | Handle::Bottom => CursorIcon::RowResize,
+                     Handle::TopLeft | Handle::BottomRight => CursorIcon::NwseResize,
+                     Handle::BottomLeft | Handle::TopRight => CursorIcon::NeswResize,
+                  }
+               } else {
+                  CursorIcon::Default
+               }
+            } else {
+               CursorIcon::Default
+            }
+         }
+         Action::DraggingWhole => CursorIcon::AllScroll,
+      });
 
       // Check if the left mouse button was pressed, and if so, start selecting.
       match input.action(MouseButton::Left) {

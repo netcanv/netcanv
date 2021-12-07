@@ -35,11 +35,10 @@ use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::WindowBuilder;
 use crate::ui::view::{self, View};
 use backend::Backend;
-use config::UserConfig;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
-use nysa::global as bus;
 
+use netcanv_renderer_opengl::winit::window::CursorIcon;
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::UiRenderFrame;
 #[cfg(feature = "renderer-skia")]
@@ -122,6 +121,7 @@ fn inner_main() -> anyhow::Result<()> {
                let mut root_view = View::group_sized(ui);
                view::layout::full_screen(&mut root_view);
 
+               input.set_cursor(CursorIcon::Default);
                app.as_mut().unwrap().process(StateArgs {
                   ui,
                   input: &mut input,
@@ -132,7 +132,7 @@ fn inner_main() -> anyhow::Result<()> {
                Err(error) => eprintln!("render error: {}", error),
                _ => (),
             }
-            input.finish_frame();
+            input.finish_frame(ui.window());
          }
 
          _ => (),
