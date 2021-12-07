@@ -382,10 +382,6 @@ impl State {
          config.lobby.nickname = self.nickname_field.text().to_owned();
          config.lobby.relay = self.relay_field.text().to_owned();
       });
-      self.status = match config::save() {
-         Ok(..) => Status::None,
-         Err(error) => error.into(),
-      };
    }
 }
 

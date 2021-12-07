@@ -23,7 +23,7 @@ use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
-use crate::config::{self, config, ToolbarPosition};
+use crate::config::{config, ToolbarPosition};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;

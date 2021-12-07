@@ -149,9 +149,12 @@ pub fn config() -> RwLockReadGuard<'static, UserConfig> {
    CONFIG.get().expect("attempt to read config without loading it").read().unwrap()
 }
 
-/// Writes to the user config.
+/// Writes to the user config. After the closure is done running, saves the user config to the disk.
 pub fn write(f: impl FnOnce(&mut UserConfig)) {
-   let mut config =
-      CONFIG.get().expect("attempt to write config without loading it").write().unwrap();
-   f(&mut config);
+   {
+      let mut config =
+         CONFIG.get().expect("attempt to write config without loading it").write().unwrap();
+      f(&mut config);
+   }
+   catch!(save());
 }
