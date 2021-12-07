@@ -5,11 +5,9 @@ use std::sync::Mutex;
 
 use arboard::{Clipboard, ImageData};
 use image::RgbaImage;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 
-lazy_static! {
-   static ref CLIPBOARD: Mutex<Option<Clipboard>> = Mutex::new(None);
-}
+static CLIPBOARD: Lazy<Mutex<Option<Clipboard>>> = Lazy::new(|| Mutex::new(None));
 
 /// Initializes the clipboard in a platform-specific way.
 #[allow(unused)]

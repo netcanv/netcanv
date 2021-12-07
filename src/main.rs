@@ -61,6 +61,7 @@ mod viewport;
 
 use app::*;
 use assets::*;
+use config::config;
 use ui::{Input, Ui};
 
 fn inner_main() -> anyhow::Result<()> {
@@ -80,8 +81,8 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Load the user configuration and color scheme.
    // TODO: User-definable color schemes, anyone?
-   let config = UserConfig::load_or_create()?;
-   let color_scheme = ColorScheme::from(config.ui.color_scheme);
+   config::load_or_create()?;
+   let color_scheme = ColorScheme::from(config().ui.color_scheme);
 
    // Build the render backend.
    let renderer = Backend::new(window_builder, &event_loop)?;
@@ -101,7 +102,7 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Load all the assets, and start the first app state.
    let assets = Assets::new(ui.render(), color_scheme);
-   let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets, config)) as _);
+   let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
 
    event_loop.run(move |event, _, control_flow| {

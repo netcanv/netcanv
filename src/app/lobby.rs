@@ -14,7 +14,7 @@ use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{Assets, ColorScheme, SwitchColorScheme};
 use crate::backend::Backend;
 use crate::common::{Error, Fatal};
-use crate::config::{self, UserConfig};
+use crate::config::{self, config};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
 use crate::ui::*;
@@ -36,7 +36,6 @@ impl<T: Display> From<T> for Status {
 /// The lobby app state.
 pub struct State {
    assets: Assets,
-   config: UserConfig,
 
    // Subsystems
    relay_socksys: Arc<SocketSystem<relay::Packet>>,
@@ -57,12 +56,11 @@ pub struct State {
 
 impl State {
    /// Creates and initializes the lobby state.
-   pub fn new(assets: Assets, config: UserConfig) -> Self {
-      let nickname_field = TextField::new(Some(&config.lobby.nickname));
-      let relay_field = TextField::new(Some(&config.lobby.relay));
+   pub fn new(assets: Assets) -> Self {
+      let nickname_field = TextField::new(Some(&config().lobby.nickname));
+      let relay_field = TextField::new(Some(&config().lobby.relay));
       Self {
          assets,
-         config,
 
          relay_socksys: SocketSystem::new(),
 
@@ -380,9 +378,11 @@ impl State {
 
    /// Saves the user configuration.
    fn save_config(&mut self) {
-      self.config.lobby.nickname = self.nickname_field.text().to_owned();
-      self.config.lobby.relay = self.relay_field.text().to_owned();
-      self.status = match self.config.save() {
+      config::write(|config| {
+         config.lobby.nickname = self.nickname_field.text().to_owned();
+         config.lobby.relay = self.relay_field.text().to_owned();
+      });
+      self.status = match config::save() {
          Ok(..) => Status::None,
          Err(error) => error.into(),
       };
@@ -422,7 +422,7 @@ impl AppState for State {
             colors: &self.assets.colors.action_button,
             corner_radius: 0.0,
          },
-         if self.config.ui.color_scheme == config::ColorScheme::Dark {
+         if config().ui.color_scheme == config::ColorScheme::Dark {
             &self.assets.icons.color_switcher.light
          } else {
             &self.assets.icons.color_switcher.dark
@@ -430,13 +430,15 @@ impl AppState for State {
       )
       .clicked()
       {
-         self.config.ui.color_scheme = match self.config.ui.color_scheme {
-            config::ColorScheme::Light => config::ColorScheme::Dark,
-            config::ColorScheme::Dark => config::ColorScheme::Light,
-         };
+         config::write(|config| {
+            config.ui.color_scheme = match config.ui.color_scheme {
+               config::ColorScheme::Light => config::ColorScheme::Dark,
+               config::ColorScheme::Dark => config::ColorScheme::Light,
+            };
+         });
          self.save_config();
-         self.assets.colors = ColorScheme::from(self.config.ui.color_scheme);
-         bus::push(SwitchColorScheme(self.config.ui.color_scheme));
+         self.assets.colors = ColorScheme::from(config().ui.color_scheme);
+         bus::push(SwitchColorScheme(config().ui.color_scheme));
       }
 
       ui.pop();
@@ -468,17 +470,11 @@ impl AppState for State {
       if connected {
          let mut this = *self;
          this.save_config();
-         match paint::State::new(
-            this.assets,
-            this.config,
-            this.peer.unwrap(),
-            this.image_file,
-            renderer,
-         ) {
+         match paint::State::new(this.assets, this.peer.unwrap(), this.image_file, renderer) {
             Ok(state) => Box::new(state),
-            Err((error, assets, config)) => {
+            Err((error, assets)) => {
                bus::push(Fatal(error));
-               Box::new(Self::new(assets, config))
+               Box::new(Self::new(assets))
             }
          }
       } else {

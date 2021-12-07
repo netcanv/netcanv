@@ -23,7 +23,7 @@ use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
-use crate::config::{ToolbarPosition, UserConfig};
+use crate::config::{self, config, ToolbarPosition};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
@@ -65,7 +65,6 @@ struct RequestChunkDownload((i32, i32));
 /// The paint app state.
 pub struct State {
    assets: Assets,
-   config: UserConfig,
 
    paint_canvas: PaintCanvas,
    tools: Rc<RefCell<Vec<Box<dyn Tool>>>>,
@@ -118,14 +117,12 @@ impl State {
    /// Creates a new paint state.
    pub fn new(
       assets: Assets,
-      config: UserConfig,
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
-   ) -> Result<Self, (anyhow::Error, Assets, UserConfig)> {
+   ) -> Result<Self, (anyhow::Error, Assets)> {
       let mut this = Self {
          assets,
-         config,
 
          paint_canvas: PaintCanvas::new(),
          tools: Rc::new(RefCell::new(Vec::new())),
@@ -164,7 +161,7 @@ impl State {
 
       if let Some(path) = image_path {
          if let Err(error) = this.paint_canvas.load(renderer, &path) {
-            return Err((error, this.assets, this.config));
+            return Err((error, this.assets));
          }
       }
 
@@ -698,7 +695,7 @@ impl State {
    /// Reflows the toolbar's size.
    fn resize_toolbar(&mut self) {
       let length = 4.0 + self.tools.borrow().len() as f32 * (Self::TOOL_SIZE + 4.0);
-      self.toolbar_view.dimensions = match self.config.ui.toolbar_position {
+      self.toolbar_view.dimensions = match config().ui.toolbar_position {
          ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
          ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
       }
@@ -707,7 +704,7 @@ impl State {
 
    /// Returns the toolbar's alignment inside the canvas view.
    fn toolbar_alignment(&self) -> Alignment {
-      match self.config.ui.toolbar_position {
+      match config().ui.toolbar_position {
          ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
          ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
          ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
@@ -971,7 +968,7 @@ impl AppState for State {
 
    fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {
       if self.fatal_error {
-         Box::new(lobby::State::new(self.assets, self.config))
+         Box::new(lobby::State::new(self.assets))
       } else {
          self
       }
