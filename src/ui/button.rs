@@ -59,7 +59,6 @@ impl Button {
       extra(ui);
       ui.fit();
 
-      let mut clicked = false;
       ui.outline_rounded(colors.outline, corner_radius, 1.0);
       if ui.hover(input) {
          let fill_color = match input.action(MouseButton::Left) {
@@ -67,8 +66,8 @@ impl Button {
             _ => colors.hover,
          };
          ui.fill_rounded(fill_color, corner_radius);
-         clicked = input.action(MouseButton::Left) == (true, ButtonState::Released);
       }
+      let clicked = ui.clicked(input, MouseButton::Left);
 
       ui.pop();
 

@@ -34,12 +34,18 @@ pub trait UiInput {
    /// Returns the previous mouse position relative to the current group.
    fn previous_mouse_position(&self, input: &Input) -> Point;
 
+   /// Returns whether the current group contains the given point.
+   fn has_point(&self, point: Point) -> bool;
+
    /// Returns whether the mouse position is in the current group's rectangle.
    fn has_mouse(&self, input: &Input) -> bool;
 
    /// Returns whether the mouse position is in the current group's rectangle, and the mouse
    /// is currently active.
    fn hover(&self, input: &Input) -> bool;
+
+   /// Returns whether the current group has just been clicked with the given mouse button.
+   fn clicked(&self, input: &Input, button: MouseButton) -> bool;
 }
 
 impl UiInput for Ui {
@@ -51,17 +57,26 @@ impl UiInput for Ui {
       input.previous_mouse_position() - self.position()
    }
 
-   fn has_mouse(&self, input: &Input) -> bool {
-      let mouse = self.mouse_position(input);
+   fn has_point(&self, point: Point) -> bool {
+      let Point { x, y } = self.position();
       let Vector {
          x: width,
          y: height,
       } = self.size();
-      mouse.x >= 0.0 && mouse.x <= width && mouse.y >= 0.0 && mouse.y <= height
+      point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
+   }
+
+   fn has_mouse(&self, input: &Input) -> bool {
+      let mouse = input.mouse_position();
+      self.has_point(mouse)
    }
 
    fn hover(&self, input: &Input) -> bool {
       input.mouse_active() && self.has_mouse(input)
+   }
+
+   fn clicked(&self, input: &Input, button: MouseButton) -> bool {
+      input.mouse_button_just_released(button) && self.has_point(dbg!(input.click_position(button)))
    }
 }
 

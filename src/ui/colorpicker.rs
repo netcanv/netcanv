@@ -630,9 +630,9 @@ impl PickerWindow {
                },
                radius,
             );
-            if input.action(MouseButton::Left) == (true, ButtonState::Released) {
-               data.color = Srgb::from_color(color).into();
-            }
+         }
+         if ui.clicked(input, MouseButton::Left) {
+            data.color = Srgb::from_color(color).into();
          }
          ui.pop();
          ui.pop();

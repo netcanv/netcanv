@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
 use crate::backend::winit::event::{KeyboardInput, WindowEvent};
-use netcanv_renderer::paws::{vector, Point, Vector};
+use netcanv_renderer::paws::{point, vector, Point, Vector};
 
 const MOUSE_BUTTON_COUNT: usize = 8;
 const KEY_CODE_COUNT: usize = 256;
@@ -21,6 +21,7 @@ pub struct Input {
    mouse_button_is_down: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_pressed: [bool; MOUSE_BUTTON_COUNT],
    mouse_button_just_released: [bool; MOUSE_BUTTON_COUNT],
+   click_positions: [Point; MOUSE_BUTTON_COUNT],
    active_mouse_area: usize,
    processed_mouse_area: usize,
    frame_mouse_area: usize,
@@ -39,13 +40,14 @@ impl Input {
    /// Creates a new input state.
    pub fn new() -> Self {
       Self {
-         mouse_position: Point::new(0.0, 0.0),
-         previous_mouse_position: Point::new(0.0, 0.0),
-         mouse_scroll: Vector::new(0.0, 0.0),
+         mouse_position: point(0.0, 0.0),
+         previous_mouse_position: point(0.0, 0.0),
+         mouse_scroll: vector(0.0, 0.0),
 
          mouse_button_is_down: [false; MOUSE_BUTTON_COUNT],
          mouse_button_just_pressed: [false; MOUSE_BUTTON_COUNT],
          mouse_button_just_released: [false; MOUSE_BUTTON_COUNT],
+         click_positions: [vector(0.0, 0.0); MOUSE_BUTTON_COUNT],
          active_mouse_area: 0,
          processed_mouse_area: 0,
          frame_mouse_area: 0,
@@ -123,6 +125,15 @@ impl Input {
          self.mouse_button_just_released[i]
       } else {
          false
+      }
+   }
+
+   /// Returns the position where the last click with the given mouse button was initiated.
+   pub fn click_position(&self, button: MouseButton) -> Point {
+      if let Some(i) = Self::mouse_button_index(button) {
+         self.click_positions[i]
+      } else {
+         point(0.0, 0.0)
       }
    }
 
@@ -253,6 +264,7 @@ impl Input {
             ElementState::Pressed => {
                self.mouse_button_is_down[i] = true;
                self.mouse_button_just_pressed[i] = true;
+               self.click_positions[i] = self.mouse_position();
             }
             ElementState::Released => {
                self.mouse_button_is_down[i] = false;
