@@ -233,6 +233,7 @@ impl From<Srgb> for Hsv {
 impl From<Hsv> for Srgb {
    fn from(Hsv { h, s, v }: Hsv) -> Self {
       // https://en.wikipedia.org/wiki/HSL_and_HSV#To_RGB
+      let h = h.rem_euclid(6.0);
       let c = v * s;
       let x = c * (1.0 - f32::abs(h.rem_euclid(2.0) - 1.0));
       let (r1, g1, b1) = if h >= 0.0 && h < 1.0 {
