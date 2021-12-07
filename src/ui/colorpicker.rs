@@ -1,7 +1,9 @@
 //! Color picker with palettes and multiple color spaces.
 
 use image::{Rgba, RgbaImage};
-use netcanv_renderer::paws::{point, vector, Color, Layout, Padding, Rect, Renderer, Vector};
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Color, Layout, Padding, Rect, Renderer, Vector,
+};
 use netcanv_renderer::{Font, Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
 use netcanv_renderer_opengl::winit::event::MouseButton;
 use strum::{EnumIter, EnumMessage};
@@ -44,21 +46,22 @@ impl ColorPicker {
    /// The number of colors in a palette.
    const NUM_COLORS: usize = 10;
 
+   const DEFAULT_PALETTE: [Color; Self::NUM_COLORS] = [
+      Color::rgb(0x100820), // Black
+      Color::rgb(0x665b78), // Gray
+      Color::rgb(0xeff5f0), // White
+      Color::rgb(0xff003e), // Red
+      Color::rgb(0xff7b00), // Orange
+      Color::rgb(0xffff00), // Yellow
+      Color::rgb(0x2dd70e), // Green
+      Color::rgb(0x03cbfb), // Aqua
+      Color::rgb(0x0868eb), // Blue
+      Color::rgb(0xa315d7), // Purple
+   ];
+
    /// Creates a new color picker.
    pub fn new() -> Self {
-      let palette = [
-         0x100820, // black
-         0x665b78, // gray
-         0xeff5f0, // white
-         0xff003e, // red
-         0xff7b00, // orange
-         0xffff00, // yellow
-         0x2dd70e, // green
-         0x03cbfb, // aqua
-         0x0868eb, // blue
-         0xa315d7, // purple
-      ]
-      .map(|hex| Srgb::from_color(Color::rgb(hex)).into());
+      let palette = Self::DEFAULT_PALETTE.map(|color| Srgb::from_color(color).into());
       Self {
          palette,
          index: 0,
@@ -569,6 +572,84 @@ impl PickerWindow {
       ui.pop();
    }
 
+   /// Processes the header bar - the area of the that can be used to drag the window around,
+   /// which also contains controls.
+   fn process_header_bar(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      assets: &Assets,
+      hit_test: &mut HitTest,
+      data: &mut PickerWindowData,
+   ) {
+      ui.push((ui.width(), 48.0), Layout::Freeform);
+      ui.push(ui.size(), Layout::Horizontal);
+      let mouse_on_title_bar = ui.hover(input);
+
+      // The color space selector.
+      ui.pad((12.0, 12.0));
+      ui.push((0.0, ui.height()), Layout::Horizontal);
+      self.color_space.with_text(
+         ui,
+         input,
+         RadioButtonArgs {
+            height: 24.0,
+            colors: &assets.colors.radio_button,
+            corner_radius: 11.5,
+         },
+         &assets.sans,
+      );
+      data.color_space = *self.color_space.selected();
+      ui.fit();
+      let mouse_on_title_bar = mouse_on_title_bar && !ui.hover(input);
+      ui.pop();
+
+      // Separator.
+      ui.push((8.0, ui.height()), Layout::Freeform);
+      ui.border_right(assets.colors.separator, 1.0);
+      ui.pop();
+      ui.push((12.0, ui.height()), Layout::Freeform);
+      ui.pop();
+
+      // The preset colors.
+      ui.push((0.0, ui.height()), Layout::Horizontal);
+      for color in ColorPicker::DEFAULT_PALETTE {
+         let inner_size = 16.0;
+         ui.push((inner_size, ui.height()), Layout::Freeform);
+         ui.push((inner_size, inner_size), Layout::Freeform);
+         ui.align((AlignH::Left, AlignV::Middle));
+         let radius = inner_size / 2.0;
+         ui.fill_rounded(color, radius);
+         ui.outline_rounded(Color::BLACK.with_alpha(32), radius - 0.5, 1.0);
+         if ui.hover(input) {
+            ui.fill_rounded(
+               if input.mouse_button_is_down(MouseButton::Left) {
+                  Color::BLACK.with_alpha(32)
+               } else {
+                  Color::WHITE.with_alpha(96)
+               },
+               radius,
+            );
+            if input.action(MouseButton::Left) == (true, ButtonState::Released) {
+               data.color = Srgb::from_color(color).into();
+            }
+         }
+         ui.pop();
+         ui.pop();
+         ui.space(4.0);
+      }
+      ui.fit();
+      let mouse_on_title_bar = mouse_on_title_bar && !ui.hover(input);
+      ui.pop();
+
+      ui.pop();
+      ui.pop();
+
+      if mouse_on_title_bar {
+         *hit_test = HitTest::Draggable;
+      }
+   }
+
    /// Parses a hex code into a color. If the given text is not a valid hex code, returns `None`.
    fn parse_hex_code(text: &str) -> Option<Color> {
       // Empty string? Not a hex code.
@@ -651,34 +732,7 @@ impl WindowContent for PickerWindow {
    ) {
       ui.push(ui.size(), Layout::Vertical);
 
-      // The title bar and color space selector.
-      ui.push((ui.width(), 48.0), Layout::Freeform);
-      ui.push(ui.size(), Layout::Horizontal);
-      let mouse_on_title_bar = ui.hover(input);
-
-      ui.pad((12.0, 12.0));
-      ui.push((0.0, ui.height()), Layout::Horizontal);
-      self.color_space.with_text(
-         ui,
-         input,
-         RadioButtonArgs {
-            height: 24.0,
-            colors: &assets.colors.radio_button,
-            corner_radius: 11.5,
-         },
-         &assets.sans,
-      );
-      data.color_space = *self.color_space.selected();
-      ui.fit();
-      let mouse_on_title_bar = mouse_on_title_bar && !ui.hover(input);
-      ui.pop();
-
-      ui.pop();
-      ui.pop();
-
-      if mouse_on_title_bar {
-         **hit_test = HitTest::Draggable;
-      }
+      self.process_header_bar(ui, input, assets, hit_test, data);
 
       // Process the group encompassing the color canvas and slider.
       ui.push(ui.remaining_size(), Layout::Horizontal);
