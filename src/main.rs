@@ -12,7 +12,7 @@
 //  - assets.rs - asset loading and color schemes.
 //  - assets/ - does not contain any code, but rather actual assets, such as fonts and icons.
 //  - app/ - contains app states (the lobby and paint UI).
-//  - net/ - contains networking-related code (communicating with the matchmaker and other clients).
+//  - net/ - contains networking-related code (communicating with the relay and other clients).
 //  - ui/ - contains NetCanv's bespoke UI framework, as well as all the widgets.
 //
 // This list may become out of date with time, as the app gets refactored, so feel free to explore,

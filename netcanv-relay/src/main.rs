@@ -1,4 +1,4 @@
-//! The NetCanv matchmaker server.
+//! The NetCanv Relay server.
 //! Keeps track of open rooms and relays packets between peers.
 
 use std::collections::{HashMap, HashSet};
@@ -6,7 +6,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use nanorand::Rng;
-use netcanv_protocol::matchmaker::{self as mm, Packet, PeerId, RoomId, DEFAULT_PORT};
+use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
 use structopt::StructOpt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -14,9 +14,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
 #[derive(StructOpt)]
-#[structopt(name = "netcanv-matchmaker")]
+#[structopt(name = "netcanv-relay")]
 struct Options {
-   /// The port to host the matchmaker under.
+   /// The port to host the relay under.
    #[structopt(short)]
    port: Option<u16>,
 }
@@ -228,14 +228,14 @@ async fn host(
    let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&write, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
+      send_packet(&write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let room_id = if let Some(id) = state.rooms.find_room_id() {
       id
    } else {
-      send_packet(&write, Packet::Error(mm::Error::NoFreeRooms)).await?;
+      send_packet(&write, Packet::Error(relay::Error::NoFreeRooms)).await?;
       anyhow::bail!("no more free room IDs");
    };
 
@@ -255,14 +255,14 @@ async fn join(
    let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&write, Packet::Error(mm::Error::NoFreePeerIDs)).await?;
+      send_packet(&write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let host_id = if let Some(id) = state.rooms.host_id(room_id) {
       id
    } else {
-      send_packet(&write, Packet::Error(mm::Error::RoomDoesNotExist)).await?;
+      send_packet(&write, Packet::Error(relay::Error::RoomDoesNotExist)).await?;
       anyhow::bail!("no room with the given ID");
    };
 
@@ -292,7 +292,7 @@ async fn relay(
       if let Some(stream) = state.peers.peer_streams.get(&target_id) {
          send_packet(stream, packet).await?;
       } else {
-         send_packet(write, Packet::Error(mm::Error::NoSuchPeer)).await?;
+         send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
       }
    }
 
@@ -410,7 +410,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
    .await?;
    let state = Arc::new(Mutex::new(State::new()));
 
-   eprintln!("NetCanv Matchmaker server");
+   eprintln!("NetCanv Relay server");
    eprintln!("listening on {}", listener.local_addr()?);
 
    loop {

@@ -17,12 +17,12 @@ chmod +x linuxdeploy-x86_64.AppImage
   --output appimage
 
 ./linuxdeploy-x86_64.AppImage \
-  --appdir NetCanv-Matchmaker-AppDir \
-  --executable target/release/netcanv-matchmaker \
+  --appdir NetCanv-Relay-AppDir \
+  --executable target/release/netcanv-relay \
   --icon-file resources/netcanv.png \
-  --desktop-file resources/netcanv-matchmaker.desktop \
+  --desktop-file resources/netcanv-relay.desktop \
   --output appimage
 
 mkdir appimages
-mv NetCanv-*.AppImage NetCanv_Matchmaker-*.AppImage appimages
+mv NetCanv-*.AppImage NetCanv_Relay-*.AppImage appimages
 rm -r NetCanv*-AppDir

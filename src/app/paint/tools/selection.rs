@@ -6,7 +6,7 @@ use crate::backend::winit::event::{MouseButton, VirtualKeyCode};
 use image::io::Reader;
 use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
-use netcanv_protocol::matchmaker::PeerId;
+use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
