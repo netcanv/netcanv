@@ -11,7 +11,7 @@ use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
 
 use crate::app::{paint, AppState, StateArgs};
-use crate::assets::{Assets, ColorScheme, SwitchColorScheme};
+use crate::assets::{Assets, ColorScheme};
 use crate::backend::Backend;
 use crate::common::{Error, Fatal};
 use crate::config::{self, config};
@@ -434,7 +434,6 @@ impl AppState for State {
          });
          self.save_config();
          self.assets.colors = ColorScheme::from(config().ui.color_scheme);
-         bus::push(SwitchColorScheme(config().ui.color_scheme));
       }
 
       ui.pop();

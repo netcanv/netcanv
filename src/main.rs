@@ -92,11 +92,6 @@ fn inner_main() -> anyhow::Result<()> {
       Err(error) => eprintln!("failed to initialize clipboard: {}", error),
    }
 
-   // On Wayland, winit draws its own set of decorations, which can be customized.
-   // We customize them to fit our color scheme.
-   #[cfg(target_family = "unix")]
-   renderer.window().set_wayland_theme(color_scheme.clone());
-
    // Build the UI.
    let mut ui = Ui::new(renderer);
 
@@ -138,12 +133,6 @@ fn inner_main() -> anyhow::Result<()> {
                _ => (),
             }
             input.finish_frame();
-
-            #[cfg(target_family = "unix")]
-            for message in &bus::retrieve_all::<SwitchColorScheme>() {
-               let SwitchColorScheme(scheme) = message.consume();
-               ui.window().set_wayland_theme(ColorScheme::from(scheme));
-            }
          }
 
          _ => (),
