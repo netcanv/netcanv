@@ -6,7 +6,7 @@
 //! older configs. These keys will be added to the user's configuration automatically.
 
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{RwLock, RwLockReadGuard};
 
 use directories::ProjectDirs;
 use once_cell::sync::OnceCell;

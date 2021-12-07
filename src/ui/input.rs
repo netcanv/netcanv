@@ -7,6 +7,7 @@ use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
 use crate::backend::winit::event::{KeyboardInput, WindowEvent};
 use netcanv_renderer::paws::{point, vector, Point, Vector};
+use netcanv_renderer_opengl::winit::window::{CursorIcon, Window};
 
 const MOUSE_BUTTON_COUNT: usize = 8;
 const KEY_CODE_COUNT: usize = 256;
@@ -25,6 +26,9 @@ pub struct Input {
    active_mouse_area: usize,
    processed_mouse_area: usize,
    frame_mouse_area: usize,
+
+   previous_cursor: CursorIcon,
+   cursor: CursorIcon,
 
    // keyboard input
    char_buffer: Vec<char>,
@@ -51,6 +55,9 @@ impl Input {
          active_mouse_area: 0,
          processed_mouse_area: 0,
          frame_mouse_area: 0,
+
+         previous_cursor: CursorIcon::Default,
+         cursor: CursorIcon::Default,
 
          char_buffer: Vec::new(),
          key_just_typed: [false; KEY_CODE_COUNT],
@@ -148,6 +155,11 @@ impl Input {
       }
    }
 
+   /// Sets the current mouse cursor.
+   pub fn set_cursor(&mut self, cursor: CursorIcon) {
+      self.cursor = cursor;
+   }
+
    /// Returns the characters that were typed during this frame.
    pub fn characters_typed(&self) -> &[char] {
       &self.char_buffer
@@ -224,7 +236,7 @@ impl Input {
    /// Finishes an input frame. This resets pressed/released states, resets the previous mouse
    /// position, scroll delta, among other things, so this must be called at the end of each
    /// frame.
-   pub fn finish_frame(&mut self) {
+   pub fn finish_frame(&mut self, window: &Window) {
       for state in &mut self.mouse_button_just_pressed {
          *state = false;
       }
@@ -234,6 +246,10 @@ impl Input {
       self.previous_mouse_position = self.mouse_position;
       self.mouse_scroll = vector(0.0, 0.0);
       self.frame_mouse_area = self.processed_mouse_area;
+      if self.cursor != self.previous_cursor {
+         self.previous_cursor = self.cursor;
+         window.set_cursor_icon(self.cursor);
+      }
       for state in &mut self.key_just_typed {
          *state = false;
       }
