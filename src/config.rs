@@ -6,8 +6,10 @@
 //! older configs. These keys will be added to the user's configuration automatically.
 
 use std::path::PathBuf;
+use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use directories::ProjectDirs;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 /// Saved values of lobby text boxes.
@@ -77,7 +79,7 @@ impl UserConfig {
    ///
    /// If the `config.toml` doesn't exist, it's created with values inherited from
    /// `UserConfig::default`.
-   pub fn load_or_create() -> anyhow::Result<Self> {
+   fn load_or_create() -> anyhow::Result<Self> {
       let config_dir = Self::config_dir();
       let config_file = Self::path();
       std::fs::create_dir_all(config_dir)?;
@@ -103,7 +105,7 @@ impl UserConfig {
    }
 
    /// Saves the user configuration to the `config.toml` file.
-   pub fn save(&self) -> anyhow::Result<()> {
+   fn save(&self) -> anyhow::Result<()> {
       // Assumes that `config_dir` was already created in `load_or_create`.
       let config_file = Self::path();
       std::fs::write(&config_file, toml::to_string(self)?)?;
@@ -124,4 +126,35 @@ impl Default for UserConfig {
          },
       }
    }
+}
+
+static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
+
+/// Loads or creates the user config.
+pub fn load_or_create() -> anyhow::Result<()> {
+   let config = UserConfig::load_or_create()?;
+   if let Err(_) = CONFIG.set(RwLock::new(config)) {
+      anyhow::bail!("the user config is already loaded");
+   }
+   Ok(())
+}
+
+/// Saves the user config.
+pub fn save() -> anyhow::Result<()> {
+   config().save()
+}
+
+/// Reads from the user config.
+pub fn config() -> RwLockReadGuard<'static, UserConfig> {
+   CONFIG.get().expect("attempt to read config without loading it").read().unwrap()
+}
+
+/// Writes to the user config. After the closure is done running, saves the user config to the disk.
+pub fn write(f: impl FnOnce(&mut UserConfig)) {
+   {
+      let mut config =
+         CONFIG.get().expect("attempt to write config without loading it").write().unwrap();
+      f(&mut config);
+   }
+   catch!(save());
 }
