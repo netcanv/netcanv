@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize)]
 pub struct LobbyConfig {
    pub nickname: String,
+   #[serde(alias = "matchmaker")]
    pub relay: String,
 }
 
