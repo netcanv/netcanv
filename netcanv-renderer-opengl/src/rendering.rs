@@ -378,9 +378,9 @@ impl RenderState {
       let transform = self.transform();
       let mut premultiply_alpha = false;
       match transform.blend_mode {
-         BlendMode::Clear => unsafe {
+         BlendMode::Replace => unsafe {
             self.gl.blend_equation(glow::FUNC_ADD);
-            self.gl.blend_func(glow::ZERO, glow::ZERO);
+            self.gl.blend_func(glow::ONE, glow::ZERO);
          },
          BlendMode::Alpha => unsafe {
             self.gl.blend_equation(glow::FUNC_ADD);

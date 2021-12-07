@@ -94,20 +94,16 @@ impl BrushTool {
       paint_canvas: &mut PaintCanvas,
       a: Point,
       b: Point,
-      color: Option<Color>,
+      color: Color,
       thickness: f32,
    ) {
       let coverage = Self::coverage(a, b, thickness);
+      renderer.push();
+      renderer.set_blend_mode(BlendMode::Replace);
       paint_canvas.draw(renderer, coverage, |renderer| {
-         let color = match color {
-            Some(color) => color,
-            None => {
-               renderer.set_blend_mode(BlendMode::Clear);
-               Color::BLACK
-            }
-         };
          renderer.line(a, b, color, LineCap::Round, thickness);
       });
+      renderer.pop();
    }
 
    fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerBrush {
@@ -190,21 +186,21 @@ impl Tool for BrushTool {
             a,
             b,
             match self.state {
-               BrushState::Drawing => Some(self.color()),
-               BrushState::Erasing => None,
+               BrushState::Drawing => self.color(),
+               BrushState::Erasing => Color::TRANSPARENT,
                _ => unreachable!(),
             },
             self.thickness(),
          );
          self.stroke_points.push(Stroke {
             color: match self.state {
-               BrushState::Drawing => Some((
+               BrushState::Drawing => (
                   self.color().r,
                   self.color().g,
                   self.color().b,
                   self.color().a,
-               )),
-               BrushState::Erasing => None,
+               ),
+               BrushState::Erasing => (0, 0, 0, 0),
                _ => unreachable!(),
             },
             thickness: self.thickness() as u8,
@@ -421,7 +417,10 @@ impl Tool for BrushTool {
                   let (bx, by) = b;
                   point(bx, by)
                };
-               let color = color.map(|(r, g, b, a)| Color::new(r, g, b, a));
+               let color = {
+                  let (r, g, b, a) = color;
+                  Color::new(r, g, b, a)
+               };
                self.stroke(renderer, paint_canvas, a, b, color, thickness);
             }
          }
@@ -437,7 +436,7 @@ impl Tool for BrushTool {
 
 #[derive(Serialize, Deserialize)]
 struct Stroke {
-   color: Option<(u8, u8, u8, u8)>,
+   color: (u8, u8, u8, u8),
    thickness: u8,
    a: (f32, f32),
    b: (f32, f32),

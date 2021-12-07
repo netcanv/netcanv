@@ -651,7 +651,7 @@ impl Selection {
          self.capture = Some(capture);
          // After the capture is taken, erase the rectangle from the paint canvas.
          paint_canvas.draw(renderer, rect, |renderer| {
-            renderer.set_blend_mode(BlendMode::Clear);
+            renderer.set_blend_mode(BlendMode::Replace);
             renderer.fill(rect, Color::BLACK, 0.0);
          });
       }

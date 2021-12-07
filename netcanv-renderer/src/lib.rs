@@ -100,8 +100,8 @@ pub trait Framebuffer {
 /// Blending modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendMode {
-   /// Clears colors to transparency.
-   Clear,
+   /// Does not blend colors.
+   Replace,
    /// Blends colors using the alpha channel of the destination.
    Alpha,
    /// Adds colors together.
