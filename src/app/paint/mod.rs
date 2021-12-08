@@ -1,7 +1,7 @@
 //! The paint state. This is the screen where you paint on the canvas with other people.
 
 mod actions;
-mod tool_bar;
+pub mod tool_bar;
 mod tools;
 
 use std::collections::HashMap;
@@ -870,10 +870,15 @@ impl AppState for State {
       self.process_canvas(ui, input);
 
       // Bars
-      self.toolbar.process(ToolbarArgs {
-         wm: &mut self.wm,
-         parent_view: &view::layout::padded(&self.canvas_view, 8.0),
-      });
+      self.toolbar.process(
+         ui,
+         input,
+         ToolbarArgs {
+            wm: &mut self.wm,
+            parent_view: &view::layout::padded(&self.canvas_view, 8.0),
+            colors: &self.assets.colors.toolbar,
+         },
+      );
       // Draw windows over the toolbar, but below the bottom bar.
       self.wm.process(ui, input, &self.assets);
       self.process_bar(ui, input);

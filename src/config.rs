@@ -34,12 +34,8 @@ pub enum ColorScheme {
 pub enum ToolbarPosition {
    /// Vertical on the left side of the screen.
    Left,
-   /// Horizontal on the top of the screen.
-   Top,
    /// Vertical on the right side of the screen.
    Right,
-   /// Horizontal on the bottom of the screen.
-   Bottom,
 }
 
 impl Default for ToolbarPosition {

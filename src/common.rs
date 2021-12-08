@@ -113,6 +113,9 @@ pub trait RectMath {
    fn with_bottom_right(self, bottom_right: Point) -> Self;
    /// Sets the bottom-left corner of the rectangle, leaving the other corners unaffected.
    fn with_bottom_left(self, bottom_left: Point) -> Self;
+
+   /// Returns whether the rectangle contains the given point.
+   fn contains(&self, point: Point) -> bool;
 }
 
 impl RectMath for Rect {
@@ -211,6 +214,13 @@ impl RectMath for Rect {
          right,
          bottom: bottom_left.y,
       })
+   }
+
+   fn contains(&self, point: Point) -> bool {
+      point.x >= self.left()
+         && point.y >= self.top()
+         && point.x <= self.right()
+         && point.y <= self.bottom()
    }
 }
 

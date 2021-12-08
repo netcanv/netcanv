@@ -1,6 +1,6 @@
 //! Views and view layouting.
 
-use netcanv_renderer::paws::{point, vector, Layout, Point, Vector};
+use netcanv_renderer::paws::{point, vector, Layout, Point, Rect, Vector};
 
 use crate::token::Token;
 
@@ -110,6 +110,16 @@ impl View {
    /// Panics if the size has not been computed yet.
    pub fn height(&self) -> f32 {
       self.size().y
+   }
+
+   /// Returns the view's rectangle.
+   ///
+   /// Panics if the size has not been computed yet.
+   pub fn rect(&self) -> Rect {
+      Rect {
+         position: self.position,
+         size: self.size(),
+      }
    }
 
    /// Creates a new view, whose size is the current group in the given UI.

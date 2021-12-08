@@ -54,34 +54,39 @@ impl WindowManager {
    }
 
    /// Returns an immutable reference to the given window's data.
-   pub fn window_data<D>(&self, id: &WindowId<D>) -> &D
+   pub fn window_data<D>(&self, window: &WindowId<D>) -> &D
    where
       D: Any,
    {
-      self.windows.get(&id.0).unwrap().data.downcast_ref().unwrap()
+      self.windows.get(&window.0).unwrap().data.downcast_ref().unwrap()
    }
 
    /// Returns a mutable reference to the given window's data.
-   pub fn window_data_mut<D>(&mut self, id: &WindowId<D>) -> &mut D
+   pub fn window_data_mut<D>(&mut self, window: &WindowId<D>) -> &mut D
    where
       D: Any,
    {
-      self.windows.get_mut(&id.0).unwrap().data.downcast_mut().unwrap()
+      self.windows.get_mut(&window.0).unwrap().data.downcast_mut().unwrap()
    }
 
    /// Returns whether the window should close.
-   pub fn should_close<D>(&self, id: &WindowId<D>) -> bool {
-      self.windows.get(&id.0).unwrap().close_requested
+   pub fn should_close<D>(&self, window: &WindowId<D>) -> bool {
+      self.windows.get(&window.0).unwrap().close_requested
    }
 
    /// Returns whether the window is pinned.
-   pub fn pinned<D>(&self, id: &WindowId<D>) -> bool {
-      self.windows.get(&id.0).unwrap().pinned
+   pub fn pinned<D>(&self, window: &WindowId<D>) -> bool {
+      self.windows.get(&window.0).unwrap().pinned
+   }
+
+   /// Returns an immutable reference to the window's view.
+   pub fn view<D>(&self, window: &WindowId<D>) -> &View {
+      &self.windows.get(&window.0).unwrap().view
    }
 
    /// Returns a mutable reference to the window's view.
-   pub fn view_mut<D>(&mut self, id: &WindowId<D>) -> &mut View {
-      &mut self.windows.get_mut(&id.0).unwrap().view
+   pub fn view_mut<D>(&mut self, window: &WindowId<D>) -> &mut View {
+      &mut self.windows.get_mut(&window.0).unwrap().view
    }
 
    /// Steals the focus of the window manager, and focuses the window with the given ID.
@@ -95,6 +100,11 @@ impl WindowManager {
    /// Returns whether any of the windows has focus.
    pub fn has_focus(&self) -> bool {
       self.stack.iter().map(|id| self.windows.get(id).unwrap()).any(|window| window.focused)
+   }
+
+   /// Returns whether the window is currently being dragged.
+   pub fn dragging<D>(&self, window: &WindowId<D>) -> bool {
+      self.windows.get(&window.0).unwrap().dragging
    }
 
    /// Opens a new window in the manager, and returns a handle for modifying it.

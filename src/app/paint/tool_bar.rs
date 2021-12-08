@@ -4,20 +4,30 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use netcanv_renderer::paws::{AlignH, AlignV, Alignment, Layout};
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Alignment, Color, Layout, LineCap, Point, Rect, Renderer,
+};
+use netcanv_renderer_opengl::winit::event::MouseButton;
 
-use crate::common::ControlFlow;
-use crate::config::{config, ToolbarPosition};
+use crate::common::{ControlFlow, RectMath};
+use crate::config::{self, config, ToolbarPosition};
 use crate::ui::view::{self, Dimensions, View};
-use crate::ui::wm::{WindowContent, WindowContentArgs, WindowId, WindowManager};
-use crate::ui::{Button, ButtonArgs};
+use crate::ui::wm::{HitTest, WindowContent, WindowContentArgs, WindowId, WindowManager};
+use crate::ui::{Button, ButtonArgs, ButtonState, Input, Ui, UiElements, UiInput};
 
 use super::tools::Tool;
 
 /// Arguments for processing the toolbar.
 pub struct ToolbarArgs<'a> {
    pub wm: &'a mut WindowManager,
+   pub colors: &'a ToolbarColors,
    pub parent_view: &'a View,
+}
+
+/// The toolbar's color scheme.
+#[derive(Clone)]
+pub struct ToolbarColors {
+   pub position_highlight: Color,
 }
 
 /// The unique index of a tool.
@@ -36,7 +46,7 @@ pub struct Toolbar {
 impl Toolbar {
    /// Creates a new, empty toolbar.
    pub fn new(wm: &mut WindowManager) -> Self {
-      let view = View::new(ToolbarWindow::dimensions(Self::position(), 0));
+      let view = View::new(ToolbarWindow::dimensions(0));
       let content = ToolbarWindow::new();
       let tools = Rc::new(RefCell::new(Vec::new()));
       let data = ToolbarData::new(Rc::clone(&tools));
@@ -125,24 +135,91 @@ impl Toolbar {
    fn view_alignment(position: ToolbarPosition) -> Alignment {
       match position {
          ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
-         ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
          ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
-         ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
       }
    }
 
+   /// Finds out the toolbar's snapped position, using the given "precise" position.
+   fn snap_position(parent_view: &View, position: Point) -> Option<ToolbarPosition> {
+      let rect = parent_view.rect();
+      let left = Rect {
+         size: vector(rect.width() / 2.0, rect.height()),
+         ..rect
+      };
+      let right = Rect {
+         position: left.position + vector(left.size.x, 0.0),
+         ..left
+      };
+      if left.contains(position) {
+         Some(ToolbarPosition::Left)
+      } else if right.contains(position) {
+         Some(ToolbarPosition::Right)
+      } else {
+         None
+      }
+   }
+
+   fn position_view(parent_view: &View, view: &mut View, position: ToolbarPosition) {
+      view::layout::align(parent_view, view, Self::view_alignment(position));
+   }
+
    /// Processes the toolbar.
-   pub fn process(&mut self, ToolbarArgs { wm, parent_view }: ToolbarArgs) {
+   pub fn process(
+      &mut self,
+      ui: &mut Ui,
+      input: &Input,
+      ToolbarArgs {
+         wm,
+         colors,
+         parent_view,
+      }: ToolbarArgs,
+   ) {
       let position = Self::position();
 
       // Update the view's size and lay it out in the parent view.
-      wm.view_mut(&self.window).dimensions = ToolbarWindow::dimensions(position, self.tool_count());
-      view::layout::align(
-         parent_view,
-         wm.view_mut(&self.window),
-         Self::view_alignment(position),
-      );
+      wm.view_mut(&self.window).dimensions = ToolbarWindow::dimensions(self.tool_count());
+      if wm.dragging(&self.window) {
+         let window_view = wm.view(&self.window).clone();
+         let new_position =
+            Self::snap_position(parent_view, window_view.rect().top_center()).unwrap_or(position);
 
+         // Draw a preview for where the new position is going to be while dragging.
+         let mut preview = View::new(window_view.dimensions);
+         Self::position_view(parent_view, &mut preview, new_position);
+         let rect = preview.rect();
+         ui.render().outline(rect, colors.position_highlight, rect.width() / 2.0, 1.0);
+         ui.render().fill(
+            rect,
+            colors.position_highlight.with_alpha(127),
+            rect.width() / 2.0,
+         );
+
+         // Draw a guide line for where the boundary between the left and right side is.
+         let parent_rect = parent_view.rect();
+         let center_x = parent_rect.center_x();
+         let top = parent_rect.top();
+         let bottom = parent_rect.bottom();
+         ui.render().line(
+            point(center_x, top),
+            point(center_x, bottom),
+            colors.position_highlight,
+            LineCap::Butt,
+            1.0,
+         );
+
+         // Snap to the correct position if the mouse was released.
+         if input.action(MouseButton::Left) == (true, ButtonState::Released)
+            && new_position != position
+         {
+            config::write(|config| {
+               config.ui.toolbar_position = new_position;
+            })
+         }
+      } else {
+         Self::position_view(parent_view, wm.view_mut(&self.window), position);
+      }
+
+      // Update the shared data to reflect the current state of the toolbar.
       let data = wm.window_data_mut(&self.window);
       if let Some(tool_id) = data.selected_tool.take() {
          self.current_tool = tool_id;
@@ -177,18 +254,16 @@ impl ToolbarWindow {
    const TOOLBAR_SIZE: f32 = 40.0;
    /// The width and height of a tool button.
    const TOOL_SIZE: f32 = Self::TOOLBAR_SIZE - 8.0;
+   const DRAG_HANDLE_SIZE: f32 = 16.0;
 
    fn new() -> Self {
       Self {}
    }
 
-   fn dimensions(position: ToolbarPosition, n_tools: usize) -> Dimensions {
-      let length = 4.0 + n_tools as f32 * (Self::TOOL_SIZE + 4.0);
-      match position {
-         ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
-         ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
-      }
-      .into()
+   fn dimensions(n_tools: usize) -> Dimensions {
+      let padding = 4.0;
+      let length = padding + Self::DRAG_HANDLE_SIZE + n_tools as f32 * (Self::TOOL_SIZE + padding);
+      Dimensions::from((Self::TOOLBAR_SIZE, length))
    }
 }
 
@@ -198,21 +273,32 @@ impl WindowContent for ToolbarWindow {
    fn process(
       &mut self,
       WindowContentArgs {
-         ui, assets, input, ..
+         ui,
+         assets,
+         input,
+         hit_test,
+         ..
       }: &mut WindowContentArgs,
       data: &mut Self::Data,
    ) {
-      ui.push(
-         ui.size(),
-         match Toolbar::position() {
-            ToolbarPosition::Top | ToolbarPosition::Bottom => Layout::Horizontal,
-            ToolbarPosition::Left | ToolbarPosition::Right => Layout::Vertical,
-         },
-      );
+      ui.push(ui.size(), Layout::Vertical);
 
       ui.fill_rounded(assets.colors.panel, ui.width().min(ui.height()) / 2.0);
       ui.pad(4.0);
 
+      // The dragging handle.
+      ui.push((ui.width(), Self::DRAG_HANDLE_SIZE), Layout::Freeform);
+      ui.icon(
+         &assets.icons.navigation.drag_horizontal,
+         assets.colors.drag_handle,
+         Some(ui.size()),
+      );
+      if ui.hover(input) {
+         **hit_test = HitTest::Draggable;
+      }
+      ui.pop();
+
+      // The tools.
       let tools = data.tools.borrow_mut();
       for (i, tool) in tools.iter().enumerate() {
          let i = ToolId(i);
