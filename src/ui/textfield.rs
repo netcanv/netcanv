@@ -7,6 +7,7 @@ use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer
 
 use crate::backend::Font;
 use crate::clipboard;
+use crate::config::config;
 use crate::ui::*;
 
 /// A text field's state.
@@ -366,19 +367,19 @@ impl TextField {
             self.reset_blink(input);
          }
 
-         if input.action((Modifier::CTRL, VirtualKeyCode::A)) == (true, true) {
+         if input.action(config().keymap.edit.select_all) == (true, true) {
             self.selection.anchor = TextPosition(0);
             self.selection.cursor = TextPosition(self.text.len());
          }
 
-         if input.action((Modifier::CTRL, VirtualKeyCode::C)) == (true, true) {
+         if input.action(config().keymap.edit.copy) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
             );
          }
 
-         if input.action((Modifier::CTRL, VirtualKeyCode::V)) == (true, true) {
+         if input.action(config().keymap.edit.paste) == (true, true) {
             if let Ok(clipboard) = clipboard::paste_string() {
                let cursor = self.selection.cursor();
                self.text.replace_range(self.selection.normalize(), &clipboard);
@@ -386,7 +387,7 @@ impl TextField {
             }
          }
 
-         if input.action((Modifier::CTRL, VirtualKeyCode::X)) == (true, true) {
+         if input.action(config().keymap.edit.cut) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result

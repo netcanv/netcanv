@@ -8,6 +8,9 @@ pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode
 use crate::backend::winit::event::{KeyboardInput, WindowEvent};
 use netcanv_renderer::paws::{point, vector, Point, Vector};
 use netcanv_renderer_opengl::winit::window::{CursorIcon, Window};
+use serde::de::Visitor;
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Serialize};
 
 const MOUSE_BUTTON_COUNT: usize = 8;
 const KEY_CODE_COUNT: usize = 256;
@@ -421,6 +424,7 @@ impl Input {
 
 /// A set of modifier keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct Modifier(u8);
 
 impl Modifier {
@@ -432,6 +436,9 @@ impl Modifier {
    /// The Ctrl key.
    pub const CTRL: Self = Self(0b10);
 
+   const SHIFT_STR: &'static str = "Shift";
+   const CTRL_STR: &'static str = "Ctrl";
+
    /// Creates modifiers from the given input.
    pub fn from_input(input: &Input) -> Self {
       let mut mods = Modifier(0);
@@ -442,6 +449,21 @@ impl Modifier {
          mods = mods | Self::CTRL;
       }
       mods
+   }
+
+   /// Returns whether the shift key is included in this set.
+   pub fn shift(&self) -> bool {
+      (*self & Self::SHIFT) == Self::SHIFT
+   }
+
+   /// Returns whether the control key is included in this set.
+   pub fn ctrl(&self) -> bool {
+      (*self & Self::CTRL) == Self::CTRL
+   }
+
+   /// Returns the cardinality of this set.
+   pub fn card(&self) -> usize {
+      self.shift() as usize + self.ctrl() as usize
    }
 }
 
@@ -460,6 +482,56 @@ impl BitAnd for Modifier {
    /// Intersects modifiers together.
    fn bitand(self, rhs: Self) -> Self::Output {
       Self(self.0 & rhs.0)
+   }
+}
+
+impl Serialize for Modifier {
+   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+   where
+      S: serde::Serializer,
+   {
+      let mut seq = serializer.serialize_seq(Some(self.card()))?;
+      if self.shift() {
+         seq.serialize_element(Self::SHIFT_STR)?;
+      }
+      if self.ctrl() {
+         seq.serialize_element(Self::CTRL_STR)?;
+      }
+      seq.end()
+   }
+}
+
+impl<'de> Deserialize<'de> for Modifier {
+   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+   where
+      D: serde::Deserializer<'de>,
+   {
+      struct ModifierVisitor;
+
+      impl<'de> Visitor<'de> for ModifierVisitor {
+         type Value = Modifier;
+
+         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a set of modifier keys")
+         }
+
+         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+         where
+            A: serde::de::SeqAccess<'de>,
+         {
+            let mut modifier = Modifier::NONE;
+            while let Some(element) = seq.next_element::<&str>()? {
+               match element {
+                  Modifier::SHIFT_STR => modifier = modifier | Modifier::SHIFT,
+                  Modifier::CTRL_STR => modifier = modifier | Modifier::CTRL,
+                  _ => return Err(serde::de::Error::custom("invalid modifier")),
+               }
+            }
+            Ok(modifier)
+         }
+      }
+
+      deserializer.deserialize_seq(ModifierVisitor)
    }
 }
 

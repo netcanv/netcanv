@@ -12,6 +12,8 @@ use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
+use crate::keymap::Keymap;
+
 /// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
 pub struct LobbyConfig {
@@ -60,6 +62,9 @@ pub struct UiConfig {
 pub struct UserConfig {
    pub lobby: LobbyConfig,
    pub ui: UiConfig,
+
+   #[serde(default)]
+   pub keymap: Keymap,
 }
 
 impl UserConfig {
@@ -124,6 +129,7 @@ impl Default for UserConfig {
             color_scheme: ColorScheme::Light,
             toolbar_position: ToolbarPosition::Left,
          },
+         keymap: Default::default(),
       }
    }
 }

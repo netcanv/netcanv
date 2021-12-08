@@ -3,6 +3,7 @@ use std::io::Cursor;
 use std::time::Instant;
 
 use crate::backend::winit::event::{MouseButton, VirtualKeyCode};
+use crate::config::config;
 use image::io::Reader;
 use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
@@ -246,7 +247,7 @@ impl Tool for SelectionTool {
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action((Modifier::NONE, VirtualKeyCode::Delete)) == (true, true) {
+      if input.action(config().keymap.edit.delete) == (true, true) {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
@@ -257,12 +258,12 @@ impl Tool for SelectionTool {
          return KeyShortcutAction::Success;
       }
 
-      if input.action((Modifier::CTRL, VirtualKeyCode::C)) == (true, true) {
+      if input.action(config().keymap.edit.copy) == (true, true) {
          self.copy_to_clipboard();
          return KeyShortcutAction::Success;
       }
 
-      if input.action((Modifier::CTRL, VirtualKeyCode::X)) == (true, true) {
+      if input.action(config().keymap.edit.cut) == (true, true) {
          self.copy_to_clipboard();
          self.selection.cancel();
          return KeyShortcutAction::Success;
@@ -278,7 +279,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action((Modifier::CTRL, VirtualKeyCode::V)) == (true, true) {
+      if input.action(config().keymap.edit.paste) == (true, true) {
          self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
          return KeyShortcutAction::SwitchToThisTool;
       }

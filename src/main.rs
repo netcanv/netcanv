@@ -52,6 +52,7 @@ mod backend;
 mod clipboard;
 mod color;
 mod config;
+mod keymap;
 mod net;
 mod paint_canvas;
 mod token;

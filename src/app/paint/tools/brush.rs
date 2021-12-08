@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::backend::winit::event::MouseButton;
+use crate::config::config;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
@@ -163,10 +164,10 @@ impl Tool for BrushTool {
          thickness_change += scroll.y * 2.0;
       }
 
-      if input.action(VirtualKeyCode::LBracket) == (true, true) {
+      if input.action(config().keymap.brush.decrease_thickness) == (true, true) {
          thickness_change -= 2.0;
       }
-      if input.action(VirtualKeyCode::RBracket) == (true, true) {
+      if input.action(config().keymap.brush.increase_thickness) == (true, true) {
          thickness_change += 2.0;
       }
 
