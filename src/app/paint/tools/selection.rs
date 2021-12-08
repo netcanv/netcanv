@@ -653,7 +653,7 @@ impl Selection {
          // After the capture is taken, erase the rectangle from the paint canvas.
          paint_canvas.draw(renderer, rect, |renderer| {
             renderer.set_blend_mode(BlendMode::Replace);
-            renderer.fill(rect, Color::BLACK, 0.0);
+            renderer.fill(rect, Color::TRANSPARENT, 0.0);
          });
       }
    }
