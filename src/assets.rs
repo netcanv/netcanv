@@ -234,8 +234,6 @@ pub struct ColorScheme {
    pub text_field: TextFieldColors,
    pub context_menu: ContextMenuColors,
    pub window_buttons: WindowButtonsColors,
-
-   pub titlebar: TitlebarColors,
 }
 
 impl ColorScheme {
@@ -369,16 +367,6 @@ impl From<CommonColors> for ColorScheme {
                pressed_icon: white,
             },
          },
-
-         titlebar: TitlebarColors {
-            titlebar: gray_90,
-            separator,
-            text: gray_00,
-
-            foreground_hover: gray_80,
-            button: gray_00,
-            close_button: red_30,
-         },
       }
    }
 }
@@ -391,17 +379,4 @@ impl From<crate::config::ColorScheme> for ColorScheme {
          ColorScheme::Dark => Self::dark(),
       }
    }
-}
-
-/// The title bar's color scheme. This only applies to title bars on Wayland, where the compositor
-/// does not always provide a server-side title bar.
-#[derive(Clone)]
-pub struct TitlebarColors {
-   pub titlebar: Color,
-   pub separator: Color,
-   pub text: Color,
-
-   pub foreground_hover: Color,
-   pub button: Color,
-   pub close_button: Color,
 }
