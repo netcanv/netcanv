@@ -1,29 +1,28 @@
 //! The paint state. This is the screen where you paint on the canvas with other people.
 
 mod actions;
+mod tool_bar;
 mod tools;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Alignment, Color, Layout, Rect, Renderer, Vector,
+   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 
 use crate::app::paint::actions::ActionArgs;
+use crate::app::paint::tool_bar::ToolbarArgs;
 use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
-use crate::config::{config, ToolbarPosition};
 use crate::net::peer::{self, Peer};
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
@@ -34,7 +33,8 @@ use crate::ui::*;
 use crate::viewport::Viewport;
 
 use self::actions::SaveToFileAction;
-use self::tools::{BrushTool, Net, SelectionTool, Tool, ToolArgs};
+use self::tool_bar::{ToolId, Toolbar};
+use self::tools::{BrushTool, Net, SelectionTool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -67,9 +67,6 @@ pub struct State {
    assets: Assets,
 
    paint_canvas: PaintCanvas,
-   tools: Rc<RefCell<Vec<Box<dyn Tool>>>>,
-   tools_by_name: HashMap<String, usize>,
-   current_tool: usize,
 
    actions: Vec<Box<dyn actions::Action>>,
    save_to_file: Option<PathBuf>,
@@ -88,9 +85,9 @@ pub struct State {
 
    canvas_view: View,
    bottom_bar_view: View,
-   toolbar_view: View,
 
    overflow_menu: ContextMenu,
+   toolbar: Toolbar,
    wm: WindowManager,
 }
 
@@ -106,10 +103,6 @@ impl State {
 
    /// The height of the bottom bar.
    const BOTTOM_BAR_SIZE: f32 = 32.0;
-   /// The width of the toolbar.
-   const TOOLBAR_SIZE: f32 = 40.0;
-   /// The width and height of a tool button.
-   const TOOL_SIZE: f32 = Self::TOOLBAR_SIZE - 8.0;
 
    /// The amount of padding applied around the canvas area, when laying out elements on top of it.
    const CANVAS_INNER_PADDING: f32 = 8.0;
@@ -121,13 +114,11 @@ impl State {
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
    ) -> Result<Self, (anyhow::Error, Assets)> {
+      let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
 
          paint_canvas: PaintCanvas::new(),
-         tools: Rc::new(RefCell::new(Vec::new())),
-         tools_by_name: HashMap::new(),
-         current_tool: 0,
 
          actions: Vec::new(),
 
@@ -151,10 +142,10 @@ impl State {
 
          canvas_view: View::new((Dimension::Percentage(1.0), Dimension::Rest(1.0))),
          bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),
-         toolbar_view: View::new((Self::TOOLBAR_SIZE, 0.0)),
 
          overflow_menu: ContextMenu::new((256.0, 0.0)), // Vertical is filled in later
-         wm: WindowManager::new(),
+         toolbar: Toolbar::new(&mut wm),
+         wm,
       };
       this.register_tools(renderer);
       this.register_actions(renderer);
@@ -176,19 +167,13 @@ impl State {
       Ok(this)
    }
 
-   /// Registers a tool.
-   fn register_tool(&mut self, tool: Box<dyn Tool>) {
-      let mut tools = self.tools.borrow_mut();
-      self.tools_by_name.insert(tool.name().to_owned(), tools.len());
-      tools.push(tool);
-   }
-
    /// Registers all the tools.
    fn register_tools(&mut self, renderer: &mut Backend) {
-      self.register_tool(Box::new(SelectionTool::new(renderer)));
+      let _selection = self.toolbar.add_tool(SelectionTool::new(renderer));
+      let brush = self.toolbar.add_tool(BrushTool::new(renderer));
+
       // Set the default tool to the brush.
-      self.current_tool = self.tools.borrow().len();
-      self.register_tool(Box::new(BrushTool::new(renderer)));
+      self.toolbar.set_current_tool(brush);
    }
 
    /// Registers all the actions and calculates the layout height of the overflow menu.
@@ -206,32 +191,17 @@ impl State {
          Dimension::Constant(room_id_height + separator_height + actions_height);
    }
 
-   /// Executes the given callback with the currently selected tool.
-   fn with_current_tool<R>(
-      &mut self,
-      mut callback: impl FnMut(&mut Self, &mut Box<dyn Tool>) -> R,
-   ) -> R {
-      let tools = Rc::clone(&self.tools);
-      let mut tools = tools.borrow_mut();
-      let tool = &mut tools[self.current_tool];
-      callback(self, tool)
-   }
-
    /// Sets the current tool to the one with the provided ID.
-   fn set_current_tool(&mut self, renderer: &mut Backend, tool: usize) {
-      let previous_tool = self.current_tool;
-      let mut tools = self.tools.borrow_mut();
+   fn set_current_tool(&mut self, renderer: &mut Backend, tool: ToolId) {
+      let previous_tool = self.toolbar.current_tool();
       if tool != previous_tool {
-         tools[previous_tool].deactivate(renderer, &mut self.paint_canvas);
-         catch!(self.peer.send_select_tool(tools[tool].name().to_owned()));
+         self.toolbar.with_tool(previous_tool, |tool| {
+            tool.deactivate(renderer, &mut self.paint_canvas);
+         });
+         catch!(self.peer.send_select_tool(self.toolbar.clone_tool_name(tool)));
+         self.toolbar.set_current_tool(tool);
+         self.toolbar.with_current_tool(|tool| tool.activate());
       }
-      tools[tool].activate();
-      self.current_tool = tool;
-   }
-
-   /// Clones the current tool's name into a String.
-   fn clone_tool_name(&self) -> String {
-      self.tools.borrow()[self.current_tool].name().to_owned()
    }
 
    /// Requests a chunk download from the host.
@@ -276,33 +246,13 @@ impl State {
    }
 
    fn process_tool_key_shortcuts(&mut self, ui: &mut Ui, input: &mut Input) {
-      let mut tools = self.tools.borrow_mut();
-
       // If any of the WM's windows are focused, skip keyboard shortcuts.
       if self.wm.has_focus() {
          return;
       }
 
-      match tools[self.current_tool].active_key_shortcuts(
-         ToolArgs {
-            ui,
-            input,
-            wm: &mut self.wm,
-            canvas_view: &self.canvas_view,
-            assets: &mut self.assets,
-            net: Net::new(&self.peer),
-         },
-         &mut self.paint_canvas,
-         &self.viewport,
-      ) {
-         KeyShortcutAction::None => (),
-         KeyShortcutAction::Success => return,
-         KeyShortcutAction::SwitchToThisTool => (),
-      }
-
-      let mut switch_tool = None;
-      for (i, tool) in tools.iter_mut().enumerate() {
-         match tool.global_key_shortcuts(
+      match self.toolbar.with_current_tool(|tool| {
+         tool.active_key_shortcuts(
             ToolArgs {
                ui,
                input,
@@ -313,17 +263,36 @@ impl State {
             },
             &mut self.paint_canvas,
             &self.viewport,
-         ) {
-            KeyShortcutAction::None => (),
-            KeyShortcutAction::Success => return,
-            KeyShortcutAction::SwitchToThisTool => {
-               switch_tool = Some(i);
-               break;
-            }
-         }
+         )
+      }) {
+         KeyShortcutAction::None => (),
+         KeyShortcutAction::Success => return,
+         KeyShortcutAction::SwitchToThisTool => (),
       }
 
-      drop(tools);
+      let switch_tool = self
+         .toolbar
+         .with_each_tool(|tool_id, tool| {
+            match tool.global_key_shortcuts(
+               ToolArgs {
+                  ui,
+                  input,
+                  wm: &mut self.wm,
+                  canvas_view: &self.canvas_view,
+                  assets: &mut self.assets,
+                  net: Net::new(&self.peer),
+               },
+               &mut self.paint_canvas,
+               &self.viewport,
+            ) {
+               KeyShortcutAction::None => (),
+               KeyShortcutAction::Success => return ControlFlow::Break(None),
+               KeyShortcutAction::SwitchToThisTool => return ControlFlow::Break(Some(tool_id)),
+            }
+            ControlFlow::Continue
+         })
+         .flatten();
+
       if let Some(tool) = switch_tool {
          self.set_current_tool(ui, tool);
       }
@@ -367,18 +336,18 @@ impl State {
 
       self.process_tool_key_shortcuts(ui, input);
 
-      self.with_current_tool(|p, tool| {
+      self.toolbar.with_current_tool(|tool| {
          tool.process_paint_canvas_input(
             ToolArgs {
                ui,
                input,
-               wm: &mut p.wm,
-               canvas_view: &p.canvas_view,
-               assets: &p.assets,
-               net: Net::new(&mut p.peer),
+               wm: &mut self.wm,
+               canvas_view: &self.canvas_view,
+               assets: &self.assets,
+               net: Net::new(&mut self.peer),
             },
-            &mut p.paint_canvas,
-            &p.viewport,
+            &mut self.paint_canvas,
+            &self.viewport,
          )
       });
 
@@ -401,37 +370,37 @@ impl State {
          ui.render().push();
          for (&address, mate) in self.peer.mates() {
             if let Some(tool_name) = &mate.tool {
-               if let Some(&tool_id) = self.tools_by_name.get(tool_name) {
-                  let mut tools = self.tools.borrow_mut();
-                  let tool = &mut tools[tool_id];
-                  tool.process_paint_canvas_peer(
-                     ToolArgs {
-                        ui,
-                        input,
-                        wm: &mut self.wm,
-                        canvas_view: &self.canvas_view,
-                        assets: &self.assets,
-                        net: Net::new(&self.peer),
-                     },
-                     &self.viewport,
-                     address,
-                  );
+               if let Some(tool_id) = self.toolbar.tool_by_name(tool_name) {
+                  self.toolbar.with_tool(tool_id, |tool| {
+                     tool.process_paint_canvas_peer(
+                        ToolArgs {
+                           ui,
+                           input,
+                           wm: &mut self.wm,
+                           canvas_view: &self.canvas_view,
+                           assets: &self.assets,
+                           net: Net::new(&self.peer),
+                        },
+                        &self.viewport,
+                        address,
+                     );
+                  });
                }
             }
          }
          ui.render().pop();
 
-         self.with_current_tool(|p, tool| {
+         self.toolbar.with_current_tool(|tool| {
             tool.process_paint_canvas_overlays(
                ToolArgs {
                   ui,
                   input,
-                  wm: &mut p.wm,
-                  canvas_view: &p.canvas_view,
-                  assets: &p.assets,
-                  net: Net::new(&mut p.peer),
+                  wm: &mut self.wm,
+                  canvas_view: &self.canvas_view,
+                  assets: &self.assets,
+                  net: Net::new(&mut self.peer),
                },
-               &p.viewport,
+               &self.viewport,
             );
          });
       });
@@ -461,8 +430,10 @@ impl State {
       self.update_timer.tick();
       while self.update_timer.update() {
          // Tool updates
-         self.with_current_tool(|p, tool| {
-            catch!(tool.network_send(tools::Net { peer: &mut p.peer }))
+         self.toolbar.with_current_tool(|tool| {
+            catch!(tool.network_send(tools::Net {
+               peer: &mut self.peer
+            }))
          });
          // Chunk downloading
          if self.save_to_file.is_some() {
@@ -498,14 +469,14 @@ impl State {
 
       // Tool
 
-      self.with_current_tool(|p, tool| {
+      self.toolbar.with_current_tool(|tool| {
          tool.process_bottom_bar(ToolArgs {
             ui,
             input,
-            wm: &mut p.wm,
-            canvas_view: &p.canvas_view,
-            assets: &p.assets,
-            net: Net::new(&mut p.peer),
+            wm: &mut self.wm,
+            canvas_view: &self.canvas_view,
+            assets: &self.assets,
+            net: Net::new(&mut self.peer),
          });
       });
 
@@ -692,67 +663,6 @@ impl State {
       }
    }
 
-   /// Reflows the toolbar's size.
-   fn resize_toolbar(&mut self) {
-      let length = 4.0 + self.tools.borrow().len() as f32 * (Self::TOOL_SIZE + 4.0);
-      self.toolbar_view.dimensions = match config().ui.toolbar_position {
-         ToolbarPosition::Left | ToolbarPosition::Right => (Self::TOOLBAR_SIZE, length),
-         ToolbarPosition::Top | ToolbarPosition::Bottom => (length, Self::TOOLBAR_SIZE),
-      }
-      .into();
-   }
-
-   /// Returns the toolbar's alignment inside the canvas view.
-   fn toolbar_alignment(&self) -> Alignment {
-      match config().ui.toolbar_position {
-         ToolbarPosition::Left => (AlignH::Left, AlignV::Middle),
-         ToolbarPosition::Right => (AlignH::Right, AlignV::Middle),
-         ToolbarPosition::Top => (AlignH::Center, AlignV::Top),
-         ToolbarPosition::Bottom => (AlignH::Center, AlignV::Bottom),
-      }
-   }
-
-   /// Processes the toolbar.
-   fn process_toolbar(&mut self, ui: &mut Ui, input: &mut Input) {
-      self.toolbar_view.begin(ui, input, Layout::Vertical);
-
-      ui.fill_rounded(self.assets.colors.panel, ui.width().min(ui.height()) / 2.0);
-      ui.pad(4.0);
-
-      let tools = self.tools.borrow_mut();
-      let mut selected_tool = None;
-      for (i, tool) in tools.iter().enumerate() {
-         ui.push((Self::TOOL_SIZE, Self::TOOL_SIZE), Layout::Freeform);
-         if Button::with_icon(
-            ui,
-            input,
-            ButtonArgs {
-               height: Self::TOOL_SIZE,
-               colors: if self.current_tool == i {
-                  &self.assets.colors.selected_toolbar_button
-               } else {
-                  &self.assets.colors.toolbar_button
-               },
-               corner_radius: ui.width() / 2.0,
-            },
-            tool.icon(),
-         )
-         .clicked()
-         {
-            selected_tool = Some(i);
-         }
-         ui.pop();
-         ui.space(4.0);
-      }
-      drop(tools);
-
-      if let Some(selected_tool) = selected_tool {
-         self.set_current_tool(ui, selected_tool);
-      }
-
-      self.toolbar_view.end(ui);
-   }
-
    fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
       use peer::MessageKind;
 
@@ -765,8 +675,12 @@ impl State {
             }
             // Order matters here! The tool selection packet must arrive before the packets sent
             // from the tool's `network_peer_join` event.
-            self.peer.send_select_tool(self.clone_tool_name())?;
-            self.with_current_tool(|p, tool| tool.network_peer_join(Net::new(&p.peer), peer_id))?;
+            self
+               .peer
+               .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
+            self
+               .toolbar
+               .with_current_tool(|tool| tool.network_peer_join(Net::new(&self.peer), peer_id))?;
          }
          MessageKind::Left {
             peer_id,
@@ -776,15 +690,15 @@ impl State {
             log!(self.log, "{} has left", nickname);
             // Make sure the tool they were last using is properly deinitialized.
             if let Some(tool) = last_tool {
-               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
-                  let mut tools = self.tools.borrow_mut();
-                  let tool = &mut tools[tool_id];
-                  tool.network_peer_deactivate(
-                     ui,
-                     Net::new(&mut self.peer),
-                     &mut self.paint_canvas,
-                     peer_id,
-                  )?;
+               if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
+                  self.toolbar.with_tool(tool_id, |tool| {
+                     tool.network_peer_deactivate(
+                        ui,
+                        Net::new(&mut self.peer),
+                        &mut self.paint_canvas,
+                        peer_id,
+                     )
+                  })?
                }
             }
          }
@@ -798,7 +712,9 @@ impl State {
             // Make sure we send the tool _after_ adding the requested chunks.
             // This way if something goes wrong here and the function returns Err, at least we
             // will have queued up some chunk downloads at this point.
-            self.peer.send_select_tool(self.clone_tool_name())?;
+            self
+               .peer
+               .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
          }
          MessageKind::Chunks(chunks) => {
             eprintln!("received {} chunks", chunks.len());
@@ -811,16 +727,16 @@ impl State {
             self.send_chunks(requester, &positions)?;
          }
          MessageKind::Tool(sender, name, payload) => {
-            if let Some(&tool_id) = self.tools_by_name.get(&name) {
-               let mut tools = self.tools.borrow_mut();
-               let tool = &mut tools[tool_id];
-               tool.network_receive(
-                  ui,
-                  Net::new(&mut self.peer),
-                  &mut self.paint_canvas,
-                  sender,
-                  payload.clone(),
-               )?;
+            if let Some(tool_id) = self.toolbar.tool_by_name(&name) {
+               self.toolbar.with_tool(tool_id, |tool| {
+                  tool.network_receive(
+                     ui,
+                     Net::new(&mut self.peer),
+                     &mut self.paint_canvas,
+                     sender,
+                     payload.clone(),
+                  )
+               })?;
             }
          }
          MessageKind::SelectTool {
@@ -831,24 +747,24 @@ impl State {
             eprintln!("{:?} selected tool {}", address, tool);
             // Deselect the old tool.
             if let Some(tool) = previous_tool {
-               if let Some(&tool_id) = self.tools_by_name.get(&tool) {
+               if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
                   // ↑ still waiting for if_let_chains to get stabilized.
-                  let mut tools = self.tools.borrow_mut();
-                  let tool = &mut tools[tool_id];
-                  tool.network_peer_deactivate(
-                     ui,
-                     Net::new(&mut self.peer),
-                     &mut self.paint_canvas,
-                     address,
-                  )?;
+                  self.toolbar.with_tool(tool_id, |tool| {
+                     tool.network_peer_deactivate(
+                        ui,
+                        Net::new(&mut self.peer),
+                        &mut self.paint_canvas,
+                        address,
+                     )
+                  })?;
                }
             }
             // Select the new tool.
-            if let Some(&tool_id) = self.tools_by_name.get(&tool) {
-               eprintln!(" - valid tool with ID {}", tool_id);
-               let mut tools = self.tools.borrow_mut();
-               let tool = &mut tools[tool_id];
-               tool.network_peer_activate(Net::new(&mut self.peer), address)?;
+            if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
+               eprintln!(" - valid tool - {:?}", tool_id);
+               self.toolbar.with_tool(tool_id, |tool| {
+                  tool.network_peer_activate(Net::new(&mut self.peer), address)
+               })?;
             }
          }
       }
@@ -885,11 +801,6 @@ impl State {
          DirectionV::BottomToTop,
       );
       let padded_canvas = view::layout::padded(&self.canvas_view, Self::CANVAS_INNER_PADDING);
-
-      // The toolbar.
-      self.resize_toolbar();
-      let toolbar_alignment = self.toolbar_alignment();
-      view::layout::align(&padded_canvas, &mut self.toolbar_view, toolbar_alignment);
 
       // The overflow menu.
       view::layout::align(
@@ -959,7 +870,10 @@ impl AppState for State {
       self.process_canvas(ui, input);
 
       // Bars
-      self.process_toolbar(ui, input);
+      self.toolbar.process(ToolbarArgs {
+         wm: &mut self.wm,
+         parent_view: &view::layout::padded(&self.canvas_view, 8.0),
+      });
       // Draw windows over the toolbar, but below the bottom bar.
       self.wm.process(ui, input, &self.assets);
       self.process_bar(ui, input);

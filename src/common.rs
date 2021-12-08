@@ -6,6 +6,16 @@ use netcanv_renderer::Font as FontTrait;
 use crate::backend::Font;
 
 //
+// General
+//
+
+/// Stable version of `std::ops::ControlFlow`.
+pub enum ControlFlow<B> {
+   Continue,
+   Break(B),
+}
+
+//
 // Math
 //
 

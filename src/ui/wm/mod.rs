@@ -98,7 +98,7 @@ impl WindowManager {
    }
 
    /// Opens a new window in the manager, and returns a handle for modifying it.
-   pub fn open_window<C, D>(&mut self, view: View, content: C, data: D) -> WindowId<D>
+   pub fn open_window<C, D>(&mut self, view: View, content: C, data: D) -> WindowSettings<'_, D>
    where
       C: WindowContent<Data = D> + 'static,
       D: Any,
@@ -119,7 +119,11 @@ impl WindowManager {
       );
       self.stack.push(id);
       self.steal_focus(id);
-      WindowId(id, PhantomData)
+      WindowSettings {
+         wm: self,
+         id,
+         _data: PhantomData,
+      }
    }
 
    /// Closes an open window.
@@ -207,6 +211,26 @@ impl WindowManager {
       if let Some(window_id) = steal_focus {
          self.steal_focus(window_id);
       }
+   }
+}
+
+/// A struct for changing a window's properties after creation.
+pub struct WindowSettings<'wm, D> {
+   wm: &'wm mut WindowManager,
+   id: UntypedWindowId,
+   _data: PhantomData<D>,
+}
+
+impl<'wm, D> WindowSettings<'wm, D> {
+   /// Sets the pinned state of a window.
+   pub fn set_pinned(self, pinned: bool) -> Self {
+      self.wm.windows.get_mut(&self.id).unwrap().pinned = pinned;
+      self
+   }
+
+   /// Finishes setting up a window.
+   pub fn finish(self) -> WindowId<D> {
+      WindowId(self.id, PhantomData)
    }
 }
 

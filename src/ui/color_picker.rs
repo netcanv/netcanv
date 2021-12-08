@@ -175,7 +175,7 @@ impl ColorPicker {
                PickerWindow::new(renderer, &data).background().buttons(WindowButtonStyle {
                   padding: Padding::even(12.0),
                });
-            let window_id = wm.open_window(view, content, data);
+            let window_id = wm.open_window(view, content, data).finish();
             self.window_state = Some(PickerWindowState::Open(window_id));
          }
       }
