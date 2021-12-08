@@ -32,13 +32,12 @@ use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use crate::backend::winit::platform::unix::*;
-use crate::backend::winit::window::WindowBuilder;
+use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::ui::view::{self, View};
 use backend::Backend;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
 
-use netcanv_renderer_opengl::winit::window::CursorIcon;
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::UiRenderFrame;
 #[cfg(feature = "renderer-skia")]

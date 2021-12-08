@@ -1,8 +1,8 @@
 //! Window content wrappers for the window manager.
 
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout, Padding};
 use netcanv_renderer::{Image as ImageTrait, RenderBackend};
-use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::backend::Image;
 use crate::ui::{Input, Ui, UiInput};

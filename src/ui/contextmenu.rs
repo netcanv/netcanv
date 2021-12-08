@@ -2,8 +2,8 @@
 //!
 //! The opening interaction is handled by external events.
 
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::{Color, Layout};
-use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use super::view::{Dimensions, View};
 use super::{Input, Ui};

@@ -10,7 +10,6 @@ use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
-use netcanv_renderer_opengl::winit::event::VirtualKeyCode;
 use serde::{Deserialize, Serialize};
 
 use crate::app::paint;

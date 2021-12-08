@@ -1,6 +1,6 @@
 //! Keyboard shortcut mappings.
 
-use netcanv_renderer_opengl::winit::event::VirtualKeyCode;
+use crate::backend::winit::event::VirtualKeyCode;
 use serde::{Deserialize, Serialize};
 
 use crate::ui::Modifier;

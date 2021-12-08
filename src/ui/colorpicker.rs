@@ -1,11 +1,11 @@
 //! Color picker with palettes and multiple color spaces.
 
+use crate::backend::winit::event::MouseButton;
 use image::{Rgba, RgbaImage};
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Padding, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{Font, Framebuffer as FramebufferTrait, RenderBackend, ScalingFilter};
-use netcanv_renderer_opengl::winit::event::MouseButton;
 use strum::{EnumIter, EnumMessage};
 
 use crate::assets::Assets;

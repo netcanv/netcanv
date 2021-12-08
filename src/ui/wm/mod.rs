@@ -13,8 +13,8 @@ use crate::token::Token;
 use super::view::View;
 use super::{ButtonState, Input, Ui};
 
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::Layout;
-use netcanv_renderer_opengl::winit::event::MouseButton;
 pub use windows::WindowContentWrappers;
 
 /// A window.

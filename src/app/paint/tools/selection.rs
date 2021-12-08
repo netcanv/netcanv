@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::time::Instant;
 
-use crate::backend::winit::event::{MouseButton, VirtualKeyCode};
+use crate::backend::winit::event::MouseButton;
+use crate::backend::winit::window::CursorIcon;
 use crate::config::config;
 use image::io::Reader;
 use image::png::PngEncoder;
@@ -12,7 +13,6 @@ use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, 
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
 };
-use netcanv_renderer_opengl::winit::window::CursorIcon;
 use serde::{Deserialize, Serialize};
 
 use crate::app::paint;
@@ -21,7 +21,7 @@ use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::clipboard;
 use crate::common::{lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{ButtonState, Modifier, UiElements, UiInput};
+use crate::ui::{ButtonState, UiElements, UiInput};
 use crate::viewport::Viewport;
 
 use super::{KeyShortcutAction, Net, Tool, ToolArgs};
