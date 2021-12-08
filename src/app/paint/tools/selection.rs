@@ -19,7 +19,7 @@ use crate::app::paint;
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::clipboard;
-use crate::common::{lerp_point, RectMath, VectorMath};
+use crate::common::{lerp_point, RectMath, RectSides, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{ButtonState, UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -45,6 +45,36 @@ enum Handle {
    Bottom,
    BottomLeft,
    Left,
+}
+
+impl Handle {
+   /// Returns the corner of the rectangle at which this handle is anchored.
+   fn rect_corner(&self, rect: Rect) -> Point {
+      match self {
+         Self::TopLeft => rect.top_left(),
+         Self::Top => rect.top_center(),
+         Self::TopRight => rect.top_right(),
+         Self::Right => rect.right_center(),
+         Self::BottomRight => rect.bottom_right(),
+         Self::Bottom => rect.bottom_center(),
+         Self::BottomLeft => rect.bottom_left(),
+         Self::Left => rect.left_center(),
+      }
+   }
+
+   /// Returns the handle opposite to this one.
+   fn opposite(&self) -> Self {
+      match self {
+         Self::TopLeft => Self::BottomRight,
+         Self::Top => Self::Bottom,
+         Self::TopRight => Self::BottomRight,
+         Self::Right => Self::Left,
+         Self::BottomRight => Self::TopLeft,
+         Self::Bottom => Self::Top,
+         Self::BottomLeft => Self::TopRight,
+         Self::Left => Self::Right,
+      }
+   }
 }
 
 /// An (inter)action that can be performed on the selection.
@@ -148,6 +178,24 @@ impl SelectionTool {
    /// Returns whether a rect is smaller than a pixel.
    fn rect_is_smaller_than_a_pixel(rect: Rect) -> bool {
       rect.width().trunc().abs() < 1.0 || rect.height().trunc().abs() < 1.0
+   }
+
+   /// Scales a rect relative to the provided origin.
+   fn scale_rect(rect: Rect, origin: Point, scale: Vector) -> Rect {
+      let rect = Rect {
+         position: rect.position - origin,
+         ..rect
+      };
+      let left = rect.left() * scale.x;
+      let right = rect.right() * scale.x;
+      let top = rect.top() * scale.y;
+      let bottom = rect.bottom() * scale.y;
+      Rect::from_sides(RectSides {
+         left,
+         right,
+         top,
+         bottom,
+      })
    }
 
    /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
@@ -327,10 +375,6 @@ impl Tool for SelectionTool {
       input.set_cursor(match self.action.or(self.potential_action) {
          Action::None => CursorIcon::Crosshair,
          Action::Selecting => CursorIcon::Crosshair,
-         // Action::DraggingHandle(Handle::Left | Handle::Right) => CursorIcon::ColResize,
-         // Action::DraggingHandle(Handle::Top | Handle::Bottom) => CursorIcon::RowResize,
-         // Action::DraggingHandle(Handle::TopLeft | Handle::BottomRight) => CursorIcon::NwseResize,
-         // Action::DraggingHandle(Handle::BottomLeft | Handle::TopRight) => CursorIcon::NeswResize,
          Action::DraggingHandle(_) => {
             // We process the hovered handles for a second time, because the first time around the
             // rectangle was not sorted.
