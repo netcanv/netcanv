@@ -6,24 +6,24 @@ use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
 use crate::backend::{Backend, Font, Image};
 
 mod button;
-mod colorpicker;
-mod contextmenu;
+mod color_picker;
+mod context_menu;
 mod expand;
 mod input;
-mod radiobutton;
+mod radio_button;
 mod slider;
-mod textfield;
+mod text_field;
 pub mod view;
 pub mod wm;
 
 pub use button::*;
-pub use colorpicker::*;
-pub use contextmenu::*;
+pub use color_picker::*;
+pub use context_menu::*;
 pub use expand::*;
 pub use input::*;
-pub use radiobutton::*;
+pub use radio_button::*;
 pub use slider::*;
-pub use textfield::*;
+pub use text_field::*;
 
 pub type Ui = paws::Ui<Backend>;
 
