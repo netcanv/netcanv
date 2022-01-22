@@ -1,4 +1,106 @@
-                                 Apache License
+<html>
+
+<head>
+   <style>
+      @media (prefers-color-scheme: dark) {
+         body {
+            background: #333;
+            color: white;
+         }
+
+         a {
+            color: skyblue;
+         }
+      }
+
+      .container {
+         font-family: sans-serif;
+         max-width: 800px;
+         margin: 0 auto;
+      }
+
+      .intro {
+         text-align: center;
+      }
+
+      .licenses-list {
+         list-style-type: none;
+         margin: 0;
+         padding: 0;
+      }
+
+      .license-used-by {
+         margin-top: -10px;
+      }
+
+      .license-text {
+         max-height: 200px;
+         overflow-y: scroll;
+         white-space: pre-wrap;
+      }
+   </style>
+</head>
+
+<body>
+   <main class="container">
+      <div class="intro">
+         <h1>Third Party Licenses</h1>
+         <p>This page lists the licenses of outside projects used in NetCanv.</p>
+      </div>
+      <h2>Table of contents</h2>
+      <ol>
+         <li><a href="#crates">Crates</a></li>
+         <li><a href="#icons">Icons</a></li>
+      </ol>
+
+      <h2 id="crates">Crates</h2>
+
+      <h3>Overview of licenses:</h3>
+      <ul class="licenses-overview">
+         {{#each overview}}
+         <li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+         {{/each}}
+      </ul>
+
+      <h3>All license text:</h3>
+      <ul class="licenses-list">
+         {{#each licenses}}
+         <li class="license">
+            <h3 id="{{id}}">{{name}}</h3>
+            <h4>Used by:</h4>
+            <ul class="license-used-by">
+               {{#each used_by}}
+               <li><a
+                     href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}}
+                     {{crate.version}}</a></li>
+               {{/each}}
+            </ul>
+            <pre class="license-text">{{text}}</pre>
+         </li>
+         {{/each}}
+      </ul>
+
+      <h2 id="icons">Icons</h2>
+
+      <p>NetCanv uses icons from <a href="https://materialdesignicons.com">Material Design Icons</a>,
+         which contains icons from Google and outside contributors, as well as icons designed
+         specifically for the application.</p>
+
+      <h3>Own icons</h3>
+
+      <p>The following icons were designed for NetCanv by <a href="https://github.com/liquidev">liquidev</a>.</p>
+
+      <ul class="license-used-by">
+         <li>window-close.svg</li>
+         <li>window-pin.svg</li>
+         <li>window-pinned.svg</li>
+      </ul>
+
+      <h3>Outside icons</h3>
+
+      <p>Some icons are redistributed from Google's Material Design Icons, which are licensed under
+         the Apache 2.0 license.</p>
+      <pre class="license-text">                                 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
 
@@ -198,4 +300,31 @@
    distributed under the License is distributed on an "AS IS" BASIS,
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
-   limitations under the License.
+   limitations under the License.</pre>
+
+      <p>Some icons are the work of the Pictogrammers icon group, and are licensed under their own license.</p>
+
+      <pre class="license-text">Pictogrammers Free License
+--------------------------
+
+This icon collection is released as free, open source, and GPL friendly by
+the [Pictogrammers](http://pictogrammers.com/) icon group. You may use it
+for commercial projects, open source projects, or anything really.
+
+# Icons: Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+Some of the icons are redistributed under the Apache 2.0 license. All other
+icons are either redistributed under their respective licenses or are
+distributed under the Apache 2.0 license.
+
+# Fonts: Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+All web and desktop fonts are distributed under the Apache 2.0 license. Web
+and desktop fonts contain some icons that are redistributed under the Apache
+2.0 license. All other icons are either redistributed under their respective
+licenses or are distributed under the Apache 2.0 license.
+
+# Code: MIT (https://opensource.org/licenses/MIT)
+The MIT license applies to all non-font and non-icon files.</pre>
+   </main>
+</body>
+
+</html>

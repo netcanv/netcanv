@@ -1,9 +1,19 @@
-//
 // NetCanv - online collaborative paint canvas
-// Copyright (C) 2021, liquidev and contributors
+// Copyright 2021-2022, liquidev
 //
-// Licensed under the GNU General Public License, version 3.
-// Check the LICENSE file in the repository root for details.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//--------------------------------------------------------------------------------------------------
 //
 // Welcome to main.rs! You've come this far, and I'm happy to see you here.
 // Here are some points of interest within the codebase:
@@ -11,8 +21,14 @@
 //  - main.rs - handles platform details, such as opening a window and setting up the renderer.
 //  - paint_canvas.rs - the infinite paint canvas.
 //  - assets.rs - asset loading and color schemes.
+//  - config.rs - user configuration.
 //  - assets/ - does not contain any code, but rather actual assets, such as fonts and icons.
 //  - app/ - contains app states (the lobby and paint UI).
+//    - paint/ - contains the painting state. This is where you draw things with friends
+//      - actions/ - actions available in the overflow menu
+//      - tools/ - tools available in the toolbar on the left
+//      - mod.rs - the state UI itself
+//    - lobby.rs - the lobby UI
 //  - net/ - contains networking-related code (communicating with the relay and other clients).
 //  - ui/ - contains NetCanv's bespoke UI framework, as well as all the widgets.
 //
@@ -21,7 +37,6 @@
 //
 // I hope you enjoy hacking on NetCanv!
 //    - liquidev
-//
 
 // Prevent opening a console on Windows if this is a release build.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -65,8 +80,6 @@ use config::config;
 use ui::{Input, Ui};
 
 fn inner_main() -> anyhow::Result<()> {
-   println!("test2");
-
    // Set up the winit event loop and open the window.
    let event_loop = EventLoop::new();
    let window_builder = {

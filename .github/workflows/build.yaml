@@ -18,8 +18,17 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    # Hopefully this doesn't break too bad.
+    - name: Cache cargo-about
+      uses: actions/cache@v2
+      with:
+        key: cargo-about-${{ runner.os }}
+        path: "~/.cargo/bin/cargo-about"
+
     - name: Install dependencies
-      run: sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+      run: |
+        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+        cargo install cargo-about
 
     - name: Compile application
       run: cargo build --release
@@ -41,6 +50,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    # Hopefully this doesn't break too bad.
+    - name: Cache cargo-about
+      uses: actions/cache@v2
+      with:
+        key: cargo-about-${{ runner.os }}
+        path: "~/.cargo/bin/cargo-about"
+
+    - name: Install dependencies
+      run: |
+        cargo install cargo-about
 
     - name: Compile application
       run: cargo build --release
