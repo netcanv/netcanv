@@ -1,7 +1,11 @@
 //! Handling of assets such as icons, fonts, etc.
 
+use std::io::Write;
+
+use anyhow::Context;
 use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
+use url::Url;
 
 use crate::app::paint::tool_bar::ToolbarColors;
 use crate::backend::{Backend, Font, Image};
@@ -14,6 +18,8 @@ use crate::ui::{
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf");
+
+const ABOUT_HTML: &[u8] = include_bytes!("assets/about/about.html");
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
@@ -28,9 +34,25 @@ const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
 const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
+const LEGAL_SVG: &[u8] = include_bytes!("assets/icons/legal.svg");
 const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
 const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
+
+/// Opens the licensing information page.
+pub fn open_license_page() -> anyhow::Result<()> {
+   let mut license_file = tempfile::Builder::new()
+      .prefix("netcanv-about")
+      .suffix(".html")
+      .tempfile()
+      .context("could not create temporary file for licensing info")?;
+   license_file.write(&ABOUT_HTML)?;
+   let (_, path) = license_file.keep()?;
+   let url = Url::from_file_path(path)
+      .map_err(|_| anyhow::anyhow!("could not create license page URL"))?;
+   webbrowser::open(url.as_ref()).context("could not open web browser")?;
+   Ok(())
+}
 
 /// Icons for navigation.
 pub struct NavigationIcons {
@@ -56,10 +78,11 @@ pub struct PeerIcons {
    pub host: Image,
 }
 
-/// Icons for the color scheme switcher.
-pub struct ColorSwitcherIcons {
-   pub dark: Image,
-   pub light: Image,
+/// Icons for the lobby.
+pub struct LobbyIcons {
+   pub dark_mode: Image,
+   pub light_mode: Image,
+   pub legal: Image,
 }
 
 pub struct WindowIcons {
@@ -73,7 +96,7 @@ pub struct Icons {
    // Control-specific
    pub expand: ExpandIcons,
    pub color_picker: ColorPickerIcons,
-   pub color_switcher: ColorSwitcherIcons,
+   pub lobby: LobbyIcons,
 
    // Generic
    pub navigation: NavigationIcons,
@@ -125,9 +148,10 @@ impl Assets {
             color_picker: ColorPickerIcons {
                eraser: Self::load_icon(renderer, ERASER_SVG),
             },
-            color_switcher: ColorSwitcherIcons {
-               dark: Self::load_icon(renderer, DARK_MODE_SVG),
-               light: Self::load_icon(renderer, LIGHT_MODE_SVG),
+            lobby: LobbyIcons {
+               dark_mode: Self::load_icon(renderer, DARK_MODE_SVG),
+               light_mode: Self::load_icon(renderer, LIGHT_MODE_SVG),
+               legal: Self::load_icon(renderer, LEGAL_SVG),
             },
 
             navigation: NavigationIcons {

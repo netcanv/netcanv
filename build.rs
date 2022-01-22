@@ -7,10 +7,11 @@ fn cargo_about_is_available() -> bool {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   // Builds the license file using cargo about.
+   // Builds the license file using cargo-about.
    if cargo_about_is_available() {
       println!("cargo:rerun-if-changed=src/assets/about/about.toml");
       println!("cargo:rerun-if-changed=src/assets/about/about.hbs");
+      println!("cargo:rerun-if-changed=Cargo.toml");
 
       let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
       let about_dir = src_dir.join("assets").join("about");

@@ -30,6 +30,7 @@ strum = { version = "0.23.0", features = ["derive"] }
 
 # Windowing and graphics
 native-dialog = "0.5.5"
+webbrowser = "0.5.5"
 image = { version = "0.23.14", default-features = false, features = ["png", "jpeg"] }
 webp = { version = "0.2.0", features = ["img"] }
 usvg = { version = "0.14.0", default-features = false }
@@ -45,7 +46,9 @@ nysa = "0.2.2"
 
 # Utilities
 directories = "3.0.2"
+tempfile = "3.3.0"
 toml = "0.5.8"
+url = "2.2.2"
 
 # Clipboard
 arboard = "2.0.1"
