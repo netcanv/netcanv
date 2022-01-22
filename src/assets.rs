@@ -19,7 +19,12 @@ const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf");
 
-const ABOUT_HTML: &[u8] = include_bytes!("assets/about/about.html");
+const ABOUT_HTML: Option<&[u8]> = if option_env!("NETCANV_BUILD_ABOUT").is_some() {
+   Some(include_bytes!(concat!(env!("OUT_DIR"), "/about.html")))
+} else {
+   let _compiling_without_cargo_about = 123;
+   None
+};
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
 const CHEVRON_DOWN_SVG: &[u8] = include_bytes!("assets/icons/chevron-down.svg");
@@ -39,19 +44,30 @@ const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
 const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
+/// Returns whether the licensing information page is available.
+pub fn has_license_page() -> bool {
+   ABOUT_HTML.is_some()
+}
+
 /// Opens the licensing information page.
 pub fn open_license_page() -> anyhow::Result<()> {
-   let mut license_file = tempfile::Builder::new()
-      .prefix("netcanv-about")
-      .suffix(".html")
-      .tempfile()
-      .context("could not create temporary file for licensing info")?;
-   license_file.write(&ABOUT_HTML)?;
-   let (_, path) = license_file.keep()?;
-   let url = Url::from_file_path(path)
-      .map_err(|_| anyhow::anyhow!("could not create license page URL"))?;
-   webbrowser::open(url.as_ref()).context("could not open web browser")?;
-   Ok(())
+   if let Some(about_html) = &ABOUT_HTML {
+      let mut license_file = tempfile::Builder::new()
+         .prefix("netcanv-about")
+         .suffix(".html")
+         .tempfile()
+         .context("could not create temporary file for licensing info")?;
+      license_file.write(about_html)?;
+      let (_, path) = license_file.keep()?;
+      let url = Url::from_file_path(path)
+         .map_err(|_| anyhow::anyhow!("could not create license page URL"))?;
+      webbrowser::open(url.as_ref()).context("could not open web browser")?;
+      Ok(())
+   } else {
+      anyhow::bail!(
+         "NetCanv was built without cargo-about installed. License information is not available"
+      );
+   }
 }
 
 /// Icons for navigation.

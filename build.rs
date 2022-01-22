@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       println!("cargo:rerun-if-changed=src/assets/about/about.toml");
       println!("cargo:rerun-if-changed=src/assets/about/about.hbs");
       println!("cargo:rerun-if-changed=Cargo.toml");
+      println!("cargo:rustc-env=NETCANV_BUILD_ABOUT=1");
 
       let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
       let about_dir = src_dir.join("assets").join("about");
@@ -23,10 +24,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
          .arg(about_dir.join("about.toml"))
          .output()?
          .stdout;
-      std::fs::write(about_dir.join("about.html"), &about)?;
+      std::fs::write(
+         Path::new(&std::env::var("OUT_DIR")?).join("about.html"),
+         &about,
+      )?;
    } else {
       println!(
-         "Warning: cargo-about is not available. Licensing information will not be available."
+         "cargo:warning=cargo-about is not available. Licensing information will not be embedded in the executable."
       );
    }
 

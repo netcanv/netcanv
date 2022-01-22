@@ -436,22 +436,24 @@ impl AppState for State {
          self.assets.colors = ColorScheme::from(config().ui.color_scheme);
       }
 
-      ui.push((ui.width(), ui.remaining_height()), Layout::VerticalRev);
-      if Button::with_icon(
-         ui,
-         input,
-         ButtonArgs {
-            height: 32.0,
-            colors: &self.assets.colors.action_button,
-            corner_radius: 4.0,
-         },
-         &self.assets.icons.lobby.legal,
-      )
-      .clicked()
-      {
-         catch!(assets::open_license_page());
+      if assets::has_license_page() {
+         ui.push((ui.width(), ui.remaining_height()), Layout::VerticalRev);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: 32.0,
+               colors: &self.assets.colors.action_button,
+               corner_radius: 4.0,
+            },
+            &self.assets.icons.lobby.legal,
+         )
+         .clicked()
+         {
+            catch!(assets::open_license_page());
+         }
+         ui.pop();
       }
-      ui.pop();
 
       ui.pop();
 
