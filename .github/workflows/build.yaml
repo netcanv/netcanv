@@ -18,6 +18,8 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - uses: Swatinem/rust-cache@v1
+
     - name: Install dependencies
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
@@ -43,6 +45,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    - uses: Swatinem/rust-cache@v1
 
     - name: Install dependencies
       run: |
