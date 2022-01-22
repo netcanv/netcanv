@@ -80,8 +80,6 @@ use config::config;
 use ui::{Input, Ui};
 
 fn inner_main() -> anyhow::Result<()> {
-   println!("test2");
-
    // Set up the winit event loop and open the window.
    let event_loop = EventLoop::new();
    let window_builder = {
