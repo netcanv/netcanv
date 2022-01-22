@@ -18,7 +18,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: Swatinem/rust-cache@v1
+    # Hopefully this doesn't break too bad.
+    - name: Cache cargo-about
+      uses: actions/cache@v2
+      with:
+        key: cargo-about-${{ runner.os }}
+        path: "~/.cargo/bin/cargo-about"
 
     - name: Install dependencies
       run: |
@@ -46,7 +51,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: Swatinem/rust-cache@v1
+    # Hopefully this doesn't break too bad.
+    - name: Cache cargo-about
+      uses: actions/cache@v2
+      with:
+        key: cargo-about-${{ runner.os }}
+        path: "~/.cargo/bin/cargo-about"
 
     - name: Install dependencies
       run: |
