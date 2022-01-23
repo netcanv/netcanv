@@ -22,7 +22,6 @@ const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf"
 const ABOUT_HTML: Option<&[u8]> = if option_env!("NETCANV_BUILD_ABOUT").is_some() {
    Some(include_bytes!(concat!(env!("OUT_DIR"), "/about.html")))
 } else {
-   let _compiling_without_cargo_about = 123;
    None
 };
 
