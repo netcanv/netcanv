@@ -55,7 +55,7 @@ jobs:
       uses: actions/cache@v2
       with:
         key: cargo-about-${{ runner.os }}
-        path: "~/.cargo/bin/cargo-about"
+        path: "~/.cargo/bin/cargo-about.exe"
 
     - name: Install dependencies
       run: |
