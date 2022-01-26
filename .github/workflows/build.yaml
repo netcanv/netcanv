@@ -28,7 +28,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
-        cargo install cargo-about
+        cargo install cargo-about || true
 
     - name: Compile application
       run: cargo build --release
@@ -51,7 +51,6 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    # Hopefully this doesn't break too bad.
     - name: Cache cargo-about
       uses: actions/cache@v2
       with:
