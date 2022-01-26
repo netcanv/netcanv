@@ -7,6 +7,7 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::RenderBackend;
 use url::Url;
 
+use crate::app::lobby::LobbyColors;
 use crate::app::paint::tool_bar::ToolbarColors;
 use crate::backend::{Backend, Font, Image};
 use crate::ui::wm::windows::{WindowButtonColors, WindowButtonsColors};
@@ -279,6 +280,8 @@ pub struct ColorScheme {
    pub window_buttons: WindowButtonsColors,
    pub toolbar: ToolbarColors,
    pub drag_handle: Color,
+
+   pub lobby: LobbyColors,
 }
 
 impl ColorScheme {
@@ -415,6 +418,10 @@ impl From<CommonColors> for ColorScheme {
          drag_handle: gray_60,
          toolbar: ToolbarColors {
             position_highlight: blue_50,
+         },
+
+         lobby: LobbyColors {
+            background: blue_50,
          },
       }
    }

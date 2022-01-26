@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use native_dialog::FileDialog;
 use netcanv_protocol::relay::{self, RoomId};
-use netcanv_renderer::paws::{vector, AlignH, AlignV, Layout};
+use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout};
 use netcanv_renderer::{Font, RenderBackend};
 use nysa::global as bus;
 
@@ -17,7 +17,14 @@ use crate::common::{Error, Fatal};
 use crate::config::{self, config};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
+use crate::ui::view::View;
 use crate::ui::*;
+
+/// Colors used in the lobby screen.
+#[derive(Clone)]
+pub struct LobbyColors {
+   pub background: Color,
+}
 
 /// A status returned from some other part of the app.
 #[derive(Debug)]
@@ -48,6 +55,8 @@ pub struct State {
    join_expand: Expand,
    host_expand: Expand,
 
+   view: View,
+
    // net
    status: Status,
    peer: Option<Peer>,
@@ -71,6 +80,8 @@ impl State {
          join_expand: Expand::new(true),
          host_expand: Expand::new(false),
 
+         view: View::new((388.0 + 32.0, 300.0 + 32.0)),
+
          status: Status::None,
          peer: None,
          image_file: None,
@@ -79,16 +90,7 @@ impl State {
 
    /// Processes the header (app name and welcome message).
    fn process_header(&mut self, ui: &mut Ui) {
-      ui.push((ui.width(), 72.0), Layout::Vertical);
-
-      ui.push((ui.width(), 56.0), Layout::Freeform);
-      ui.text(
-         &self.assets.sans.with_size(48.0),
-         "NetCanv",
-         self.assets.colors.text,
-         (AlignH::Left, AlignV::Middle),
-      );
-      ui.pop();
+      ui.push((ui.width(), 24.0), Layout::Vertical);
 
       ui.push((ui.width(), ui.remaining_height()), Layout::Freeform);
       ui.text(
@@ -152,7 +154,7 @@ impl State {
          },
       );
       ui.pop();
-      ui.space(32.0);
+      ui.space(24.0);
 
       // join room
       if self
@@ -307,7 +309,8 @@ impl State {
    /// Processes the status report box.
    fn process_status(&mut self, ui: &mut Ui) {
       if !matches!(self.status, Status::None) {
-         ui.push((ui.width(), 24.0), Layout::Horizontal);
+         ui.push((ui.width(), 32.0), Layout::Horizontal);
+         ui.fill_rounded(self.assets.colors.panel, 8.0);
          let icon = match self.status {
             Status::None => unreachable!(),
             Status::Info(_) => &self.assets.icons.status.info,
@@ -386,8 +389,15 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, StateArgs { ui, input, .. }: StateArgs) {
-      ui.clear(self.assets.colors.panel);
+   fn process(
+      &mut self,
+      StateArgs {
+         ui,
+         input,
+         root_view,
+      }: StateArgs,
+   ) {
+      ui.clear(self.assets.colors.lobby.background);
 
       // The lobby does not use mouse areas.
       input.set_mouse_area(0, true);
@@ -396,16 +406,18 @@ impl AppState for State {
          catch!(peer.communicate());
       }
 
-      ui.pad((32.0, 32.0));
+      view::layout::align(&root_view, &mut self.view, (AlignH::Center, AlignV::Middle));
+      self.view.begin(ui, input, Layout::Vertical);
+      ui.fill_rounded(self.assets.colors.panel, 8.0);
+      ui.pad((16.0, 16.0));
 
-      ui.push((ui.width(), 384.0), Layout::Vertical);
-      ui.align((AlignH::Left, AlignV::Middle));
       self.process_header(ui);
       ui.space(24.0);
       self.process_menu(ui, input);
-      ui.space(24.0);
+      ui.space(32.0);
       self.process_status(ui);
-      ui.pop();
+
+      self.view.end(ui);
 
       ui.push((32.0, ui.height()), Layout::Vertical);
       ui.align((AlignH::Right, AlignV::Top));
