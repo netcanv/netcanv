@@ -58,8 +58,9 @@ jobs:
         path: "~/.cargo/bin/cargo-about.exe"
 
     - name: Install dependencies
+      shell: bash
       run: |
-        cargo install cargo-about
+        cargo install cargo-about || true
 
     - name: Compile application
       run: cargo build --release
