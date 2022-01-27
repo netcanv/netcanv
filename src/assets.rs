@@ -216,7 +216,18 @@ impl Assets {
 
          banner: Banner {
             base: Self::load_svg(renderer, BANNER_BASE_SVG).colorized(Color::WHITE),
-            shadow: Self::load_image(renderer, BANNER_SHADOW_PNG),
+            shadow: {
+               #[cfg(not(debug_assertions))]
+               {
+                  Self::load_image(renderer, BANNER_SHADOW_PNG)
+               }
+               #[cfg(debug_assertions)]
+               {
+                  // NOTE: The shadow is disabled on debug mode because it slows down loading times
+                  // significantly, and we don't have async PNG loading yet.
+                  renderer.create_image_from_rgba(1, 1, &[0, 0, 0, 0])
+               }
+            },
          },
       }
    }
