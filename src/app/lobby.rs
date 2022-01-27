@@ -134,7 +134,7 @@ impl State {
 
       for (&x, &color) in STRIP_X_POSITIONS.iter().zip(STRIP_COLORS.iter()) {
          const AMPLITUDE_SCALE: f32 = 0.1;
-         const FREQUENCY: f32 = 0.0175 * std::f32::consts::PI;
+         const FREQUENCY: f32 = 0.03 * std::f32::consts::PI;
          const MAX_AMPLITUDE: f32 = 64.0;
          let mut previous_coords = None;
          for i in 0..=subdivisions {
@@ -142,7 +142,7 @@ impl State {
             let point_amplitude = (f32::abs(y - waving_center) - flat_radius)
                .clamp(0.0, MAX_AMPLITUDE)
                * AMPLITUDE_SCALE;
-            let wave = f32::sin(((y - waving_center) * FREQUENCY).abs() + input.time_in_seconds())
+            let wave = f32::sin(-((y - waving_center) * FREQUENCY).abs() + input.time_in_seconds())
                * point_amplitude;
             let x = (x + wave) * scale;
             let x = image_rect.x() + x;
