@@ -124,7 +124,7 @@ impl State {
       const STRIP_WIDTH: f32 = 16.0;
       let strip_width = STRIP_WIDTH * scale;
 
-      const SUBDIVISION_SPACING: f32 = 8.0;
+      const SUBDIVISION_SPACING: f32 = 12.0;
       let main_view_rect = self.main_view.rect();
       let flat_range = (image_rect.top() + image_rect.height() * 0.5)
          ..(main_view_rect.bottom() - Self::STATUS_HEIGHT);
@@ -146,11 +146,11 @@ impl State {
                * point_amplitude;
             let x = (x + wave) * scale;
             let x = image_rect.x() + x;
-            if let Some(a) = previous_coords {
-               let b = vector(x, y);
-               ui.render().line(a, b, color, LineCap::Round, strip_width);
+            let point = vector(x + strip_width / 2.0, y);
+            if let Some(previous_point) = previous_coords {
+               ui.render().line(previous_point, point, color, LineCap::Round, strip_width);
             }
-            previous_coords = Some(vector(x, y));
+            previous_coords = Some(point);
          }
       }
 
