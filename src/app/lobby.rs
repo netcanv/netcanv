@@ -64,6 +64,10 @@ pub struct State {
 }
 
 impl State {
+   const VIEW_BOX_PADDING: f32 = 16.0;
+   const VIEW_BOX_WIDTH: f32 = 388.0 + Self::VIEW_BOX_PADDING * 2.0;
+   const VIEW_BOX_HEIGHT: f32 = 294.0 + Self::VIEW_BOX_PADDING * 2.0;
+
    /// Creates and initializes the lobby state.
    pub fn new(assets: Assets) -> Self {
       let nickname_field = TextField::new(Some(&config().lobby.nickname));
@@ -80,7 +84,7 @@ impl State {
          join_expand: Expand::new(true),
          host_expand: Expand::new(false),
 
-         view: View::new((388.0 + 32.0, 300.0 + 32.0)),
+         view: View::new((Self::VIEW_BOX_WIDTH, Self::VIEW_BOX_HEIGHT)),
 
          status: Status::None,
          peer: None,
@@ -112,7 +116,7 @@ impl State {
       let button = ButtonArgs {
          height: 32.0,
          colors: &self.assets.colors.button.clone(),
-         corner_radius: 0.0,
+         corner_radius: 16.0,
       };
       let textfield = TextFieldArgs {
          font: &self.assets.sans,
@@ -199,7 +203,7 @@ impl State {
                ..textfield
             },
          );
-         ui.offset(vector(16.0, 16.0));
+         ui.offset(vector(8.0, 16.0));
          if Button::with_text(ui, input, button, &self.assets.sans, "Join").clicked()
             || room_id_field.done()
          {
@@ -409,7 +413,7 @@ impl AppState for State {
       view::layout::align(&root_view, &mut self.view, (AlignH::Center, AlignV::Middle));
       self.view.begin(ui, input, Layout::Vertical);
       ui.fill_rounded(self.assets.colors.panel, 8.0);
-      ui.pad((16.0, 16.0));
+      ui.pad(Self::VIEW_BOX_PADDING);
 
       self.process_header(ui);
       ui.space(24.0);
