@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use native_dialog::FileDialog;
 use netcanv_protocol::relay::{self, RoomId};
-use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, Rect, Renderer};
+use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 use netcanv_renderer::{Font, Image as ImageTrait, RenderBackend};
 use nysa::global as bus;
 
@@ -102,7 +102,7 @@ impl State {
    }
 
    /// Processes the logo banner.
-   fn process_banner(&mut self, ui: &mut Ui, root_view: &View) {
+   fn process_banner(&mut self, ui: &mut Ui, input: &Input, root_view: &View) {
       ui.push((ui.width(), Self::BANNER_HEIGHT), Layout::Freeform);
 
       let group_rect = ui.rect();
@@ -124,17 +124,34 @@ impl State {
       const STRIP_WIDTH: f32 = 16.0;
       let strip_width = STRIP_WIDTH * scale;
 
+      const SUBDIVISION_SPACING: f32 = 8.0;
+      let main_view_rect = self.main_view.rect();
+      let flat_range = (image_rect.top() + image_rect.height() * 0.5)
+         ..(main_view_rect.bottom() - Self::STATUS_HEIGHT);
+      let flat_radius = (flat_range.end - flat_range.start) / 2.0;
+      let waving_center = (flat_range.start + flat_range.end) / 2.0;
+      let subdivisions = (root_view.height() / SUBDIVISION_SPACING).ceil() as usize;
+
       for (&x, &color) in STRIP_X_POSITIONS.iter().zip(STRIP_COLORS.iter()) {
-         let scaled_x = x * scale;
-         let absolute_x = image_rect.x() + scaled_x;
-         ui.render().fill(
-            Rect::new(
-               vector(absolute_x, 0.0),
-               vector(strip_width, root_view.height()),
-            ),
-            color,
-            0.0,
-         );
+         const AMPLITUDE_SCALE: f32 = 0.1;
+         const FREQUENCY: f32 = 0.0175 * std::f32::consts::PI;
+         const MAX_AMPLITUDE: f32 = 64.0;
+         let mut previous_coords = None;
+         for i in 0..=subdivisions {
+            let y = SUBDIVISION_SPACING * i as f32;
+            let point_amplitude = (f32::abs(y - waving_center) - flat_radius)
+               .clamp(0.0, MAX_AMPLITUDE)
+               * AMPLITUDE_SCALE;
+            let wave = f32::sin(((y - waving_center) * FREQUENCY).abs() + input.time_in_seconds())
+               * point_amplitude;
+            let x = (x + wave) * scale;
+            let x = image_rect.x() + x;
+            if let Some(a) = previous_coords {
+               let b = vector(x, y);
+               ui.render().line(a, b, color, LineCap::Round, strip_width);
+            }
+            previous_coords = Some(vector(x, y));
+         }
       }
 
       ui.image(image_rect, &self.assets.banner.base);
@@ -524,7 +541,7 @@ impl AppState for State {
 
       self.main_view.begin(ui, input, Layout::Vertical);
 
-      self.process_banner(ui, &root_view);
+      self.process_banner(ui, input, &root_view);
 
       ui.push((ui.width(), Self::VIEW_BOX_HEIGHT), Layout::Vertical);
       ui.fill_rounded(self.assets.colors.panel, 8.0);
