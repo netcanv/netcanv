@@ -116,19 +116,19 @@ impl SelectionTool {
    pub fn new(renderer: &mut Backend) -> Self {
       Self {
          icons: Icons {
-            tool: Assets::load_icon(
+            tool: Assets::load_svg(
                renderer,
                include_bytes!("../../../assets/icons/selection.svg"),
             ),
-            cursor: Assets::load_icon(
+            cursor: Assets::load_svg(
                renderer,
                include_bytes!("../../../assets/icons/position.svg"),
             ),
-            position: Assets::load_icon(
+            position: Assets::load_svg(
                renderer,
                include_bytes!("../../../assets/icons/selection-position.svg"),
             ),
-            rectangle: Assets::load_icon(
+            rectangle: Assets::load_svg(
                renderer,
                include_bytes!("../../../assets/icons/selection-rectangle.svg"),
             ),

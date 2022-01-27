@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use native_dialog::FileDialog;
 use netcanv_protocol::relay::{self, RoomId};
-use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout};
-use netcanv_renderer::{Font, RenderBackend};
+use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, Rect, Renderer};
+use netcanv_renderer::{Font, Image as ImageTrait, RenderBackend};
 use nysa::global as bus;
 
 use crate::app::{paint, AppState, StateArgs};
@@ -55,7 +55,8 @@ pub struct State {
    join_expand: Expand,
    host_expand: Expand,
 
-   view: View,
+   main_view: View,
+   panel_view: View,
 
    // net
    status: Status,
@@ -64,9 +65,13 @@ pub struct State {
 }
 
 impl State {
+   const BANNER_HEIGHT: f32 = 128.0;
+   const MENU_HEIGHT: f32 = 294.0;
+   const STATUS_HEIGHT: f32 = 48.0;
+
    const VIEW_BOX_PADDING: f32 = 16.0;
    const VIEW_BOX_WIDTH: f32 = 388.0 + Self::VIEW_BOX_PADDING * 2.0;
-   const VIEW_BOX_HEIGHT: f32 = 294.0 + Self::VIEW_BOX_PADDING * 2.0;
+   const VIEW_BOX_HEIGHT: f32 = Self::MENU_HEIGHT + Self::VIEW_BOX_PADDING * 2.0;
 
    /// Creates and initializes the lobby state.
    pub fn new(assets: Assets) -> Self {
@@ -84,7 +89,11 @@ impl State {
          join_expand: Expand::new(true),
          host_expand: Expand::new(false),
 
-         view: View::new((Self::VIEW_BOX_WIDTH, Self::VIEW_BOX_HEIGHT)),
+         main_view: View::new((
+            Self::VIEW_BOX_WIDTH,
+            Self::BANNER_HEIGHT + Self::VIEW_BOX_HEIGHT + Self::STATUS_HEIGHT,
+         )),
+         panel_view: View::new((40.0, 12.0 + 2.0 * 32.0)),
 
          status: Status::None,
          peer: None,
@@ -92,8 +101,47 @@ impl State {
       }
    }
 
-   /// Processes the header (app name and welcome message).
-   fn process_header(&mut self, ui: &mut Ui) {
+   /// Processes the logo banner.
+   fn process_banner(&mut self, ui: &mut Ui, root_view: &View) {
+      ui.push((ui.width(), Self::BANNER_HEIGHT), Layout::Freeform);
+
+      let group_rect = ui.rect();
+      let scale = group_rect.height() / self.assets.banner.base.height() as f32;
+      let image_size = vector(
+         self.assets.banner.base.width() as f32,
+         self.assets.banner.base.height() as f32,
+      ) * scale;
+      let image_rect = Rect::new(group_rect.center() - image_size / 2.0, image_size);
+
+      const STRIP_X_POSITIONS: [f32; 3] = [8.0, 48.0, 88.0];
+      const STRIP_COLORS: [Color; 3] = [
+         Color::rgb(0xFF003E),
+         Color::rgb(0x2DD70E),
+         Color::rgb(0x0868EB),
+      ];
+      const STRIP_WIDTH: f32 = 16.0;
+      let strip_width = STRIP_WIDTH * scale;
+
+      for (&x, &color) in STRIP_X_POSITIONS.iter().zip(STRIP_COLORS.iter()) {
+         let scaled_x = x * scale;
+         let absolute_x = image_rect.x() + scaled_x;
+         ui.render().fill(
+            Rect::new(
+               vector(absolute_x, 0.0),
+               vector(strip_width, root_view.height()),
+            ),
+            color,
+            0.0,
+         );
+      }
+
+      ui.image(image_rect, &self.assets.banner.base);
+
+      ui.pop();
+   }
+
+   /// Processes the welcome message.
+   fn process_welcome(&mut self, ui: &mut Ui) {
       ui.push((ui.width(), 24.0), Layout::Vertical);
 
       ui.push((ui.width(), ui.remaining_height()), Layout::Freeform);
@@ -313,25 +361,25 @@ impl State {
    /// Processes the status report box.
    fn process_status(&mut self, ui: &mut Ui) {
       if !matches!(self.status, Status::None) {
-         ui.push((ui.width(), 32.0), Layout::Horizontal);
+         ui.push((ui.width(), 48.0), Layout::Horizontal);
          ui.fill_rounded(self.assets.colors.panel, 8.0);
-         let icon = match self.status {
+         ui.pad(16.0);
+         let (icon, color, text) = match &self.status {
             Status::None => unreachable!(),
-            Status::Info(_) => &self.assets.icons.status.info,
-            Status::Error(_) => &self.assets.icons.status.error,
-         };
-         let color = match self.status {
-            Status::None => unreachable!(),
-            Status::Info(_) => self.assets.colors.text,
-            Status::Error(_) => self.assets.colors.error,
+            Status::Info(text) => (
+               &self.assets.icons.status.info,
+               self.assets.colors.text,
+               text,
+            ),
+            Status::Error(text) => (
+               &self.assets.icons.status.error,
+               self.assets.colors.error,
+               text,
+            ),
          };
          ui.icon(icon, color, Some(vector(ui.height(), ui.height())));
          ui.space(8.0);
          ui.push((ui.remaining_width(), ui.height()), Layout::Freeform);
-         let text = match &self.status {
-            Status::None => unreachable!(),
-            Status::Info(text) | Status::Error(text) => text,
-         };
          ui.text(
             &self.assets.sans,
             text,
@@ -340,6 +388,54 @@ impl State {
          );
          ui.pop();
          ui.pop();
+      }
+   }
+
+   /// Processes the panel on the right that contains action buttons.
+   fn process_icon_panel(&mut self, ui: &mut Ui, input: &mut Input) {
+      if Button::with_icon(
+         ui,
+         input,
+         ButtonArgs {
+            height: 32.0,
+            colors: &self.assets.colors.action_button,
+            corner_radius: 16.0,
+         },
+         if config().ui.color_scheme == config::ColorScheme::Dark {
+            &self.assets.icons.lobby.light_mode
+         } else {
+            &self.assets.icons.lobby.dark_mode
+         },
+      )
+      .clicked()
+      {
+         config::write(|config| {
+            config.ui.color_scheme = match config.ui.color_scheme {
+               config::ColorScheme::Light => config::ColorScheme::Dark,
+               config::ColorScheme::Dark => config::ColorScheme::Light,
+            };
+         });
+         self.save_config();
+         self.assets.colors = ColorScheme::from(config().ui.color_scheme);
+      }
+
+      ui.space(4.0);
+
+      if assets::has_license_page() {
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: 32.0,
+               colors: &self.assets.colors.action_button,
+               corner_radius: 16.0,
+            },
+            &self.assets.icons.lobby.legal,
+         )
+         .clicked()
+         {
+            catch!(assets::open_license_page());
+         }
       }
    }
 
@@ -410,68 +506,50 @@ impl AppState for State {
          catch!(peer.communicate());
       }
 
-      view::layout::align(&root_view, &mut self.view, (AlignH::Center, AlignV::Middle));
-      self.view.begin(ui, input, Layout::Vertical);
+      let padded_root_view = view::layout::padded(&root_view, 8.0);
+      view::layout::align(
+         &root_view,
+         &mut self.main_view,
+         (AlignH::Center, AlignV::Middle),
+      );
+      view::layout::align(
+         &padded_root_view,
+         &mut self.panel_view,
+         (AlignH::Right, AlignV::Top),
+      );
+
+      // Main view
+
+      self.main_view.begin(ui, input, Layout::Vertical);
+
+      self.process_banner(ui, &root_view);
+
+      ui.push((ui.width(), Self::VIEW_BOX_HEIGHT), Layout::Vertical);
       ui.fill_rounded(self.assets.colors.panel, 8.0);
+
+      ui.push(ui.size(), Layout::Vertical);
       ui.pad(Self::VIEW_BOX_PADDING);
 
-      self.process_header(ui);
+      self.process_welcome(ui);
       ui.space(24.0);
       self.process_menu(ui, input);
-      ui.space(32.0);
-      self.process_status(ui);
-
-      self.view.end(ui);
-
-      ui.push((32.0, ui.height()), Layout::Vertical);
-      ui.align((AlignH::Right, AlignV::Top));
-
-      if Button::with_icon(
-         ui,
-         input,
-         ButtonArgs {
-            height: 32.0,
-            colors: &self.assets.colors.action_button,
-            corner_radius: 4.0,
-         },
-         if config().ui.color_scheme == config::ColorScheme::Dark {
-            &self.assets.icons.lobby.light_mode
-         } else {
-            &self.assets.icons.lobby.dark_mode
-         },
-      )
-      .clicked()
-      {
-         config::write(|config| {
-            config.ui.color_scheme = match config.ui.color_scheme {
-               config::ColorScheme::Light => config::ColorScheme::Dark,
-               config::ColorScheme::Dark => config::ColorScheme::Light,
-            };
-         });
-         self.save_config();
-         self.assets.colors = ColorScheme::from(config().ui.color_scheme);
-      }
-
-      if assets::has_license_page() {
-         ui.push((ui.width(), ui.remaining_height()), Layout::VerticalRev);
-         if Button::with_icon(
-            ui,
-            input,
-            ButtonArgs {
-               height: 32.0,
-               colors: &self.assets.colors.action_button,
-               corner_radius: 4.0,
-            },
-            &self.assets.icons.lobby.legal,
-         )
-         .clicked()
-         {
-            catch!(assets::open_license_page());
-         }
-         ui.pop();
-      }
 
       ui.pop();
+
+      ui.space(40.0);
+      self.process_status(ui);
+
+      ui.pop();
+
+      self.main_view.end(ui);
+
+      // Panel
+
+      self.panel_view.begin(ui, input, Layout::Vertical);
+      ui.fill_rounded(self.assets.colors.panel, ui.width() / 2.0);
+      ui.pad(4.0);
+      self.process_icon_panel(ui, input);
+      self.panel_view.end(ui);
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;
