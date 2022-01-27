@@ -52,7 +52,7 @@ impl BrushTool {
    /// Creates an instance of the brush tool.
    pub fn new(renderer: &mut Backend) -> Self {
       Self {
-         icon: Assets::load_icon(renderer, include_bytes!("../../../assets/icons/brush.svg")),
+         icon: Assets::load_svg(renderer, include_bytes!("../../../assets/icons/brush.svg")),
          state: BrushState::Idle,
          thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
          color_picker: ColorPicker::new(),

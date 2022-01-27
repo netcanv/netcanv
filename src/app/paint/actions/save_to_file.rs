@@ -19,7 +19,7 @@ impl SaveToFileAction {
 
    pub fn new(renderer: &mut Backend) -> Self {
       Self {
-         icon: Assets::load_icon(renderer, include_bytes!("../../../assets/icons/save.svg")),
+         icon: Assets::load_svg(renderer, include_bytes!("../../../assets/icons/save.svg")),
          last_autosave: Instant::now(),
       }
    }

@@ -1,12 +1,13 @@
 //! Handling of assets such as icons, fonts, etc.
 
-use std::io::Write;
+use std::io::{Cursor, Write};
 
 use anyhow::Context;
 use netcanv_renderer::paws::Color;
-use netcanv_renderer::RenderBackend;
+use netcanv_renderer::{Image as ImageTrait, RenderBackend};
 use url::Url;
 
+use crate::app::lobby::LobbyColors;
 use crate::app::paint::tool_bar::ToolbarColors;
 use crate::backend::{Backend, Font, Image};
 use crate::ui::wm::windows::{WindowButtonColors, WindowButtonsColors};
@@ -42,6 +43,9 @@ const LEGAL_SVG: &[u8] = include_bytes!("assets/icons/legal.svg");
 const WINDOW_CLOSE_SVG: &[u8] = include_bytes!("assets/icons/window-close.svg");
 const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
+
+const BANNER_BASE_SVG: &[u8] = include_bytes!("assets/banner/base.svg");
+const BANNER_SHADOW_PNG: &[u8] = include_bytes!("assets/banner/shadow.png");
 
 /// Returns whether the licensing information page is available.
 pub fn has_license_page() -> bool {
@@ -121,6 +125,12 @@ pub struct Icons {
    pub window: WindowIcons,
 }
 
+/// Banner layers.
+pub struct Banner {
+   pub base: Image,
+   pub shadow: Image,
+}
+
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
 pub struct Assets {
    pub sans: Font,
@@ -129,11 +139,12 @@ pub struct Assets {
 
    pub colors: ColorScheme,
    pub icons: Icons,
+   pub banner: Banner,
 }
 
 impl Assets {
-   /// Loads an icon from an SVG file.
-   pub fn load_icon(renderer: &mut Backend, data: &[u8]) -> Image {
+   /// Loads an SVG file to a texture.
+   pub fn load_svg(renderer: &mut Backend, data: &[u8]) -> Image {
       use usvg::{FitTo, NodeKind, Tree};
 
       let tree =
@@ -148,6 +159,17 @@ impl Assets {
       renderer.create_image_from_rgba(size.width() as u32, size.height() as u32, pixmap.data())
    }
 
+   /// Loads an image file into a texture.
+   fn load_image(renderer: &mut Backend, data: &[u8]) -> Image {
+      let image = image::io::Reader::new(Cursor::new(data))
+         .with_guessed_format()
+         .expect("unknown image format")
+         .decode()
+         .expect("error while loading the image file")
+         .to_rgba8();
+      renderer.create_image_from_rgba(image.width(), image.height(), &image)
+   }
+
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(renderer: &mut Backend, colors: ColorScheme) -> Self {
       Self {
@@ -157,38 +179,54 @@ impl Assets {
          colors,
          icons: Icons {
             expand: ExpandIcons {
-               expand: Self::load_icon(renderer, CHEVRON_RIGHT_SVG),
-               shrink: Self::load_icon(renderer, CHEVRON_DOWN_SVG),
+               expand: Self::load_svg(renderer, CHEVRON_RIGHT_SVG),
+               shrink: Self::load_svg(renderer, CHEVRON_DOWN_SVG),
             },
             color_picker: ColorPickerIcons {
-               eraser: Self::load_icon(renderer, ERASER_SVG),
+               eraser: Self::load_svg(renderer, ERASER_SVG),
             },
             lobby: LobbyIcons {
-               dark_mode: Self::load_icon(renderer, DARK_MODE_SVG),
-               light_mode: Self::load_icon(renderer, LIGHT_MODE_SVG),
-               legal: Self::load_icon(renderer, LEGAL_SVG),
+               dark_mode: Self::load_svg(renderer, DARK_MODE_SVG),
+               light_mode: Self::load_svg(renderer, LIGHT_MODE_SVG),
+               legal: Self::load_svg(renderer, LEGAL_SVG),
             },
 
             navigation: NavigationIcons {
-               menu: Self::load_icon(renderer, MENU_SVG),
-               copy: Self::load_icon(renderer, COPY_SVG),
-               drag_horizontal: Self::load_icon(renderer, DRAG_HORIZONTAL_SVG),
+               menu: Self::load_svg(renderer, MENU_SVG),
+               copy: Self::load_svg(renderer, COPY_SVG),
+               drag_horizontal: Self::load_svg(renderer, DRAG_HORIZONTAL_SVG),
             },
             status: StatusIcons {
-               info: Self::load_icon(renderer, INFO_SVG),
-               error: Self::load_icon(renderer, ERROR_SVG),
+               info: Self::load_svg(renderer, INFO_SVG),
+               error: Self::load_svg(renderer, ERROR_SVG),
             },
             file: FileIcons {
-               save: Self::load_icon(renderer, SAVE_SVG),
+               save: Self::load_svg(renderer, SAVE_SVG),
             },
             peer: PeerIcons {
-               client: Self::load_icon(renderer, PEER_CLIENT_SVG),
-               host: Self::load_icon(renderer, PEER_HOST_SVG),
+               client: Self::load_svg(renderer, PEER_CLIENT_SVG),
+               host: Self::load_svg(renderer, PEER_HOST_SVG),
             },
             window: WindowIcons {
-               close: Self::load_icon(renderer, WINDOW_CLOSE_SVG),
-               pin: Self::load_icon(renderer, WINDOW_PIN_SVG),
-               pinned: Self::load_icon(renderer, WINDOW_PINNED_SVG),
+               close: Self::load_svg(renderer, WINDOW_CLOSE_SVG),
+               pin: Self::load_svg(renderer, WINDOW_PIN_SVG),
+               pinned: Self::load_svg(renderer, WINDOW_PINNED_SVG),
+            },
+         },
+
+         banner: Banner {
+            base: Self::load_svg(renderer, BANNER_BASE_SVG).colorized(Color::WHITE),
+            shadow: {
+               #[cfg(not(debug_assertions))]
+               {
+                  Self::load_image(renderer, BANNER_SHADOW_PNG)
+               }
+               #[cfg(debug_assertions)]
+               {
+                  // NOTE: The shadow is disabled on debug mode because it slows down loading times
+                  // significantly, and we don't have async PNG loading yet.
+                  renderer.create_image_from_rgba(1, 1, &[0, 0, 0, 0])
+               }
             },
          },
       }
@@ -279,6 +317,8 @@ pub struct ColorScheme {
    pub window_buttons: WindowButtonsColors,
    pub toolbar: ToolbarColors,
    pub drag_handle: Color,
+
+   pub lobby: LobbyColors,
 }
 
 impl ColorScheme {
@@ -415,6 +455,10 @@ impl From<CommonColors> for ColorScheme {
          drag_handle: gray_60,
          toolbar: ToolbarColors {
             position_highlight: blue_50,
+         },
+
+         lobby: LobbyColors {
+            background: blue_50,
          },
       }
    }
