@@ -113,6 +113,8 @@ impl State {
       ) * scale;
       let image_rect = Rect::new(group_rect.center() - image_size / 2.0, image_size);
 
+      ui.image(image_rect, &self.assets.banner.shadow);
+
       const STRIP_X_POSITIONS: [f32; 3] = [8.0, 48.0, 88.0];
       const STRIP_COLORS: [Color; 3] = [
          Color::rgb(0xFF003E),

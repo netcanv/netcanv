@@ -1,6 +1,6 @@
 //! Handling of assets such as icons, fonts, etc.
 
-use std::io::Write;
+use std::io::{Cursor, Write};
 
 use anyhow::Context;
 use netcanv_renderer::paws::Color;
@@ -45,6 +45,7 @@ const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
 const BANNER_BASE_SVG: &[u8] = include_bytes!("assets/banner/base.svg");
+const BANNER_SHADOW_PNG: &[u8] = include_bytes!("assets/banner/shadow.png");
 
 /// Returns whether the licensing information page is available.
 pub fn has_license_page() -> bool {
@@ -127,6 +128,7 @@ pub struct Icons {
 /// Banner layers.
 pub struct Banner {
    pub base: Image,
+   pub shadow: Image,
 }
 
 /// App assets. This constitutes fonts, color schemes, icons, and the like.
@@ -155,6 +157,17 @@ impl Assets {
       resvg::render(&tree, FitTo::Original, pixmap.as_mut());
 
       renderer.create_image_from_rgba(size.width() as u32, size.height() as u32, pixmap.data())
+   }
+
+   /// Loads an image file into a texture.
+   fn load_image(renderer: &mut Backend, data: &[u8]) -> Image {
+      let image = image::io::Reader::new(Cursor::new(data))
+         .with_guessed_format()
+         .expect("unknown image format")
+         .decode()
+         .expect("error while loading the image file")
+         .to_rgba8();
+      renderer.create_image_from_rgba(image.width(), image.height(), &image)
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
@@ -203,6 +216,7 @@ impl Assets {
 
          banner: Banner {
             base: Self::load_svg(renderer, BANNER_BASE_SVG).colorized(Color::WHITE),
+            shadow: Self::load_image(renderer, BANNER_SHADOW_PNG),
          },
       }
    }
