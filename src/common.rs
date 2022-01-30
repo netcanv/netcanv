@@ -240,27 +240,27 @@ pub struct Fatal(pub anyhow::Error);
 /// Catches an error onto the global bus and returns the provided value from the current function.
 #[macro_export]
 macro_rules! catch {
-    ($exp:expr, as $T:expr, return $or:expr $(,)?) => {
-        match $exp {
-            Ok(ok) => ok,
-            Err(err) => {
-                nysa::global::push($T(::anyhow::anyhow!(err)));
-                return $or
-            },
-        }
-    };
+   ($exp:expr, as $T:expr, return $or:expr $(,)?) => {
+      match $exp {
+         Ok(ok) => ok,
+         Err(err) => {
+            nysa::global::push($T(::anyhow::anyhow!(err)));
+            return $or
+         },
+      }
+   };
 
-    ($exp:expr, return $or:expr $(,)?) => {
-        catch!($exp, as crate::common::Error, return $or)
-    };
+   ($exp:expr, return $or:expr $(,)?) => {
+      catch!($exp, as crate::common::Error, return $or)
+   };
 
-    ($exp:expr, as $T:expr $(,)?) => {
-        catch!($exp, as $T, return ())
-    };
+   ($exp:expr, as $T:expr $(,)?) => {
+      catch!($exp, as $T, return ())
+   };
 
-    ($exp:expr $(,)?) => {
-        catch!($exp, return ())
-    };
+   ($exp:expr $(,)?) => {
+      catch!($exp, return ())
+   };
 }
 
 //
