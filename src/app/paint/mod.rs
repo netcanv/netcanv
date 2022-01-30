@@ -62,6 +62,11 @@ enum ChunkDownload {
 /// A bus message requesting a chunk download.
 struct RequestChunkDownload((i32, i32));
 
+/// Controls shared between tools, such as the color palette.
+pub struct GlobalControls {
+   pub color_picker: ColorPicker,
+}
+
 /// The paint app state.
 pub struct State {
    assets: Assets,
@@ -89,11 +94,26 @@ pub struct State {
    overflow_menu: ContextMenu,
    toolbar: Toolbar,
    wm: WindowManager,
+   global_controls: GlobalControls,
 }
 
 macro_rules! log {
    ($log:expr, $($arg:tt)*) => {
       $log.push((format!($($arg)*), Instant::now()))
+   };
+}
+
+macro_rules! tool_args {
+   ($ui:expr, $input:expr, $state:expr) => {
+      ToolArgs {
+         ui: $ui,
+         input: $input,
+         wm: &mut $state.wm,
+         canvas_view: &$state.canvas_view,
+         global_controls: &mut $state.global_controls,
+         assets: &mut $state.assets,
+         net: Net::new(&$state.peer),
+      }
    };
 }
 
@@ -146,6 +166,10 @@ impl State {
          overflow_menu: ContextMenu::new((256.0, 0.0)), // Vertical is filled in later
          toolbar: Toolbar::new(&mut wm),
          wm,
+
+         global_controls: GlobalControls {
+            color_picker: ColorPicker::new(),
+         },
       };
       this.register_tools(renderer);
       this.register_actions(renderer);
@@ -253,14 +277,7 @@ impl State {
 
       match self.toolbar.with_current_tool(|tool| {
          tool.active_key_shortcuts(
-            ToolArgs {
-               ui,
-               input,
-               wm: &mut self.wm,
-               canvas_view: &self.canvas_view,
-               assets: &mut self.assets,
-               net: Net::new(&self.peer),
-            },
+            tool_args!(ui, input, self),
             &mut self.paint_canvas,
             &self.viewport,
          )
@@ -274,14 +291,7 @@ impl State {
          .toolbar
          .with_each_tool(|tool_id, tool| {
             match tool.global_key_shortcuts(
-               ToolArgs {
-                  ui,
-                  input,
-                  wm: &mut self.wm,
-                  canvas_view: &self.canvas_view,
-                  assets: &mut self.assets,
-                  net: Net::new(&self.peer),
-               },
+               tool_args!(ui, input, self),
                &mut self.paint_canvas,
                &self.viewport,
             ) {
@@ -338,14 +348,7 @@ impl State {
 
       self.toolbar.with_current_tool(|tool| {
          tool.process_paint_canvas_input(
-            ToolArgs {
-               ui,
-               input,
-               wm: &mut self.wm,
-               canvas_view: &self.canvas_view,
-               assets: &self.assets,
-               net: Net::new(&mut self.peer),
-            },
+            tool_args!(ui, input, self),
             &mut self.paint_canvas,
             &self.viewport,
          )
@@ -373,14 +376,7 @@ impl State {
                if let Some(tool_id) = self.toolbar.tool_by_name(tool_name) {
                   self.toolbar.with_tool(tool_id, |tool| {
                      tool.process_paint_canvas_peer(
-                        ToolArgs {
-                           ui,
-                           input,
-                           wm: &mut self.wm,
-                           canvas_view: &self.canvas_view,
-                           assets: &self.assets,
-                           net: Net::new(&self.peer),
-                        },
+                        tool_args!(ui, input, self),
                         &self.viewport,
                         address,
                      );
@@ -391,17 +387,7 @@ impl State {
          ui.render().pop();
 
          self.toolbar.with_current_tool(|tool| {
-            tool.process_paint_canvas_overlays(
-               ToolArgs {
-                  ui,
-                  input,
-                  wm: &mut self.wm,
-                  canvas_view: &self.canvas_view,
-                  assets: &self.assets,
-                  net: Net::new(&mut self.peer),
-               },
-               &self.viewport,
-            );
+            tool.process_paint_canvas_overlays(tool_args!(ui, input, self), &self.viewport);
          });
       });
       if self.tip.created.elapsed() < self.tip.visible_duration {
@@ -431,9 +417,12 @@ impl State {
       while self.update_timer.update() {
          // Tool updates
          self.toolbar.with_current_tool(|tool| {
-            catch!(tool.network_send(tools::Net {
-               peer: &mut self.peer
-            }))
+            catch!(tool.network_send(
+               tools::Net {
+                  peer: &mut self.peer
+               },
+               &self.global_controls
+            ))
          });
          // Chunk downloading
          if self.save_to_file.is_some() {
@@ -470,14 +459,7 @@ impl State {
       // Tool
 
       self.toolbar.with_current_tool(|tool| {
-         tool.process_bottom_bar(ToolArgs {
-            ui,
-            input,
-            wm: &mut self.wm,
-            canvas_view: &self.canvas_view,
-            assets: &self.assets,
-            net: Net::new(&mut self.peer),
-         });
+         tool.process_bottom_bar(tool_args!(ui, input, self));
       });
 
       //

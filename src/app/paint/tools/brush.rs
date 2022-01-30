@@ -12,7 +12,7 @@ use netcanv_renderer::paws::{
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use serde::{Deserialize, Serialize};
 
-use crate::app::paint;
+use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::common::{lerp_point, ColorMath};
@@ -37,7 +37,6 @@ pub struct BrushTool {
 
    state: BrushState,
    thickness_slider: Slider,
-   color_picker: ColorPicker,
 
    mouse_position: Point,
    previous_mouse_position: Point,
@@ -55,7 +54,6 @@ impl BrushTool {
          icon: Assets::load_svg(renderer, include_bytes!("../../../assets/icons/brush.svg")),
          state: BrushState::Idle,
          thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
-         color_picker: ColorPicker::new(),
          mouse_position: point(0.0, 0.0),
          previous_mouse_position: point(0.0, 0.0),
          stroke_points: Vec::new(),
@@ -123,8 +121,8 @@ impl BrushTool {
    }
 
    /// Returns the color currently selected in the color picker.
-   pub fn color(&self) -> Color {
-      self.color_picker.color()
+   pub fn color(global_controls: &GlobalControls) -> Color {
+      global_controls.color_picker.color()
    }
 }
 
@@ -140,7 +138,12 @@ impl Tool for BrushTool {
    /// Handles input and drawing to the paint canvas with the brush.
    fn process_paint_canvas_input(
       &mut self,
-      ToolArgs { ui, input, .. }: ToolArgs,
+      ToolArgs {
+         ui,
+         input,
+         global_controls,
+         ..
+      }: ToolArgs,
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) {
@@ -180,13 +183,14 @@ impl Tool for BrushTool {
          viewport.to_viewport_space(b, ui.size()),
       );
       if self.state != BrushState::Idle {
+         let color = Self::color(global_controls);
          self.stroke(
             ui,
             paint_canvas,
             a,
             b,
             match self.state {
-               BrushState::Drawing => self.color(),
+               BrushState::Drawing => color,
                BrushState::Erasing => Color::TRANSPARENT,
                _ => unreachable!(),
             },
@@ -194,12 +198,7 @@ impl Tool for BrushTool {
          );
          self.stroke_points.push(Stroke {
             color: match self.state {
-               BrushState::Drawing => (
-                  self.color().r,
-                  self.color().g,
-                  self.color().b,
-                  self.color().a,
-               ),
+               BrushState::Drawing => (color.r, color.g, color.b, color.a),
                BrushState::Erasing => (0, 0, 0, 0),
                _ => unreachable!(),
             },
@@ -289,6 +288,7 @@ impl Tool for BrushTool {
          assets,
          wm,
          canvas_view,
+         global_controls,
          ..
       }: ToolArgs,
    ) {
@@ -299,7 +299,7 @@ impl Tool for BrushTool {
          &mut picker_window,
          (AlignH::Left, AlignV::Bottom),
       );
-      self.color_picker.process(
+      global_controls.color_picker.process(
          ui,
          input,
          ColorPickerArgs {
@@ -353,14 +353,14 @@ impl Tool for BrushTool {
       );
    }
 
-   fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
+   fn network_send(&mut self, net: Net, global_controls: &GlobalControls) -> anyhow::Result<()> {
       if !self.stroke_points.is_empty() {
          let packet = Packet::Stroke(self.stroke_points.drain(..).collect());
          net.send(self, PeerId::BROADCAST, packet)?;
       }
       if self.mouse_position != self.previous_mouse_position {
          let Point { x, y } = self.mouse_position;
-         let Color { r, g, b, a } = self.color();
+         let Color { r, g, b, a } = Self::color(global_controls);
          net.send(
             self,
             PeerId::BROADCAST,

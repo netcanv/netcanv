@@ -15,7 +15,7 @@ use netcanv_renderer::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::app::paint;
+use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::clipboard;
@@ -576,7 +576,7 @@ impl Tool for SelectionTool {
             assets.colors.text,
             Some((label_width(&assets.sans, &anchor), AlignH::Center)),
          );
-         let size = format!("{:.0} × {:.0}", rect.width(), rect.height());
+         let size = format!("{:.0} \u{00d7} {:.0}", rect.width(), rect.height());
          ui.icon(&self.icons.rectangle, assets.colors.text, Some(icon_size));
          ui.horizontal_label(
             &assets.sans,
@@ -588,7 +588,7 @@ impl Tool for SelectionTool {
    }
 
    /// Sends out packets containing the selection rectangle.
-   fn network_send(&mut self, net: Net) -> anyhow::Result<()> {
+   fn network_send(&mut self, net: Net, _: &GlobalControls) -> anyhow::Result<()> {
       self.send_rect_packet(&net)?;
       Ok(())
    }

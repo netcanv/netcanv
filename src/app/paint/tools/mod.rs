@@ -19,6 +19,8 @@ use netcanv_protocol::relay::PeerId;
 pub use selection::*;
 use serde::Serialize;
 
+use super::GlobalControls;
+
 pub trait Tool {
    /// Returns the name of the tool.
    ///
@@ -112,7 +114,7 @@ pub trait Tool {
    fn process_bottom_bar(&mut self, _args: ToolArgs) {}
 
    /// Called when network packets should be sent.
-   fn network_send(&mut self, _net: Net) -> anyhow::Result<()> {
+   fn network_send(&mut self, _net: Net, _global_controls: &GlobalControls) -> anyhow::Result<()> {
       Ok(())
    }
 
@@ -191,6 +193,7 @@ pub struct ToolArgs<'ui, 'input, 'state> {
    pub ui: &'ui mut Ui,
    pub input: &'input mut Input,
    pub wm: &'state mut WindowManager,
+   pub global_controls: &'state mut GlobalControls,
    pub canvas_view: &'state View,
    pub assets: &'state Assets,
    pub net: Net<'state>,
