@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       println!("cargo:rerun-if-changed=src/assets/about/about.toml");
       println!("cargo:rerun-if-changed=src/assets/about/about.hbs");
       println!("cargo:rerun-if-changed=Cargo.toml");
-      println!("cargo:rustc-env=NETCANV_BUILD_ABOUT=1");
+      println!("cargo:rustc-cfg=netcanv_has_about_html");
 
       let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
       let about_dir = src_dir.join("assets").join("about");

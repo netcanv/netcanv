@@ -20,10 +20,15 @@ const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
 const MONOSPACE_TTF: &[u8] = include_bytes!("assets/fonts/RobotoMono-Medium.ttf");
 
-const ABOUT_HTML: Option<&[u8]> = if option_env!("NETCANV_BUILD_ABOUT").is_some() {
-   Some(include_bytes!(concat!(env!("OUT_DIR"), "/about.html")))
-} else {
-   None
+const ABOUT_HTML: Option<&[u8]> = {
+   #[cfg(netcanv_has_about_html)]
+   {
+      Some(include_bytes!(concat!(env!("OUT_DIR"), "/about.html")))
+   }
+   #[cfg(not(netcanv_has_about_html))]
+   {
+      None
+   }
 };
 
 const CHEVRON_RIGHT_SVG: &[u8] = include_bytes!("assets/icons/chevron-right.svg");
