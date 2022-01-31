@@ -216,17 +216,26 @@ impl State {
          Dimension::Constant(room_id_height + separator_height + actions_height);
    }
 
-   /// Sets the current tool to the one with the provided ID.
-   fn set_current_tool(&mut self, renderer: &mut Backend, tool: ToolId) {
-      let previous_tool = self.toolbar.current_tool();
-      if tool != previous_tool {
+   fn tool_switch_events(
+      &mut self,
+      renderer: &mut Backend,
+      previous_tool: ToolId,
+      current_tool: ToolId,
+   ) {
+      if previous_tool != current_tool {
          self.toolbar.with_tool(previous_tool, |tool| {
             tool.deactivate(renderer, &mut self.paint_canvas);
          });
-         catch!(self.peer.send_select_tool(self.toolbar.clone_tool_name(tool)));
-         self.toolbar.set_current_tool(tool);
-         self.toolbar.with_current_tool(|tool| tool.activate());
+         catch!(self.peer.send_select_tool(self.toolbar.clone_tool_name(current_tool)));
+         self.toolbar.with_tool(current_tool, |tool| tool.activate());
       }
+   }
+
+   /// Sets the current tool to the one with the provided ID.
+   fn set_current_tool(&mut self, renderer: &mut Backend, tool: ToolId) {
+      let previous_tool = self.toolbar.current_tool();
+      self.toolbar.set_current_tool(tool);
+      self.tool_switch_events(renderer, previous_tool, tool);
    }
 
    /// Requests a chunk download from the host.
@@ -856,15 +865,19 @@ impl AppState for State {
       self.process_canvas(ui, input);
 
       // Bars
-      self.toolbar.process(
+      let toolbar_process = self.toolbar.process(
          ui,
          input,
          ToolbarArgs {
             wm: &mut self.wm,
             parent_view: &view::layout::padded(&self.canvas_view, 8.0),
             colors: &self.assets.colors.toolbar,
+            paint_canvas: &mut self.paint_canvas,
          },
       );
+      if let Some((previous_tool, current_tool)) = toolbar_process.switched {
+         self.tool_switch_events(ui.render(), previous_tool, current_tool);
+      }
       // Draw windows over the toolbar, but below the bottom bar.
       self.wm.process(ui, input, &self.assets);
       self.process_bar(ui, input);

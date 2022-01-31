@@ -11,6 +11,7 @@ use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::common::{ControlFlow, RectMath};
 use crate::config::{self, config, ToolbarPosition};
+use crate::paint_canvas::PaintCanvas;
 use crate::ui::view::{self, Dimensions, View};
 use crate::ui::wm::{HitTest, WindowContent, WindowContentArgs, WindowId, WindowManager};
 use crate::ui::{Button, ButtonArgs, ButtonState, Input, Ui, UiElements, UiInput};
@@ -22,6 +23,7 @@ pub struct ToolbarArgs<'a> {
    pub wm: &'a mut WindowManager,
    pub colors: &'a ToolbarColors,
    pub parent_view: &'a View,
+   pub paint_canvas: &'a mut PaintCanvas,
 }
 
 /// The toolbar's color scheme.
@@ -172,8 +174,9 @@ impl Toolbar {
          wm,
          colors,
          parent_view,
+         paint_canvas,
       }: ToolbarArgs,
-   ) {
+   ) -> ToolbarProcessResult {
       let position = Self::position();
 
       // Update the view's size and lay it out in the parent view.
@@ -221,11 +224,21 @@ impl Toolbar {
 
       // Update the shared data to reflect the current state of the toolbar.
       let data = wm.window_data_mut(&self.window);
+      let mut switched = None;
       if let Some(tool_id) = data.selected_tool.take() {
+         let previous_tool = self.current_tool;
          self.current_tool = tool_id;
+         switched = Some((previous_tool, self.current_tool));
       }
       data.current_tool = self.current_tool;
+
+      ToolbarProcessResult { switched }
    }
+}
+
+#[must_use]
+pub struct ToolbarProcessResult {
+   pub switched: Option<(ToolId, ToolId)>,
 }
 
 /// The shared data between the toolbar window and the toolbar supervisor.
