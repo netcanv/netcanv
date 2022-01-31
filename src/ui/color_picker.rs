@@ -29,6 +29,7 @@ pub struct ColorPickerArgs<'a, 'wm> {
    pub assets: &'a Assets,
    pub wm: &'wm mut WindowManager,
    pub window_view: View,
+   pub show_eraser: bool,
 }
 
 /// Icons used by the color picker.
@@ -90,6 +91,17 @@ impl ColorPicker {
       }
    }
 
+   /// Sets the currently selected color to the given (paws) color.
+   pub fn set_color(&mut self, color: Color) {
+      self.eraser = false;
+      self.palette[self.index] = Srgb::from_color(color).into();
+   }
+
+   /// Sets whether the eraser is enabled.
+   pub fn set_eraser(&mut self, enabled: bool) {
+      self.eraser = enabled;
+   }
+
    /// Processes the color palette.
    pub fn process(
       &mut self,
@@ -99,13 +111,14 @@ impl ColorPicker {
          assets,
          wm,
          window_view,
+         show_eraser,
       }: ColorPickerArgs,
    ) {
       // The palette.
       for (index, &color) in self.palette.clone().iter().enumerate() {
          ui.push((16.0, ui.height()), Layout::Freeform);
          let y_offset = ui.height()
-            * if index == self.index {
+            * if index == self.index && !self.eraser {
                0.5
             } else if ui.hover(&input) {
                0.7
@@ -114,6 +127,7 @@ impl ColorPicker {
             };
          let y_offset = y_offset.round();
          if ui.hover(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
+            self.eraser = false;
             if self.index == index {
                self.toggle_picker_window(ui, wm, window_view.clone());
             }
@@ -127,29 +141,33 @@ impl ColorPicker {
          });
          ui.pop();
       }
-      ui.space(16.0);
 
-      if Button::with_icon(
-         ui,
-         input,
-         ButtonArgs {
-            height: ui.height(),
-            colors: ButtonColors::toggle(
-               self.eraser,
-               &assets.colors.toolbar_button,
-               &assets.colors.selected_toolbar_button,
-            ),
-            corner_radius: 0.0,
-         },
-         &assets.icons.color_picker.eraser,
-      )
-      .clicked()
-      {
-         self.eraser = !self.eraser;
+      if show_eraser {
+         ui.space(16.0);
+         if Button::with_icon(
+            ui,
+            input,
+            ButtonArgs {
+               height: ui.height(),
+               colors: ButtonColors::toggle(
+                  self.eraser,
+                  &assets.colors.toolbar_button,
+                  &assets.colors.selected_toolbar_button,
+               ),
+               corner_radius: 0.0,
+            },
+            &assets.icons.color_picker.eraser,
+         )
+         .clicked()
+         {
+            self.eraser = !self.eraser;
+         }
       }
 
       // The palette color, saved from what was chosen in the picker window.
-      self.palette[self.index] = self.window_data(wm).color;
+      if self.window_data(wm).color_changed {
+         self.palette[self.index] = self.window_data(wm).color;
+      }
 
       if let Some(window_id) = self.window_id() {
          // If the window is unpinned, move it to the window_view.
@@ -225,6 +243,7 @@ enum ColorSpace {
 struct PickerWindowData {
    color: AnyColor,
    color_space: ColorSpace,
+   color_changed: bool,
 }
 
 struct PickerWindow {
@@ -306,6 +325,7 @@ impl PickerWindow {
       PickerWindowData {
          color: default_color,
          color_space: ColorSpace::Oklab,
+         color_changed: false,
       }
    }
 
@@ -782,8 +802,10 @@ impl WindowContent for PickerWindow {
 
       ui.pop();
 
+      data.color_changed = false;
       if data.color != self.previous_color || data.color_space != self.previous_color_space {
          self.update_widgets(data);
+         data.color_changed = true;
       }
       self.previous_color = data.color;
       self.previous_color_space = data.color_space;

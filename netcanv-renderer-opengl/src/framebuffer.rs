@@ -94,19 +94,19 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       (self.width, self.height)
    }
 
-   fn upload_rgba(&mut self, mut position: (u32, u32), size: (u32, u32), pixels: &[u8]) {
+   fn upload_rgba(&mut self, (x, mut y): (u32, u32), (width, height): (u32, u32), pixels: &[u8]) {
       let mut flipped = pixels.to_owned();
-      flip_vertically(size.0 as usize, size.1 as usize, 4, &mut flipped);
-      position.1 = self.height - position.1 - size.1;
+      flip_vertically(width as usize, height as usize, 4, &mut flipped);
+      y = self.height - y - height;
       unsafe {
          self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
          self.gl.tex_sub_image_2d(
             glow::TEXTURE_2D,
             0,
-            position.0 as i32,
-            position.1 as i32,
-            size.0 as i32,
-            size.1 as i32,
+            x as i32,
+            y as i32,
+            width as i32,
+            height as i32,
             glow::RGBA,
             glow::UNSIGNED_BYTE,
             PixelUnpackData::Slice(&flipped),
@@ -114,9 +114,9 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       }
    }
 
-   fn download_rgba(&self, dest: &mut [u8]) {
+   fn download_rgba(&self, (x, y): (u32, u32), (width, height): (u32, u32), dest: &mut [u8]) {
       assert!(
-         dest.len() == self.width as usize * self.height as usize * 4,
+         dest.len() == width as usize * height as usize * 4,
          "destination buffer's size must match the framebuffer texture's size"
       );
       // Read the pixels.
@@ -124,10 +124,10 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
          let mut gl_state = self.gl_state.borrow_mut();
          let previous_framebuffer = gl_state.framebuffer(&self.gl, Some(self.framebuffer));
          self.gl.read_pixels(
-            0,
-            0,
-            self.width as i32,
-            self.height as i32,
+            x as i32,
+            (self.height - y - height) as i32,
+            width as i32,
+            height as i32,
             glow::RGBA,
             glow::UNSIGNED_BYTE,
             PixelPackData::Slice(dest),
@@ -135,7 +135,7 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
          gl_state.framebuffer(&self.gl, previous_framebuffer);
       }
       // Fleeeeeeeeeeep them 'round.
-      flip_vertically(self.width as usize, self.height as usize, 4, dest);
+      flip_vertically(width as usize, height as usize, 4, dest);
    }
 
    fn set_scaling_filter(&mut self, filter: ScalingFilter) {

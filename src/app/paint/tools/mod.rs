@@ -6,17 +6,21 @@ use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::net::peer::Peer;
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::view::View;
+use crate::ui::view::{self, View};
 use crate::ui::wm::WindowManager;
-use crate::ui::{Input, Ui};
+use crate::ui::{ColorPicker, Input, Ui};
 use crate::viewport::Viewport;
 
 mod brush;
+mod eyedropper;
 mod selection;
 
 pub use brush::*;
-use netcanv_protocol::relay::PeerId;
+pub use eyedropper::*;
+use netcanv_renderer::paws::{AlignH, AlignV};
 pub use selection::*;
+
+use netcanv_protocol::relay::PeerId;
 use serde::Serialize;
 
 use super::GlobalControls;
@@ -197,6 +201,19 @@ pub struct ToolArgs<'ui, 'input, 'state> {
    pub canvas_view: &'state View,
    pub assets: &'state Assets,
    pub net: Net<'state>,
+}
+
+impl<'ui, 'input, 'state> ToolArgs<'ui, 'input, 'state> {
+   /// Returns the view of the color picker window.
+   pub fn color_picker_window_view(&self) -> View {
+      let mut picker_window = ColorPicker::picker_window_view();
+      view::layout::align(
+         &view::layout::padded(&self.canvas_view, 16.0),
+         &mut picker_window,
+         (AlignH::Left, AlignV::Bottom),
+      );
+      picker_window
+   }
 }
 
 /// The action that should be taken after [`Tool::global_key_shortcut`] is called.

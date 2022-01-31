@@ -121,7 +121,7 @@ impl BrushTool {
    }
 
    /// Returns the color currently selected in the color picker.
-   pub fn color(global_controls: &GlobalControls) -> Color {
+   fn color(global_controls: &GlobalControls) -> Color {
       global_controls.color_picker.color()
    }
 }
@@ -306,6 +306,7 @@ impl Tool for BrushTool {
             assets,
             wm,
             window_view: picker_window,
+            show_eraser: true,
          },
       );
       ui.space(16.0);

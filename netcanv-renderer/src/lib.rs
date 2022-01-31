@@ -91,7 +91,7 @@ pub trait Framebuffer {
    fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]);
 
    /// Downloads RGBA pixels from the framebuffer into a buffer.
-   fn download_rgba(&self, dest: &mut [u8]);
+   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]);
 
    /// Sets the filter used for upscaling and downscaling the framebuffer.
    fn set_scaling_filter(&mut self, filter: ScalingFilter);

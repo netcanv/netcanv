@@ -728,7 +728,7 @@ impl Selection {
          let rect = rect.sort();
          if let Some(capture) = self.capture.as_ref() {
             let mut image = RgbaImage::new(rect.width() as u32, rect.height() as u32);
-            capture.download_rgba(&mut image);
+            capture.download_rgba((0, 0), capture.size(), &mut image);
             return Some(image);
          }
       }

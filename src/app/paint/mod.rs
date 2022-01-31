@@ -34,7 +34,7 @@ use crate::viewport::Viewport;
 
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
-use self::tools::{BrushTool, Net, SelectionTool, ToolArgs};
+use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -195,6 +195,7 @@ impl State {
    fn register_tools(&mut self, renderer: &mut Backend) {
       let _selection = self.toolbar.add_tool(SelectionTool::new(renderer));
       let brush = self.toolbar.add_tool(BrushTool::new(renderer));
+      let _eyedropper = self.toolbar.add_tool(EyedropperTool::new(renderer));
 
       // Set the default tool to the brush.
       self.toolbar.set_current_tool(brush);

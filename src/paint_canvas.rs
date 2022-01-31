@@ -11,7 +11,7 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
-use netcanv_renderer::paws::{vector, Point, Rect, Renderer, Vector};
+use netcanv_renderer::paws::{vector, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 
@@ -86,7 +86,7 @@ impl Chunk {
             Self::SURFACE_SIZE.1,
             Rgba([0, 0, 0, 0]),
          );
-         self.framebuffer.download_rgba(&mut image_buffer);
+         self.framebuffer.download_rgba((0, 0), self.framebuffer.size(), &mut image_buffer);
          self.image_data.set(Some(image_buffer.clone()));
          image_buffer
       }
@@ -389,6 +389,25 @@ impl PaintCanvas {
             vector(framebuffer.width() as f32, framebuffer.height() as f32),
          );
       });
+   }
+
+   /// Downloads the color of the pixel at the provided position.
+   pub fn get_pixel(&self, position: (i64, i64)) -> Color {
+      if let Some(chunk) = self.chunks.get(&(
+         (position.0.div_euclid(Chunk::SURFACE_SIZE.0 as i64)) as i32,
+         (position.1.div_euclid(Chunk::SURFACE_SIZE.1 as i64)) as i32,
+      )) {
+         let position_in_chunk = (
+            (position.0.rem_euclid(Chunk::SURFACE_SIZE.0 as i64)) as u32,
+            (position.1.rem_euclid(Chunk::SURFACE_SIZE.1 as i64)) as u32,
+         );
+         let mut rgba = [0u8; 4];
+         chunk.framebuffer.download_rgba(position_in_chunk, (1, 1), &mut rgba);
+         let [r, g, b, a] = rgba;
+         Color { r, g, b, a }
+      } else {
+         Color::TRANSPARENT
+      }
    }
 
    /// Draws the paint canvas onto the given Skia canvas.
