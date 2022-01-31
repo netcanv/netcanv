@@ -50,7 +50,8 @@ impl Toolbar {
       let content = ToolbarWindow::new();
       let tools = Rc::new(RefCell::new(Vec::new()));
       let data = ToolbarData::new(Rc::clone(&tools));
-      let window = wm.open_window(view, content, data).set_pinned(true).finish();
+      let window =
+         wm.open_window(view, content, data).set_pinned(true).set_focusable(false).finish();
       Self {
          window,
          tools,

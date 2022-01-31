@@ -34,6 +34,8 @@ struct Window {
    dragging: bool,
    /// Whether the window is the currently focused window.
    focused: bool,
+   /// Whether the window _can_ be focused.
+   focusable: bool,
 }
 
 /// A window manager.
@@ -125,6 +127,7 @@ impl WindowManager {
             close_requested: false,
             dragging: false,
             focused: true,
+            focusable: true,
          },
       );
       self.stack.push(id);
@@ -149,6 +152,8 @@ impl WindowManager {
    /// Processes windows inside the window manager.
    pub fn process(&mut self, ui: &mut Ui, input: &mut Input, assets: &Assets) {
       let mut steal_focus = None;
+      let mouse_clicked = input.global_mouse_button_just_pressed(MouseButton::Left)
+         || input.global_mouse_button_just_pressed(MouseButton::Right);
       for stack_index in 0..self.stack.len() {
          let window_id = self.stack[stack_index];
          let window = self.windows.get_mut(&window_id).unwrap();
@@ -174,10 +179,8 @@ impl WindowManager {
          view.end(ui);
 
          // Steal focus if the window was clicked.
-         let mouse_clicked = input.global_mouse_button_just_pressed(MouseButton::Left)
-            || input.global_mouse_button_just_pressed(MouseButton::Right);
          let mouse_clicked_inside_window = mouse_clicked && window.view.has_mouse(input);
-         if mouse_clicked_inside_window {
+         if window.focusable && mouse_clicked_inside_window {
             steal_focus = Some(window_id);
          }
 
@@ -220,6 +223,10 @@ impl WindowManager {
       // Do note that _no_ window could have been clicked.
       if let Some(window_id) = steal_focus {
          self.steal_focus(window_id);
+      } else if mouse_clicked {
+         for (_, window) in &mut self.windows {
+            window.focused = false;
+         }
       }
    }
 }
@@ -232,9 +239,22 @@ pub struct WindowSettings<'wm, D> {
 }
 
 impl<'wm, D> WindowSettings<'wm, D> {
+   fn window(&mut self) -> &mut Window {
+      self.wm.windows.get_mut(&self.id).unwrap()
+   }
+
    /// Sets the pinned state of a window.
-   pub fn set_pinned(self, pinned: bool) -> Self {
-      self.wm.windows.get_mut(&self.id).unwrap().pinned = pinned;
+   pub fn set_pinned(mut self, pinned: bool) -> Self {
+      self.window().pinned = pinned;
+      self
+   }
+
+   /// Sets whether a window is focusable or not.
+   pub fn set_focusable(mut self, focusable: bool) -> Self {
+      self.window().focusable = focusable;
+      if !focusable {
+         self.window().focused = false;
+      }
       self
    }
 

@@ -280,6 +280,7 @@ impl Tool for SelectionTool {
       viewport: &Viewport,
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.paste) == (true, true) {
+         println!("pasting image from clipboard");
          self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
          return KeyShortcutAction::SwitchToThisTool;
       }
