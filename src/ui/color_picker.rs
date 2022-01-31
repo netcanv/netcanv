@@ -167,6 +167,8 @@ impl ColorPicker {
       // The palette color, saved from what was chosen in the picker window.
       if self.window_data(wm).color_changed {
          self.palette[self.index] = self.window_data(wm).color;
+      } else {
+         self.window_data_mut(wm).color = self.palette[self.index];
       }
 
       if let Some(window_id) = self.window_id() {
