@@ -50,6 +50,7 @@ const WINDOW_PIN_SVG: &[u8] = include_bytes!("assets/icons/window-pin.svg");
 const WINDOW_PINNED_SVG: &[u8] = include_bytes!("assets/icons/window-pinned.svg");
 
 const BANNER_BASE_SVG: &[u8] = include_bytes!("assets/banner/base.svg");
+#[allow(unused)] // This is unused in debug mode, which doesn't render the long shadow.
 const BANNER_SHADOW_PNG: &[u8] = include_bytes!("assets/banner/shadow.png");
 
 /// Returns whether the licensing information page is available.
@@ -165,6 +166,7 @@ impl Assets {
    }
 
    /// Loads an image file into a texture.
+   #[allow(unused)] // This is unused in debug mode, which doesn't render the long shadow.
    fn load_image(renderer: &mut Backend, data: &[u8]) -> Image {
       let image = image::io::Reader::new(Cursor::new(data))
          .with_guessed_format()
