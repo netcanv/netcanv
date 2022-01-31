@@ -872,7 +872,6 @@ impl AppState for State {
             wm: &mut self.wm,
             parent_view: &view::layout::padded(&self.canvas_view, 8.0),
             colors: &self.assets.colors.toolbar,
-            paint_canvas: &mut self.paint_canvas,
          },
       );
       if let Some((previous_tool, current_tool)) = toolbar_process.switched {

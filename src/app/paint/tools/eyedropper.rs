@@ -1,18 +1,17 @@
-use netcanv_renderer::paws::{point, AlignH, AlignV, Color, Layout, Point};
+use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout, Point};
 use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::common::ColorMath;
 use crate::paint_canvas::PaintCanvas;
-use crate::ui::{view, ButtonState, ColorPicker, ColorPickerArgs};
+use crate::ui::{view, ColorPicker, ColorPickerArgs};
 use crate::viewport::Viewport;
 
 use super::{Tool, ToolArgs};
 
 pub struct EyedropperTool {
    icon: Image,
-   position: Point,
    color: Color,
 }
 
@@ -24,7 +23,6 @@ impl EyedropperTool {
             renderer,
             include_bytes!("../../../assets/icons/eyedropper.svg"),
          ),
-         position: point(0.0, 0.0),
          color: Color::BLACK,
       }
    }
