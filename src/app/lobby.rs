@@ -67,7 +67,7 @@ pub struct State {
 impl State {
    const BANNER_HEIGHT: f32 = 128.0;
    const MENU_HEIGHT: f32 = 294.0;
-   const STATUS_HEIGHT: f32 = 48.0;
+   const STATUS_HEIGHT: f32 = 8.0 + 48.0;
 
    const VIEW_BOX_PADDING: f32 = 16.0;
    const VIEW_BOX_WIDTH: f32 = 388.0 + Self::VIEW_BOX_PADDING * 2.0;
@@ -378,11 +378,8 @@ impl State {
    }
 
    /// Processes the status report box.
-   fn process_status(&mut self, ui: &mut Ui) {
+   fn process_status(&mut self, ui: &mut Ui, input: &mut Input) {
       if !matches!(self.status, Status::None) {
-         ui.push((ui.width(), 48.0), Layout::Horizontal);
-         ui.fill_rounded(self.assets.colors.panel, 8.0);
-         ui.pad(16.0);
          let (icon, color, text) = match &self.status {
             Status::None => unreachable!(),
             Status::Info(text) => (
@@ -396,6 +393,18 @@ impl State {
                text,
             ),
          };
+         let width = 56.0 + self.assets.sans.text_width(text);
+         let width = width.max(ui.width());
+         let width = (width / 2.0).ceil() * 2.0;
+         let mut status_view = View::new((width, 48.0));
+         view::layout::align(
+            &self.main_view,
+            &mut status_view,
+            (AlignH::Center, AlignV::Bottom),
+         );
+         status_view.begin(ui, input, Layout::Horizontal);
+         ui.fill_rounded(self.assets.colors.panel, 8.0);
+         ui.pad(16.0);
          ui.icon(icon, color, Some(vector(ui.height(), ui.height())));
          ui.space(8.0);
          ui.push((ui.remaining_width(), ui.height()), Layout::Freeform);
@@ -406,7 +415,7 @@ impl State {
             (AlignH::Left, AlignV::Middle),
          );
          ui.pop();
-         ui.pop();
+         status_view.end(ui);
       }
    }
 
@@ -556,7 +565,7 @@ impl AppState for State {
       ui.pop();
 
       ui.space(40.0);
-      self.process_status(ui);
+      self.process_status(ui, input);
 
       ui.pop();
 
@@ -572,12 +581,12 @@ impl AppState for State {
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;
-         log::error!("(bus) {}", error);
+         log::error!("{}", error);
          self.status = Status::Error(error.to_string());
       }
       for message in &bus::retrieve_all::<Fatal>() {
          let fatal = message.consume().0;
-         log::error!("(bus) fatal: {}", fatal);
+         log::error!("fatal: {}", fatal);
          self.status = Status::Error(format!("Fatal: {}", fatal));
       }
    }
