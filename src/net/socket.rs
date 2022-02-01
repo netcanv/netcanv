@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use netcanv_protocol::relay;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{lookup_host, tcp, TcpStream};
+use tokio::net::{lookup_host, tcp, TcpSocket, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
@@ -38,8 +38,11 @@ impl SocketSystem {
       let addresses = Self::resolve_address_with_default_port(&hostname)
          .await
          .context("Could not resolve address. Are you sure the IP is correct?")?;
-      let (mut read_half, write_half) =
-         TcpStream::connect(addresses.as_slice()).await?.into_split();
+      println!("resolved addresses: {:?}", addresses);
+      let stream = TcpStream::connect(addresses.as_slice()).await?;
+      stream.set_nodelay(true)?;
+      let (mut read_half, write_half) = stream.into_split();
+      println!("connection established");
 
       let version = read_half.read_u32().await?;
       if version < relay::PROTOCOL_VERSION {
@@ -47,19 +50,23 @@ impl SocketSystem {
       } else if version > relay::PROTOCOL_VERSION {
          anyhow::bail!("Relay version is too new. Try updating your client");
       }
+      println!("version ok");
 
+      println!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = oneshot::channel();
       let recv_join_handle = self.runtime.spawn(async move {
          Socket::receiver_loop(read_half, recv_tx, recv_quit_rx).await.unwrap()
       });
 
+      println!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
       let (send_quit_tx, send_quit_rx) = oneshot::channel();
       let send_join_handle = self.runtime.spawn(async move {
          Socket::sender_loop(write_half, send_rx, send_quit_rx).await.unwrap()
       });
 
+      println!("registering quitters");
       let mut quitters = self.quitters.lock().await;
       quitters.push(SocketQuitter {
          quit_send: send_quit_tx,
@@ -76,6 +83,7 @@ impl SocketSystem {
 
    /// Initiates a new connection to the relay at the given hostname (IP address or DNS domain).
    pub fn connect(self: Arc<Self>, hostname: String) -> oneshot::Receiver<anyhow::Result<Socket>> {
+      println!("connecting to {}", hostname);
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
       self.runtime.spawn(async move {
