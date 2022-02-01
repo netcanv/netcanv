@@ -6,6 +6,7 @@ mod tools;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use netcanv_protocol::relay::PeerId;
@@ -24,6 +25,7 @@ use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
 use crate::net::peer::{self, Peer};
+use crate::net::socket::SocketSystem;
 use crate::net::timer::Timer;
 use crate::paint_canvas::*;
 use crate::ui::view::layout::DirectionV;
@@ -70,6 +72,7 @@ pub struct GlobalControls {
 /// The paint app state.
 pub struct State {
    assets: Assets,
+   _socket_system: Arc<SocketSystem>,
 
    paint_canvas: PaintCanvas,
 
@@ -130,6 +133,7 @@ impl State {
    /// Creates a new paint state.
    pub fn new(
       assets: Assets,
+      socket_system: Arc<SocketSystem>,
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
@@ -137,6 +141,7 @@ impl State {
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
+         _socket_system: socket_system,
 
          paint_canvas: PaintCanvas::new(),
 

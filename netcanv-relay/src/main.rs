@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
+use anyhow::Context;
 use nanorand::Rng;
 use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
 use structopt::StructOpt;
@@ -189,7 +190,9 @@ impl State {
 
 async fn send_packet(stream: &Mutex<OwnedWriteHalf>, packet: Packet) -> anyhow::Result<()> {
    let encoded = bincode::serialize(&packet)?;
-   stream.lock().await.write_all(&encoded).await?;
+   let mut stream = stream.lock().await;
+   stream.write_u32(u32::try_from(encoded.len()).context("packet is too big")?).await?;
+   stream.write_all(&encoded).await?;
    Ok(())
 }
 
@@ -203,12 +206,21 @@ async fn broadcast_packet(
    packet: Packet,
 ) -> anyhow::Result<()> {
    let packet = bincode::serialize(&packet)?;
+   u32::try_from(packet.len()).context("packet is too big")?;
+
    let peers_in_room = state.rooms.peers_in_room(room_id);
    let mut result = Ok(());
    if let Some(iter) = peers_in_room {
       for peer_id in iter {
          if peer_id != sender_id {
             if let Some(stream) = state.peers.peer_streams.get(&peer_id) {
+               match stream.lock().await.write_u32(packet.len() as u32).await {
+                  Ok(()) => (),
+                  Err(error) => {
+                     result = Err(error);
+                     continue;
+                  }
+               }
                match stream.lock().await.write_all(&packet).await {
                   Ok(()) => (),
                   Err(error) => result = Err(error),
