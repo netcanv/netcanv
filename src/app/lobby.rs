@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use native_dialog::FileDialog;
-use netcanv_protocol::relay::{self, RoomId};
+use netcanv_protocol::relay::RoomId;
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 use netcanv_renderer::{Font, Image as ImageTrait, RenderBackend};
 use nysa::global as bus;
@@ -45,7 +45,7 @@ pub struct State {
    assets: Assets,
 
    // Subsystems
-   relay_socksys: Arc<SocketSystem<relay::Packet>>,
+   socket_system: Arc<SocketSystem>,
 
    // UI elements
    nickname_field: TextField,
@@ -80,7 +80,7 @@ impl State {
       Self {
          assets,
 
-         relay_socksys: SocketSystem::new(),
+         socket_system: SocketSystem::new(),
 
          nickname_field,
          relay_field,
@@ -275,7 +275,7 @@ impl State {
             || room_id_field.done()
          {
             match Self::join_room(
-               &self.relay_socksys,
+               Arc::clone(&self.socket_system),
                self.nickname_field.text(),
                self.relay_field.text(),
                self.room_id_field.text(),
@@ -327,7 +327,7 @@ impl State {
             () => {
                self.status = Status::Info("Connecting…".into());
                match Self::host_room(
-                  &self.relay_socksys,
+                  Arc::clone(&self.socket_system),
                   self.nickname_field.text(),
                   self.relay_field.text(),
                ) {
@@ -473,17 +473,17 @@ impl State {
 
    /// Establishes a connection to the relay and hosts a new room.
    fn host_room(
-      socksys: &Arc<SocketSystem<relay::Packet>>,
+      socket_system: Arc<SocketSystem>,
       nickname: &str,
       relay_addr_str: &str,
    ) -> Result<Peer, Status> {
       Self::validate_nickname(nickname)?;
-      Ok(Peer::host(socksys, nickname, relay_addr_str)?)
+      Ok(Peer::host(socket_system, nickname, relay_addr_str))
    }
 
    /// Establishes a connection to the relay and joins an existing room.
    fn join_room(
-      socksys: &Arc<SocketSystem<relay::Packet>>,
+      socket_system: Arc<SocketSystem>,
       nickname: &str,
       relay_addr_str: &str,
       room_id_str: &str,
@@ -495,7 +495,7 @@ impl State {
       }
       Self::validate_nickname(nickname)?;
       let room_id = RoomId::try_from(room_id_str)?;
-      Ok(Peer::join(socksys, nickname, relay_addr_str, room_id)?)
+      Ok(Peer::join(socket_system, nickname, relay_addr_str, room_id))
    }
 
    /// Saves the user configuration.
@@ -597,7 +597,13 @@ impl AppState for State {
       if connected {
          let mut this = *self;
          this.save_config();
-         match paint::State::new(this.assets, this.peer.unwrap(), this.image_file, renderer) {
+         match paint::State::new(
+            this.assets,
+            this.socket_system,
+            this.peer.unwrap(),
+            this.image_file,
+            renderer,
+         ) {
             Ok(state) => Box::new(state),
             Err((error, assets)) => {
                bus::push(Fatal(error));

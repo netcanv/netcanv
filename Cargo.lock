@@ -1060,6 +1060,7 @@ dependencies = [
  "strum",
  "tempfile",
  "tiny-skia",
+ "tokio",
  "toml",
  "url",
  "usvg",

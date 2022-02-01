@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::mem;
 use std::sync::Arc;
 
 use netcanv_protocol::relay::{PeerId, RoomId};
 use netcanv_protocol::{client as cl, relay};
 use nysa::global as bus;
+use tokio::sync::oneshot;
 
-use super::socket::{self, ConnectionToken, Socket, SocketSystem};
+use super::socket::{Socket, SocketSystem};
 use crate::common::Fatal;
 use crate::token::Token;
 
@@ -55,29 +55,23 @@ pub enum MessageKind {
    },
 }
 
-/// The state of a Peer connection.
-#[derive(Debug)]
-enum State {
-   // No connection has been established yet. We're waiting on the socket subsystem to give us a socket.
-   WaitingForRelay { token: ConnectionToken },
-   // We're connected to the relay, but haven't obtained the other person's connection
-   // details yet.
-   ConnectedToRelay,
-   // We're connected to a host.
-   InRoom,
-}
-
 /// Another person in the same room.
 pub struct Mate {
    pub nickname: String,
    pub tool: Option<String>,
 }
 
+enum State {
+   WaitingForRelay(oneshot::Receiver<anyhow::Result<Socket>>),
+   ConnectedToRelay,
+   InRoom,
+}
+
 /// A connection to the relay.
 pub struct Peer {
    token: PeerToken,
    state: State,
-   relay_socket: Option<Socket<relay::Packet>>,
+   relay_socket: Option<Socket>,
 
    is_host: bool,
 
@@ -92,17 +86,11 @@ static PEER_TOKEN: Token = Token::new(0);
 
 impl Peer {
    /// Host a new room on the given relay server.
-   pub fn host(
-      socksys: &Arc<SocketSystem<relay::Packet>>,
-      nickname: &str,
-      relay_address: &str,
-   ) -> anyhow::Result<Self> {
-      let connection_token = socksys.connect(relay_address.to_owned(), relay::DEFAULT_PORT)?;
-      Ok(Self {
+   pub fn host(socket_system: Arc<SocketSystem>, nickname: &str, relay_address: &str) -> Self {
+      let socket_receiver = socket_system.connect(relay_address.to_owned());
+      Self {
          token: PeerToken(PEER_TOKEN.next()),
-         state: State::WaitingForRelay {
-            token: connection_token,
-         },
+         state: State::WaitingForRelay(socket_receiver),
          relay_socket: None,
          is_host: true,
          nickname: nickname.into(),
@@ -110,22 +98,20 @@ impl Peer {
          peer_id: None,
          mates: HashMap::new(),
          host: None,
-      })
+      }
    }
 
    /// Join an existing room on the given relay server.
    pub fn join(
-      socksys: &Arc<SocketSystem<relay::Packet>>,
+      socket_system: Arc<SocketSystem>,
       nickname: &str,
       relay_address: &str,
       room_id: RoomId,
-   ) -> anyhow::Result<Self> {
-      let connection_token = socksys.connect(relay_address.to_owned(), relay::DEFAULT_PORT)?;
-      Ok(Self {
+   ) -> Self {
+      let socket_receiver = socket_system.connect(relay_address.to_owned());
+      Self {
          token: PeerToken(PEER_TOKEN.next()),
-         state: State::WaitingForRelay {
-            token: connection_token,
-         },
+         state: State::WaitingForRelay(socket_receiver),
          relay_socket: None,
          is_host: false,
          nickname: nickname.into(),
@@ -133,12 +119,7 @@ impl Peer {
          peer_id: None,
          mates: HashMap::new(),
          host: None,
-      })
-   }
-
-   /// Returns the connection token of the relay socket.
-   fn relay_token(&self) -> Option<ConnectionToken> {
-      self.relay_socket.as_ref().map(|socket| socket.token())
+      }
    }
 
    /// Sends a relay packet to the currently connected relay, or fails if there's no
@@ -146,9 +127,9 @@ impl Peer {
    fn send_to_relay(&self, packet: relay::Packet) -> anyhow::Result<()> {
       match &self.state {
          State::ConnectedToRelay | State::InRoom => {
-            self.relay_socket.as_ref().unwrap().send(packet)
+            self.relay_socket.as_ref().unwrap().send(packet)?;
          }
-         _ => anyhow::bail!("cannot send packet: not connected to the relay"),
+         _ => anyhow::bail!("Cannot send packet: not connected to the relay"),
       }
       Ok(())
    }
@@ -159,7 +140,7 @@ impl Peer {
          State::InRoom => {
             self.send_to_relay(relay::Packet::Relay(to, bincode::serialize(&packet)?))?;
          }
-         _ => anyhow::bail!("cannot send packet: not connected to the host"),
+         _ => anyhow::bail!("Cannot send packet: not connected to the host"),
       }
       Ok(())
    }
@@ -174,16 +155,15 @@ impl Peer {
 
    /// Checks the message bus for any established connections.
    fn poll_for_new_connections(&mut self) -> anyhow::Result<()> {
-      for message in &bus::retrieve_all::<socket::Connected<relay::Packet>>() {
-         match self.state {
-            // If a new connection was established and we're trying to connect to a relay, check if
-            // the connection is ours.
-            State::WaitingForRelay { token } if message.token == token => {
-               let socket = message.consume().socket;
-               self.connected_to_relay(socket)?;
+      match &mut self.state {
+         // If a new connection was established and we're trying to connect to a relay, check if
+         // the connection is ours.
+         State::WaitingForRelay(socket) => {
+            if let Ok(socket) = socket.try_recv() {
+               self.connected_to_relay(socket?)?;
             }
-            _ => (),
          }
+         _ => (),
       }
       Ok(())
    }
@@ -193,34 +173,26 @@ impl Peer {
    ///
    /// In the process, sends the appropriate packet to the relay - whether to host or join a
    /// room.
-   fn connected_to_relay(&mut self, socket: Socket<relay::Packet>) -> anyhow::Result<()> {
-      let state = mem::replace(&mut self.state, State::ConnectedToRelay);
+   fn connected_to_relay(&mut self, socket: Socket) -> anyhow::Result<()> {
+      self.state = State::ConnectedToRelay;
       println!("connected to relay");
       self.relay_socket = Some(socket);
-      match state {
-         State::WaitingForRelay { .. } => self.send_to_relay(if self.is_host {
-            relay::Packet::Host
-         } else {
-            relay::Packet::Join(self.room_id.unwrap())
-         }),
-         _ => unreachable!(),
-      }
+      self.send_to_relay(if self.is_host {
+         relay::Packet::Host
+      } else {
+         relay::Packet::Join(self.room_id.unwrap())
+      })?;
+      Ok(())
    }
 
    /// Polls for any incoming packets.
    fn poll_for_incoming_packets(&mut self) -> anyhow::Result<()> {
-      for message in &bus::retrieve_all::<socket::IncomingPacket<relay::Packet>>() {
-         match &self.state {
-            // Ignore incoming packets if no socket connection is open yet.
-            // These packets may be coming in, but they're not for us.
-            State::WaitingForRelay { .. } => (),
-            State::ConnectedToRelay | State::InRoom
-               if Some(message.token) == self.relay_token() =>
-            {
-               let packet = message.consume().data;
+      match &self.state {
+         State::WaitingForRelay(_) => (),
+         State::ConnectedToRelay | State::InRoom => {
+            while let Some(packet) = self.relay_socket.as_mut().unwrap().recv() {
                self.relay_packet(packet)?;
             }
-            _ => (),
          }
       }
       Ok(())
