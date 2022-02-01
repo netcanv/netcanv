@@ -256,10 +256,10 @@ impl Tool for BrushTool {
          renderer.pop();
          // Render their nickname.
          let nickname = net.peer_name(peer_id).unwrap();
-         let text_color = if peer.color.brightness() > 0.5 {
-            Color::BLACK
-         } else {
+         let text_color = if peer.color.brightness() < 0.5 || peer.color.a == 0 {
             Color::WHITE
+         } else {
+            Color::BLACK
          };
          let thickness = vector(radius, radius);
          let text_rect = Rect::new(
@@ -268,7 +268,13 @@ impl Tool for BrushTool {
          );
          let padding = vector(4.0, 4.0);
          let text_rect = Rect::new(text_rect.position, text_rect.size + padding * 2.0);
-         renderer.fill(text_rect, peer.color, 2.0);
+         renderer.push();
+         if peer.color.a == 0 {
+            renderer.set_blend_mode(BlendMode::Invert);
+            renderer.outline(text_rect, Color::WHITE, 2.0, 2.0);
+         } else {
+            renderer.fill(text_rect, peer.color, 2.0);
+         }
          renderer.text(
             text_rect,
             &assets.sans,
@@ -276,6 +282,7 @@ impl Tool for BrushTool {
             text_color,
             (AlignH::Center, AlignV::Middle),
          );
+         renderer.pop();
       }
    }
 

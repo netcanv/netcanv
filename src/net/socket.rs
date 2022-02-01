@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use netcanv_protocol::relay;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{lookup_host, tcp, TcpSocket, TcpStream};
+use tokio::net::{lookup_host, tcp, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
