@@ -345,6 +345,9 @@ async fn read_packets(
       // This is a bit of a workaround because bincode can't read from async streams.
       let packet: Packet = {
          let packet_size = read.read_u32().await?;
+         if packet_size > relay::MAX_PACKET_SIZE {
+            anyhow::bail!("packet is too big");
+         }
          let mut buffer = vec![0; packet_size as usize];
          read.read_exact(&mut buffer).await?;
          bincode::deserialize(&buffer)?

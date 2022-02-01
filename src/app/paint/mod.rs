@@ -482,8 +482,6 @@ impl State {
       // Note that elements in HorizontalRev go from right to left rather than left to right.
       //
 
-      // TODO: move this to an overflow menu
-
       ui.push((ui.remaining_width(), ui.height()), Layout::HorizontalRev);
 
       if Button::with_icon(

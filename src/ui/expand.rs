@@ -37,8 +37,9 @@ pub struct ExpandArgs<'a, 'b, 'c, 'd> {
 
 /// The result result of processing an `Expand`.
 pub struct ExpandProcessResult {
-   expanded: bool,
+   is_expanded: bool,
    just_clicked: bool,
+   just_expanded: bool,
 }
 
 impl Expand {
@@ -61,8 +62,9 @@ impl Expand {
       }: ExpandArgs,
    ) -> ExpandProcessResult {
       let mut result = ExpandProcessResult {
-         expanded: false,
+         is_expanded: self.expanded,
          just_clicked: false,
+         just_expanded: false,
       };
       let icon = if self.expanded {
          &icons.shrink
@@ -111,13 +113,15 @@ impl Expand {
          if input.action(MouseButton::Left) == (true, ButtonState::Released) {
             self.expanded = !self.expanded;
             result.just_clicked = true;
+            if self.expanded {
+               result.just_expanded = true;
+            }
          }
       }
       ui.pop();
 
       ui.pop();
 
-      result.expanded = self.expanded;
       result
    }
 }
@@ -126,7 +130,7 @@ impl ExpandProcessResult {
    /// Shrinks the other Expand if the Expand this `ExpandProcessResult` is a result of was just
    /// expanded.
    pub fn mutually_exclude(self, other: &mut Expand) -> Self {
-      if self.expanded && self.just_clicked {
+      if self.just_expanded {
          other.expanded = false;
       }
       self
@@ -134,6 +138,6 @@ impl ExpandProcessResult {
 
    /// Returns whether the Expand is expanded.
    pub fn expanded(self) -> bool {
-      self.expanded
+      self.is_expanded
    }
 }

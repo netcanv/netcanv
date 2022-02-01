@@ -110,6 +110,9 @@ impl Socket {
       len: usize,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
    ) -> anyhow::Result<()> {
+      if len > relay::MAX_PACKET_SIZE as usize {
+         anyhow::bail!("Packet is too big");
+      }
       let mut bytes = vec![0; len as usize];
       read_half.read_exact(&mut bytes).await?;
       let packet = bincode::deserialize(&bytes).context("Invalid packet")?;

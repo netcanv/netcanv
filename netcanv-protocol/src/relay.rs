@@ -13,6 +13,11 @@ pub const DEFAULT_PORT: u16 = 62137;
 // The version is incremented whenever breaking changes are introduced in the protocol.
 pub const PROTOCOL_VERSION: u32 = 0;
 
+/// The maximum length of a serialized packet. If a packet is larger than this amount, the
+/// connection shall be closed.
+// 1 MiB for now, should be plenty. Chunk packets are never larger than 128 KiB.
+pub const MAX_PACKET_SIZE: u32 = 1 * 1024 * 1024;
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
    // ---
@@ -81,7 +86,6 @@ impl TryFrom<&str> for RoomId {
 
 impl Display for RoomId {
    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-      // Should not panic, as room ID is always
       match std::str::from_utf8(&self.0) {
          Ok(s) => write!(f, "{}", s),
          Err(_) => write!(f, "<invalid UTF-8>"),
@@ -95,7 +99,7 @@ impl fmt::Debug for RoomId {
    }
 }
 
-/// An error returned in case the room ID is not made up of characters.
+/// An error returned in case the room ID is not made up of 6 characters.
 #[derive(Debug)]
 pub struct RoomIdError(());
 
