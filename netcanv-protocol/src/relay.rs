@@ -11,7 +11,7 @@ pub const DEFAULT_PORT: u16 = 62137;
 ///
 /// This is sent by the server upon connecting, before any packets.
 // The version is incremented whenever breaking changes are introduced in the protocol.
-pub const PROTOCOL_VERSION: u32 = 0;
+pub const PROTOCOL_VERSION: u32 = 1;
 
 /// The maximum length of a serialized packet. If a packet is larger than this amount, the
 /// connection shall be closed.
