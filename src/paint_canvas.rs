@@ -146,7 +146,7 @@ impl Chunk {
    /// This may return `None` if the chunk is empty.
    fn png_data(&mut self, sub: usize) -> Option<&[u8]> {
       if self.png_data[sub].is_none() {
-         eprintln!("  png data doesn't exist, encoding");
+         log::debug!("png data doesn't exist, encoding");
          let chunk_image = self.download_image();
          for sub in 0..Self::SUB_COUNT {
             let (x, y) = Self::sub_screen_position(sub);
@@ -164,7 +164,7 @@ impl Chunk {
             ) {
                Ok(()) => (),
                Err(error) => {
-                  eprintln!("error while encoding: {}", error);
+                  log::error!("error while encoding: {}", error);
                   continue;
                }
             }
@@ -180,7 +180,7 @@ impl Chunk {
    /// Semantics are similar to [`Chunk::png_data`].
    fn webp_data(&mut self, sub: usize) -> Option<&[u8]> {
       if self.webp_data[sub].is_none() {
-         eprintln!("  webp data doesn't exist, encoding");
+         log::info!("webp data doesn't exist, encoding");
          let chunk_image = self.download_image();
          for sub in 0..Self::SUB_COUNT {
             let (x, y) = Self::sub_screen_position(sub);
@@ -208,13 +208,13 @@ impl Chunk {
       let png_data = self.png_data(sub)?;
       let png_size = png_data.len();
       if png_size > Self::MAX_PNG_SIZE {
-         eprintln!(
-            "  png data is larger than {} KiB, fetching webp data instead",
+         log::debug!(
+            "png data is larger than {} KiB, fetching webp data instead",
             Self::MAX_PNG_SIZE / 1024
          );
          let webp_data = self.webp_data(sub)?;
-         eprintln!(
-            "  the webp data came out to be {}% the size of the png data",
+         log::debug!(
+            "the webp data came out to be {}% the size of the png data",
             (webp_data.len() as f32 / png_size as f32 * 100.0) as i32
          );
          Some(webp_data)
@@ -229,11 +229,11 @@ impl Chunk {
    fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
       let decoder = PngDecoder::new(Cursor::new(data))?;
       if decoder.color_type() != ColorType::Rgba8 {
-         eprintln!("received non-RGBA image data, ignoring");
+         log::warn!("received non-RGBA image data, ignoring");
          return Ok(());
       }
       if decoder.dimensions() != Self::SIZE {
-         eprintln!(
+         log::error!(
             "received chunk with invalid size. got: {:?}, expected: {:?}",
             decoder.dimensions(),
             Self::SIZE
@@ -425,7 +425,7 @@ impl PaintCanvas {
 
    /// Returns the image data for the chunk at the given position, if it's not empty.
    pub fn network_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
-      eprintln!(
+      log::info!(
          "fetching data for network transmission from chunk {:?}",
          chunk_position
       );
@@ -446,7 +446,7 @@ impl PaintCanvas {
 
    /// Saves the entire paint to a PNG file.
    fn save_as_png(&self, path: &Path) -> anyhow::Result<()> {
-      eprintln!("saving png {:?}", path);
+      log::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
       for (chunk_position, _) in &self.chunks {
          left = left.min(chunk_position.0);
@@ -454,24 +454,27 @@ impl PaintCanvas {
          right = right.max(chunk_position.0);
          bottom = bottom.max(chunk_position.1);
       }
-      eprintln!(
+      log::debug!(
          "left={}, top={}, right={}, bottom={}",
-         left, top, right, bottom
+         left,
+         top,
+         right,
+         bottom
       );
       if left == i32::MAX {
          anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
       }
       let width = ((right - left + 1) * Chunk::SURFACE_SIZE.0 as i32) as u32;
       let height = ((bottom - top + 1) * Chunk::SURFACE_SIZE.1 as i32) as u32;
-      eprintln!("size: {:?}", (width, height));
+      log::debug!("size: {:?}", (width, height));
       let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
       for (chunk_position, chunk) in &self.chunks {
-         eprintln!("writing chunk {:?}", chunk_position);
+         log::debug!("writing chunk {:?}", chunk_position);
          let pixel_position = (
             (Chunk::SURFACE_SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
             (Chunk::SURFACE_SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
          );
-         eprintln!("   - pixel position: {:?}", pixel_position);
+         log::debug!("   - pixel position: {:?}", pixel_position);
 
          let chunk_image = chunk.download_image();
          let mut sub_image = image.sub_image(
@@ -483,7 +486,7 @@ impl PaintCanvas {
          sub_image.copy_from(&chunk_image, 0, 0)?;
       }
       image.save(path)?;
-      eprintln!("image {:?} saved successfully", path);
+      log::debug!("image {:?} saved successfully", path);
       Ok(())
    }
 
@@ -504,7 +507,7 @@ impl PaintCanvas {
 
    /// Clears the existing `.netcanv` save at the given path.
    fn clear_netcanv_save(path: &Path) -> anyhow::Result<()> {
-      eprintln!("clearing older netcanv save {:?}", path);
+      log::info!("clearing older netcanv save {:?}", path);
       for entry in std::fs::read_dir(path)? {
          let path = entry?.path();
          if path.is_file() {
@@ -521,14 +524,14 @@ impl PaintCanvas {
    /// Saves the paint canvas as a `.netcanv` canvas.
    fn save_as_netcanv(&mut self, path: &Path) -> anyhow::Result<()> {
       // create the directory
-      eprintln!("creating or reusing existing directory ({:?})", path);
+      log::info!("creating or reusing existing directory ({:?})", path);
       let path = Self::validate_netcanv_save_path(path)?;
       std::fs::create_dir_all(path.clone())?; // use create_dir_all to not fail if the dir already exists
       if self.filename != Some(path.clone()) {
          Self::clear_netcanv_save(&path)?;
       }
       // save the canvas.toml manifest
-      eprintln!("saving canvas.toml");
+      log::info!("saving canvas.toml");
       let canvas_toml = CanvasToml {
          version: CANVAS_TOML_VERSION,
       };
@@ -537,18 +540,18 @@ impl PaintCanvas {
          toml::to_string(&canvas_toml)?,
       )?;
       // save all the chunks
-      eprintln!("saving chunks");
+      log::info!("saving chunks");
       for (master_position, chunk) in &mut self.chunks {
          for sub in 0..Chunk::SUB_COUNT {
             if !chunk.non_empty_subs[sub] || chunk.saved_subs[sub] {
                continue;
             }
             let chunk_position = Chunk::chunk_position(*master_position, sub);
-            eprintln!("  chunk {:?}", chunk_position);
+            log::debug!("chunk {:?}", chunk_position);
             let saved = if let Some(png_data) = chunk.png_data(sub) {
                let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
                let filepath = path.join(Path::new(&filename));
-               eprintln!("  saving to {:?}", filepath);
+               log::debug!("saving to {:?}", filepath);
                std::fs::write(filepath, png_data)?;
                true
             } else {
@@ -594,10 +597,10 @@ impl PaintCanvas {
       use ::image::io::Reader as ImageReader;
 
       let image = ImageReader::open(path)?.decode()?.into_rgba8();
-      eprintln!("image size: {:?}", image.dimensions());
+      log::debug!("image size: {:?}", image.dimensions());
       let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
       let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
-      eprintln!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+      log::debug!("n. chunks: x={}, y={}", chunks_x, chunks_y);
       let (origin_x, origin_y) = Self::extract_chunk_origin_from_filename(path).unwrap_or((0, 0));
 
       for y in 0..chunks_y {
@@ -614,9 +617,12 @@ impl PaintCanvas {
                Chunk::SIZE.0 * chunk_position.0 as u32,
                Chunk::SIZE.1 * chunk_position.1 as u32,
             );
-            eprintln!(
+            log::debug!(
                "plopping chunk at {:?} (master {:?} sub {:?} pxp {:?})",
-               offset_chunk_position, master_chunk, sub_chunk, pixel_position
+               offset_chunk_position,
+               master_chunk,
+               sub_chunk,
+               pixel_position
             );
             let right = (pixel_position.0 + Chunk::SIZE.0).min(image.width() - 1);
             let bottom = (pixel_position.1 + Chunk::SIZE.1).min(image.height() - 1);
@@ -662,23 +668,23 @@ impl PaintCanvas {
    /// Loads chunks from a `.netcanv` directory.
    fn load_from_netcanv(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
       let path = Self::validate_netcanv_save_path(path)?;
-      eprintln!("loading canvas from {:?}", path);
+      log::info!("loading canvas from {:?}", path);
       // load canvas.toml
-      eprintln!("loading canvas.toml");
+      log::debug!("loading canvas.toml");
       let canvas_toml_path = path.join(Path::new("canvas.toml"));
       let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(&canvas_toml_path)?)?;
       if canvas_toml.version < CANVAS_TOML_VERSION {
          anyhow::bail!("Version mismatch in canvas.toml. Try updating your client");
       }
       // load chunks
-      eprintln!("loading chunks");
+      log::debug!("loading chunks");
       for entry in std::fs::read_dir(path.clone())? {
          let path = entry?.path();
          if path.is_file() && path.extension() == Some(OsStr::new("png")) {
             if let Some(position_osstr) = path.file_stem() {
                if let Some(position_str) = position_osstr.to_str() {
                   let chunk_position = Self::parse_chunk_position(&position_str)?;
-                  eprintln!("chunk {:?}", chunk_position);
+                  log::debug!("chunk {:?}", chunk_position);
                   let master = Chunk::master(chunk_position);
                   let sub = Chunk::sub(chunk_position);
                   self.ensure_chunk_exists(renderer, master);

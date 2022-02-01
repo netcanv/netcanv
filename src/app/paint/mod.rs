@@ -703,7 +703,7 @@ impl State {
             self.chunk_downloads.clear();
          }
          MessageKind::ChunkPositions(positions) => {
-            eprintln!("received {} chunk positions", positions.len());
+            log::debug!("received {} chunk positions", positions.len());
             for chunk_position in positions {
                self.chunk_downloads.insert(chunk_position, ChunkDownload::NotDownloaded);
             }
@@ -715,7 +715,7 @@ impl State {
                .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
          }
          MessageKind::Chunks(chunks) => {
-            eprintln!("received {} chunks", chunks.len());
+            log::debug!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
                self.canvas_data(ui, chunk_position, &image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
@@ -742,7 +742,7 @@ impl State {
             previous_tool,
             tool,
          } => {
-            eprintln!("{:?} selected tool {}", address, tool);
+            log::debug!("{:?} selected tool {}", address, tool);
             // Deselect the old tool.
             if let Some(tool) = previous_tool {
                if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
@@ -759,7 +759,7 @@ impl State {
             }
             // Select the new tool.
             if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
-               eprintln!(" - valid tool - {:?}", tool_id);
+               log::debug!(" - valid tool - {:?}", tool_id);
                self.toolbar.with_tool(tool_id, |tool| {
                   tool.network_peer_activate(Net::new(&mut self.peer), address)
                })?;

@@ -280,7 +280,7 @@ impl Tool for SelectionTool {
       viewport: &Viewport,
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.paste) == (true, true) {
-         println!("pasting image from clipboard");
+         log::info!("pasting image from clipboard");
          self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
          return KeyShortcutAction::SwitchToThisTool;
       }
@@ -607,7 +607,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       peer_id: PeerId,
    ) -> anyhow::Result<()> {
-      println!("selection {:?} deactivate", peer_id);
+      log::debug!("selection {:?} deactivated", peer_id);
       if let Some(peer) = self.peer_selections.get_mut(&peer_id) {
          peer.selection.deselect(renderer, paint_canvas);
       }

@@ -38,11 +38,11 @@ impl SocketSystem {
       let addresses = Self::resolve_address_with_default_port(&hostname)
          .await
          .context("Could not resolve address. Are you sure the IP is correct?")?;
-      println!("resolved addresses: {:?}", addresses);
+      log::info!("resolved addresses: {:?}", addresses);
       let stream = TcpStream::connect(addresses.as_slice()).await?;
       stream.set_nodelay(true)?;
       let (mut read_half, write_half) = stream.into_split();
-      println!("connection established");
+      log::info!("connection established");
 
       let version = read_half.read_u32().await?;
       if version < relay::PROTOCOL_VERSION {
@@ -50,23 +50,23 @@ impl SocketSystem {
       } else if version > relay::PROTOCOL_VERSION {
          anyhow::bail!("Relay version is too new. Try updating your client");
       }
-      println!("version ok");
+      log::debug!("version ok");
 
-      println!("starting receiver loop");
+      log::debug!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = oneshot::channel();
       let recv_join_handle = self.runtime.spawn(async move {
          Socket::receiver_loop(read_half, recv_tx, recv_quit_rx).await.unwrap()
       });
 
-      println!("starting sender loop");
+      log::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
       let (send_quit_tx, send_quit_rx) = oneshot::channel();
       let send_join_handle = self.runtime.spawn(async move {
          Socket::sender_loop(write_half, send_rx, send_quit_rx).await.unwrap()
       });
 
-      println!("registering quitters");
+      log::debug!("registering quitters");
       let mut quitters = self.quitters.lock().await;
       quitters.push(SocketQuitter {
          quit_send: send_quit_tx,
@@ -83,7 +83,7 @@ impl SocketSystem {
 
    /// Initiates a new connection to the relay at the given hostname (IP address or DNS domain).
    pub fn connect(self: Arc<Self>, hostname: String) -> oneshot::Receiver<anyhow::Result<Socket>> {
-      println!("connecting to {}", hostname);
+      log::info!("connecting to {}", hostname);
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
       self.runtime.spawn(async move {
@@ -97,7 +97,7 @@ impl SocketSystem {
 
 impl Drop for SocketSystem {
    fn drop(&mut self) {
-      println!("cleaning up remaining sockets");
+      log::info!("cleaning up remaining sockets");
       self.runtime.block_on(async {
          let mut handles = self.quitters.lock().await;
          for handle in handles.drain(..) {
@@ -137,7 +137,7 @@ impl Socket {
          tokio::select! {
             biased;
             Ok(_) = &mut quit => {
-               println!("receiver: received quit signal");
+               log::info!("receiver: received quit signal");
                break;
             },
             len = read_half.read_u32() => Self::read_packet(
@@ -148,7 +148,7 @@ impl Socket {
             else => (),
          }
       }
-      println!("receiver loop done");
+      log::info!("receiver loop done");
       Ok(())
    }
 
@@ -171,7 +171,7 @@ impl Socket {
          tokio::select! {
             biased;
             Ok(_) = &mut quit => {
-               println!("sender: received quit signal");
+               log::info!("sender: received quit signal");
                break;
             },
             packet = input.recv() => {
@@ -184,7 +184,7 @@ impl Socket {
             else => (),
          }
       }
-      println!("sender loop done");
+      log::info!("sender loop done");
       Ok(())
    }
 

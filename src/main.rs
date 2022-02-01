@@ -51,6 +51,7 @@ use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::ui::view::{self, View};
 use backend::Backend;
+use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
 
@@ -77,10 +78,16 @@ mod viewport;
 use app::*;
 use assets::*;
 use config::config;
+use simple_logger::SimpleLogger;
 use ui::{Input, Ui};
 
 fn inner_main() -> anyhow::Result<()> {
+   // Set up logging.
+   SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
+   log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
+
    // Set up the winit event loop and open the window.
+   log::debug!("opening window");
    let event_loop = EventLoop::new();
    let window_builder = {
       let b = WindowBuilder::new()
@@ -100,20 +107,24 @@ fn inner_main() -> anyhow::Result<()> {
    let color_scheme = ColorScheme::from(config().ui.color_scheme);
 
    // Build the render backend.
+   log::debug!("initializing render backend");
    let renderer = Backend::new(window_builder, &event_loop)?;
    // Also, initialize the clipboard because we now have a window handle.
    match clipboard::init() {
       Ok(_) => (),
-      Err(error) => eprintln!("failed to initialize clipboard: {}", error),
+      Err(error) => log::error!("failed to initialize clipboard: {}", error),
    }
 
    // Build the UI.
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
+   log::debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme);
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
+
+   log::debug!("init done! starting event loop");
 
    event_loop.run(move |event, _, control_flow| {
       *control_flow = ControlFlow::Poll;
@@ -145,7 +156,7 @@ fn inner_main() -> anyhow::Result<()> {
                });
                app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
-               Err(error) => eprintln!("render error: {}", error),
+               Err(error) => log::error!("render error: {}", error),
                _ => (),
             }
             input.finish_frame(ui.window());
@@ -183,7 +194,7 @@ fn main() {
             "An error occured:\n{}\n\nIf you think this is a bug, please file an issue on GitHub. https://github.com/liquidev/netcanv",
             payload
          );
-         eprintln!("inner_main() returned with an Err:\n{}", payload);
+         log::error!("inner_main() returned with an Err:\n{}", payload);
          MessageDialog::new()
             .set_title("NetCanv - Error")
             .set_text(&message)

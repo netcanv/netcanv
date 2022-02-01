@@ -176,7 +176,7 @@ impl Peer {
    /// room.
    fn connected_to_relay(&mut self, socket: Socket) -> anyhow::Result<()> {
       self.state = State::ConnectedToRelay;
-      println!("connected to relay");
+      log::info!("connected to relay");
       self.relay_socket = Some(socket);
       self.send_to_relay(if self.is_host {
          relay::Packet::Host
@@ -203,14 +203,14 @@ impl Peer {
    fn relay_packet(&mut self, packet: relay::Packet) -> anyhow::Result<()> {
       match packet {
          relay::Packet::RoomCreated(room_id, peer_id) => {
-            eprintln!("got free room ID: {:?}", room_id);
+            log::info!("got free room ID: {:?}", room_id);
             self.room_id = Some(room_id);
             self.peer_id = Some(peer_id);
             self.state = State::InRoom;
             bus::push(Connected { peer: self.token });
          }
          relay::Packet::Joined { peer_id, host_id } => {
-            eprintln!("got host ID: {:?}", host_id);
+            log::info!("got host ID: {:?}", host_id);
             self.peer_id = Some(peer_id);
             self.host = Some(host_id);
             self.state = State::InRoom;
@@ -260,14 +260,14 @@ impl Peer {
          // 0.1.0
          // -----
          cl::Packet::Hello(nickname) => {
-            eprintln!("{} ({:?}) joined", nickname, author);
+            log::info!("{} ({:?}) joined", nickname, author);
             self.send_to_client(author, cl::Packet::HiThere(self.nickname.clone()))?;
             self.send_to_client(author, cl::Packet::Version(cl::PROTOCOL_VERSION))?;
             self.add_mate(author, nickname.clone());
             self.send_message(MessageKind::Joined(nickname, author));
          }
          cl::Packet::HiThere(nickname) => {
-            eprintln!("{} ({:?}) is in the room", nickname, author);
+            log::info!("{} ({:?}) is in the room", nickname, author);
             self.add_mate(author, nickname);
          }
          cl::Packet::Reserved1 => (),
@@ -337,7 +337,7 @@ impl Peer {
    /// Requests chunk data from the host.
    pub fn download_chunks(&self, positions: Vec<(i32, i32)>) -> anyhow::Result<()> {
       assert!(self.host.is_some(), "only non-hosts can download chunks");
-      eprintln!("downloading {} chunks from the host", positions.len());
+      log::info!("downloading {} chunks from the host", positions.len());
       // The host should be available at this point, as the connection has been established.
       self.send_to_client(self.host.unwrap(), cl::Packet::GetChunks(positions))
    }

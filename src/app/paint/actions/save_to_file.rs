@@ -50,9 +50,9 @@ impl Action for SaveToFileAction {
    fn process(&mut self, ActionArgs { paint_canvas, .. }: ActionArgs) -> anyhow::Result<()> {
       if paint_canvas.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
       {
-         eprintln!("autosaving chunks");
+         log::info!("autosaving chunks");
          paint_canvas.save(None)?;
-         eprintln!("autosave complete");
+         log::info!("autosave complete");
          self.last_autosave = Instant::now();
       }
       Ok(())

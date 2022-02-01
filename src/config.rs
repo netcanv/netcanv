@@ -83,6 +83,7 @@ impl UserConfig {
    fn load_or_create() -> anyhow::Result<Self> {
       let config_dir = Self::config_dir();
       let config_file = Self::path();
+      log::info!("loading config from {:?}", config_file);
       std::fs::create_dir_all(config_dir)?;
       if !config_file.is_file() {
          let config = Self::default();
@@ -93,8 +94,8 @@ impl UserConfig {
          let config: Self = match toml::from_str(&file) {
             Ok(config) => config,
             Err(error) => {
-               eprintln!("error while deserializing config file: {}", error);
-               eprintln!("falling back to default config");
+               log::error!("error while deserializing config file: {}", error);
+               log::error!("falling back to default config");
                return Ok(Self::default());
             }
          };
