@@ -787,6 +787,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "itoa"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
+
+[[package]]
 name = "jni-sys"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1095,9 +1101,11 @@ dependencies = [
  "anyhow",
  "bincode",
  "bytemuck",
+ "log",
  "nanorand",
  "netcanv-protocol",
  "serde",
+ "simple_logger",
  "structopt",
  "tokio",
 ]
@@ -1240,6 +1248,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "num_threads"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97ba99ba6393e2c3734791401b66902d981cb03bf190af674ca69949b6d5fb15"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -1575,6 +1592,7 @@ dependencies = [
  "atty",
  "colored",
  "log",
+ "time",
  "winapi",
 ]
 
@@ -1790,6 +1808,24 @@ dependencies = [
  "miniz_oxide 0.4.4",
  "weezl",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "004cbc98f30fa233c61a38bc77e96a9106e65c88f2d3bef182ae952027e5753d"
+dependencies = [
+ "itoa",
+ "libc",
+ "num_threads",
+ "time-macros",
+]
+
+[[package]]
+name = "time-macros"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25eb0ca3468fc0acc11828786797f6ef9aa1555e4a211a60d64cc8e4d1be47d6"
 
 [[package]]
 name = "tiny-skia"

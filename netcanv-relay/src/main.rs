@@ -6,8 +6,10 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use anyhow::Context;
+use log::LevelFilter;
 use nanorand::Rng;
 use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
+use simple_logger::SimpleLogger;
 use structopt::StructOpt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -379,7 +381,7 @@ async fn handle_connection(
    address: SocketAddr,
    state: Arc<Mutex<State>>,
 ) -> anyhow::Result<()> {
-   eprintln!("{} has connected", address);
+   log::info!("{} has connected", address);
    stream.set_nodelay(true)?;
 
    let (read, mut write) = stream.into_split();
@@ -388,10 +390,10 @@ async fn handle_connection(
 
    match read_packets(read, write, address, &state).await {
       Ok(()) => (),
-      Err(error) => eprintln!("[{}] connection error: {}", address, error),
+      Err(error) => log::error!("[{}] connection error: {}", address, error),
    }
 
-   eprintln!("tearing down {}'s connection", address);
+   log::info!("tearing down {}'s connection", address);
    {
       let mut state = state.lock().await;
       let peer_id =
@@ -418,6 +420,7 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+   SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
    let options = Options::from_args();
 
    let listener = TcpListener::bind((
@@ -427,8 +430,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
    .await?;
    let state = Arc::new(Mutex::new(State::new()));
 
-   eprintln!("NetCanv Relay server");
-   eprintln!("listening on {}", listener.local_addr()?);
+   log::info!(
+      "NetCanv Relay server {} (protocol version {})",
+      env!("CARGO_PKG_VERSION"),
+      relay::PROTOCOL_VERSION
+   );
+   log::info!("listening on {}", listener.local_addr()?);
 
    loop {
       let (socket, address) = listener.accept().await?;
