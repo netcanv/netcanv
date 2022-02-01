@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 /// The default relay port.
 pub const DEFAULT_PORT: u16 = 62137;
 
+/// The version of the protocol.
+///
+/// This is sent by the server upon connecting, before any packets.
+// The version is incremented whenever breaking changes are introduced in the protocol.
+pub const PROTOCOL_VERSION: u32 = 0;
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
    // ---

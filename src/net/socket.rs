@@ -38,7 +38,15 @@ impl SocketSystem {
       let addresses = Self::resolve_address_with_default_port(&hostname)
          .await
          .context("Could not resolve address. Are you sure the IP is correct?")?;
-      let (read_half, write_half) = TcpStream::connect(addresses.as_slice()).await?.into_split();
+      let (mut read_half, write_half) =
+         TcpStream::connect(addresses.as_slice()).await?.into_split();
+
+      let version = read_half.read_u32().await?;
+      if version < relay::PROTOCOL_VERSION {
+         anyhow::bail!("Relay version is too old. Try downgrading your client");
+      } else if version > relay::PROTOCOL_VERSION {
+         anyhow::bail!("Relay version is too new. Try updating your client");
+      }
 
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = oneshot::channel();

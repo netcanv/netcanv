@@ -378,7 +378,9 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
    eprintln!("{} has connected", address);
    stream.set_nodelay(true)?;
-   let (read, write) = stream.into_split();
+
+   let (read, mut write) = stream.into_split();
+   write.write_u32(relay::PROTOCOL_VERSION).await?;
    let write = Arc::new(Mutex::new(write));
 
    match read_packets(read, write, address, &state).await {

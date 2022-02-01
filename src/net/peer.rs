@@ -160,7 +160,8 @@ impl Peer {
          // the connection is ours.
          State::WaitingForRelay(socket) => {
             if let Ok(socket) = socket.try_recv() {
-               self.connected_to_relay(socket?)?;
+               let socket = catch!(socket, as Fatal, return Ok(()));
+               self.connected_to_relay(socket)?;
             }
          }
          _ => (),
