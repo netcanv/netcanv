@@ -128,7 +128,7 @@ impl ColorPicker {
          let y_offset = y_offset.round();
          if ui.hover(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.eraser = false;
-            if self.index == index {
+            if self.index == index && !self.eraser {
                self.toggle_picker_window(ui, wm, window_view.clone());
             }
             self.index = index;
