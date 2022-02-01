@@ -541,7 +541,7 @@ impl State {
             ButtonArgs {
                height: ui.height(),
                colors: &self.assets.colors.action_button,
-               corner_radius: 0.0,
+               corner_radius: 4.0,
             },
             &self.assets.icons.navigation.copy,
          )
@@ -623,7 +623,7 @@ impl State {
                ButtonArgs {
                   height: 32.0,
                   colors: &self.assets.colors.action_button,
-                  corner_radius: 2.0,
+                  corner_radius: 4.0,
                },
                Some(ui.width()),
                |ui| {

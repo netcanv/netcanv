@@ -81,7 +81,7 @@ impl ContextMenu {
       }
       if self.is_open {
          self.view.begin(ui, input, Layout::Vertical);
-         ui.fill_rounded(args.colors.background, 4.0);
+         ui.fill_rounded(args.colors.background, 8.0);
       }
       self.just_opened = false;
       ContextMenuBeginResult {
