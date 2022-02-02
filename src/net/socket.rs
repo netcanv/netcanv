@@ -10,6 +10,8 @@ use tokio::net::{lookup_host, tcp, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
+use crate::common::Fatal;
+
 /// Runtime for managing active connections.
 pub struct SocketSystem {
    runtime: tokio::runtime::Runtime,
@@ -189,8 +191,8 @@ impl Socket {
    }
 
    /// Sends a packet to the receiving end of the socket.
-   pub fn send(&self, packet: relay::Packet) -> anyhow::Result<()> {
-      Ok(self.tx.send(packet).context("Attempt to write to a closed socket")?)
+   pub fn send(&self, packet: relay::Packet) {
+      catch!(self.tx.send(packet).context("The relay has disconnected"), as Fatal)
    }
 
    /// Receives packets from the sending end of the socket.

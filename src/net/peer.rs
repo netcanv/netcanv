@@ -127,7 +127,7 @@ impl Peer {
    fn send_to_relay(&self, packet: relay::Packet) -> anyhow::Result<()> {
       match &self.state {
          State::ConnectedToRelay | State::InRoom => {
-            self.relay_socket.as_ref().unwrap().send(packet)?;
+            self.relay_socket.as_ref().unwrap().send(packet);
          }
          _ => anyhow::bail!("Cannot send packet: not connected to the relay"),
       }
