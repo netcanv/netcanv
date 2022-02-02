@@ -15,6 +15,8 @@ use netcanv_renderer::paws::{
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 
 use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tool_bar::ToolbarArgs;
@@ -69,10 +71,16 @@ pub struct GlobalControls {
    pub color_picker: ColorPicker,
 }
 
+struct EncodeChannels {
+   tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+   rx: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
+}
+
 /// The paint app state.
 pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
+   runtime: Arc<Runtime>,
 
    paint_canvas: PaintCanvas,
 
@@ -83,6 +91,7 @@ pub struct State {
    peer: Peer,
    update_timer: Timer,
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
+   encoded_chunks: HashMap<PeerId, EncodeChannels>,
 
    fatal_error: bool,
    log: Log,
@@ -138,18 +147,26 @@ impl State {
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
    ) -> Result<Self, (anyhow::Error, Assets)> {
+      let runtime = tokio::runtime::Builder::new_multi_thread()
+         .max_blocking_threads(16)
+         .build()
+         .expect("Cannot start async compute runtime");
+      let runtime = Arc::new(runtime);
+
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
          _socket_system: socket_system,
 
-         paint_canvas: PaintCanvas::new(),
+         paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
+         runtime,
 
          actions: Vec::new(),
 
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
+         encoded_chunks: HashMap::new(),
 
          save_to_file: None,
          last_autosave: Instant::now(),
@@ -258,8 +275,8 @@ impl State {
    }
 
    /// Decodes canvas data to the given chunk.
-   fn canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: &[u8]) {
-      catch!(self.paint_canvas.decode_network_data(ui.render(), chunk_position, image_data));
+   fn decode_canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: Vec<u8>) {
+      catch!(self.paint_canvas.enqueue_network_data_decoding(chunk_position, image_data));
    }
 
    /// Processes the message log.
@@ -373,6 +390,8 @@ impl State {
       // Rendering
       //
 
+      self.paint_canvas.update(ui);
+
       ui.draw(|ui| {
          ui.render().push();
          let Vector {
@@ -439,6 +458,7 @@ impl State {
                &self.global_controls
             ))
          });
+
          // Chunk downloading
          if self.save_to_file.is_some() {
             // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
@@ -459,6 +479,28 @@ impl State {
                      *state = ChunkDownload::Queued;
                   }
                }
+            }
+         }
+
+         // Chunk sending
+         for (&peer_id, EncodeChannels { rx, .. }) in &mut self.encoded_chunks {
+            const KIBIBYTE: usize = 1024;
+            const MAX_BYTES_PER_PACKET: usize = 128 * KIBIBYTE;
+
+            let mut bytes_in_packet = 0;
+            let mut packet = Vec::new();
+            while let Ok((chunk_position, image_data)) = rx.try_recv() {
+               if bytes_in_packet + image_data.len() > MAX_BYTES_PER_PACKET {
+                  catch!(self
+                     .peer
+                     .send_chunks(peer_id, std::mem::replace(&mut packet, Vec::new())));
+                  bytes_in_packet = 0;
+               }
+               bytes_in_packet += image_data.len();
+               packet.push((chunk_position, image_data));
+            }
+            if packet.len() > 0 {
+               catch!(self.peer.send_chunks(peer_id, packet));
             }
          }
       }
@@ -717,12 +759,12 @@ impl State {
          MessageKind::Chunks(chunks) => {
             log::debug!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
-               self.canvas_data(ui, chunk_position, &image_data);
+               self.decode_canvas_data(ui, chunk_position, image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
             }
          }
          MessageKind::GetChunks(requester, positions) => {
-            self.send_chunks(requester, &positions)?;
+            self.enqueue_chunks_for_encoding(requester, &positions);
          }
          MessageKind::Tool(sender, name, payload) => {
             if let Some(tool_id) = self.toolbar.tool_by_name(&name) {
@@ -769,26 +811,18 @@ impl State {
       Ok(())
    }
 
-   fn send_chunks(&mut self, peer_id: PeerId, positions: &[(i32, i32)]) -> anyhow::Result<()> {
-      const KILOBYTE: usize = 1024;
-      const MAX_BYTES_PER_PACKET: usize = 128 * KILOBYTE;
-
-      let mut packet = Vec::new();
-      let mut bytes_of_image_data = 0;
+   fn enqueue_chunks_for_encoding(&mut self, requester: PeerId, positions: &[(i32, i32)]) {
+      let tx = &self
+         .encoded_chunks
+         .entry(requester)
+         .or_insert_with(|| {
+            let (tx, rx) = mpsc::unbounded_channel();
+            EncodeChannels { tx, rx }
+         })
+         .tx;
       for &chunk_position in positions {
-         if bytes_of_image_data > MAX_BYTES_PER_PACKET {
-            let packet = std::mem::replace(&mut packet, Vec::new());
-            bytes_of_image_data = 0;
-            self.peer.send_chunks(peer_id, packet)?;
-         }
-         if let Some(image_data) = self.paint_canvas.network_data(chunk_position) {
-            packet.push((chunk_position, image_data.to_owned()));
-            bytes_of_image_data += image_data.len();
-         }
+         self.paint_canvas.enqueue_network_data_encoding(tx.clone(), chunk_position);
       }
-      self.peer.send_chunks(peer_id, packet)?;
-
-      Ok(())
    }
 
    fn reflow_layout(&mut self, root_view: &View) -> () {

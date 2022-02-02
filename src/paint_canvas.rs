@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::{
@@ -14,21 +15,17 @@ use ::image::{
 use netcanv_renderer::paws::{vector, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
 
 /// A chunk on the infinite canvas.
 pub struct Chunk {
-   // Right now NetCanv's chunk handling is quite scuffed, mainly due to Skia's poor performance rendering many things
-   // at once. Maybe it'll become less terrible if issue #29 ever gets implemented.
-   // https://github.com/liquidev/netcanv/issues/29
    framebuffer: Framebuffer,
-   image_data: Cell<Option<RgbaImage>>,
-   png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
-   webp_data: [Option<Vec<u8>>; Self::SUB_COUNT],
-   non_empty_subs: [bool; Self::SUB_COUNT],
-   saved_subs: [bool; Self::SUB_COUNT],
+   saved: bool,
 }
 
 impl Chunk {
@@ -37,16 +34,6 @@ impl Chunk {
    const MAX_PNG_SIZE: usize = 32 * 1024;
    /// The size of a sub-chunk.
    pub const SIZE: (u32, u32) = (256, 256);
-   /// The number of sub-chunks in a master chunk, on both axes.
-   // Note that these must be powers of two.
-   const SUB_CHUNKS: (u32, u32) = (4, 4);
-   /// The total number of sub-chunks in a master chunk.
-   const SUB_COUNT: usize = (Self::SUB_CHUNKS.0 * Self::SUB_CHUNKS.1) as usize;
-   /// The size of a master chunk.
-   const SURFACE_SIZE: (u32, u32) = (
-      (Self::SIZE.0 * Self::SUB_CHUNKS.0) as u32,
-      (Self::SIZE.1 * Self::SUB_CHUNKS.1) as u32,
-   );
    /// The quality of encoded WebP files.
    // Note to self in the future: the libwebp quality factor ranges from 0.0 to 100.0, not
    // from 0.0 to 1.0.
@@ -57,238 +44,123 @@ impl Chunk {
    /// Creates a new chunk, using the given canvas as a Skia surface allocator.
    fn new(renderer: &mut Backend) -> Self {
       Self {
-         framebuffer: renderer.create_framebuffer(Self::SURFACE_SIZE.0, Self::SURFACE_SIZE.1),
-         image_data: Cell::new(None),
-         png_data: Default::default(),
-         webp_data: Default::default(),
-         non_empty_subs: [false; Self::SUB_COUNT],
-         saved_subs: [false; Self::SUB_COUNT],
+         framebuffer: renderer.create_framebuffer(Self::SIZE.0, Self::SIZE.1),
+         saved: true,
       }
    }
 
    /// Returns the on-screen position of the chunk at the given coordinates.
    fn screen_position(chunk_position: (i32, i32)) -> Point {
       Point::new(
-         (chunk_position.0 * Self::SURFACE_SIZE.0 as i32) as _,
-         (chunk_position.1 * Self::SURFACE_SIZE.1 as i32) as _,
+         (chunk_position.0 * Self::SIZE.0 as i32) as _,
+         (chunk_position.1 * Self::SIZE.1 as i32) as _,
       )
    }
 
    /// Downloads the image of the chunk from the graphics card.
    fn download_image(&self) -> RgbaImage {
-      if let Some(image_data) = self.image_data.take() {
-         let clone = image_data.clone();
-         self.image_data.set(Some(image_data));
-         clone
-      } else {
-         let mut image_buffer = ImageBuffer::from_pixel(
-            Self::SURFACE_SIZE.0,
-            Self::SURFACE_SIZE.1,
-            Rgba([0, 0, 0, 0]),
-         );
-         self.framebuffer.download_rgba((0, 0), self.framebuffer.size(), &mut image_buffer);
-         self.image_data.set(Some(image_buffer.clone()));
-         image_buffer
-      }
+      let mut image_buffer =
+         ImageBuffer::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
+      self.framebuffer.download_rgba((0, 0), self.framebuffer.size(), &mut image_buffer);
+      image_buffer
    }
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
-   fn upload_image(&mut self, image: RgbaImage, offset: (u32, u32)) {
-      for sub in 0..Self::SUB_COUNT {
-         self.mark_dirty(sub)
-      }
+   fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
+      self.mark_dirty();
       self.framebuffer.upload_rgba(offset, Self::SIZE, &image);
    }
 
-   /// Converts a network chunk position into a master chunk position.
-   fn master(chunk_position: (i32, i32)) -> (i32, i32) {
-      (
-         chunk_position.0.div_euclid(Self::SUB_CHUNKS.0 as i32),
-         chunk_position.1.div_euclid(Self::SUB_CHUNKS.1 as i32),
-      )
-   }
-
-   /// Converts a network chunk position into a sub chunk index.
-   fn sub(chunk_position: (i32, i32)) -> usize {
-      let x_bits = chunk_position.0.rem_euclid(Self::SUB_CHUNKS.0 as i32) as usize;
-      let y_bits = chunk_position.1.rem_euclid(Self::SUB_CHUNKS.1 as i32) as usize;
-      (x_bits << 2) | y_bits
-   }
-
-   /// Converts a sub-chunk index into its network-coordinate position relative to the master
-   /// chunk.
-   fn sub_position(sub: usize) -> (u32, u32) {
-      (((sub & 0b1100) >> 2) as u32, (sub & 0b11) as u32)
-   }
-
-   /// Converts a sub-chunk index into its position on the screen, relative to the master chunk's
-   /// origin.
-   fn sub_screen_position(sub: usize) -> (u32, u32) {
-      (
-         ((sub & 0b1100) >> 2) as u32 * Self::SIZE.0,
-         (sub & 0b11) as u32 * Self::SIZE.1,
-      )
-   }
-
-   /// Returns the network position of a sub-chunk within a master chunk.
-   fn chunk_position(master_position: (i32, i32), sub: usize) -> (i32, i32) {
-      let sub_position = Self::sub_position(sub);
-      (
-         (master_position.0 * Self::SUB_CHUNKS.0 as i32) + sub_position.0 as i32,
-         (master_position.1 * Self::SUB_CHUNKS.1 as i32) + sub_position.1 as i32,
-      )
-   }
-
-   /// Returns the PNG data of the given sub-chunk within this master chunk, reencoding the chunk
-   /// into a PNG file if the sub-chunk was modified since last encoding.
-   ///
-   /// This may return `None` if the chunk is empty.
-   fn png_data(&mut self, sub: usize) -> Option<&[u8]> {
-      if self.png_data[sub].is_none() {
-         log::debug!("png data doesn't exist, encoding");
-         let chunk_image = self.download_image();
-         for sub in 0..Self::SUB_COUNT {
-            let (x, y) = Self::sub_screen_position(sub);
-            let sub_image = chunk_image.view(x, y, Self::SIZE.0, Self::SIZE.1).to_image();
-            if Self::image_is_empty(&sub_image) {
-               self.non_empty_subs[sub] = false;
-               continue;
+   /// Encodes an image to PNG data asynchronously.
+   async fn encode_png_data(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+      Ok(tokio::task::spawn_blocking(move || {
+         let mut bytes: Vec<u8> = Vec::new();
+         match PngEncoder::new(Cursor::new(&mut bytes)).encode(
+            &image,
+            image.width(),
+            image.height(),
+            ColorType::Rgba8,
+         ) {
+            Ok(()) => (),
+            Err(error) => {
+               log::error!("error while encoding: {}", error);
+               anyhow::bail!(error)
             }
-            let mut bytes: Vec<u8> = Vec::new();
-            match PngEncoder::new(Cursor::new(&mut bytes)).encode(
-               &sub_image,
-               sub_image.width(),
-               sub_image.height(),
-               ColorType::Rgba8,
-            ) {
-               Ok(()) => (),
-               Err(error) => {
-                  log::error!("error while encoding: {}", error);
-                  continue;
-               }
-            }
-            self.png_data[sub] = Some(bytes);
-            self.non_empty_subs[sub] = true;
          }
-      }
-      self.png_data[sub].as_deref()
+         Ok(bytes)
+      })
+      .await??)
    }
 
-   /// Returns the lossy WebP data of the given sub-chunk within this master chunk.
-   ///
-   /// Semantics are similar to [`Chunk::png_data`].
-   fn webp_data(&mut self, sub: usize) -> Option<&[u8]> {
-      if self.webp_data[sub].is_none() {
-         log::info!("webp data doesn't exist, encoding");
-         let chunk_image = self.download_image();
-         for sub in 0..Self::SUB_COUNT {
-            let (x, y) = Self::sub_screen_position(sub);
-            let sub_image = chunk_image.view(x, y, Self::SIZE.0, Self::SIZE.1).to_image();
-            if Self::image_is_empty(&sub_image) {
-               self.non_empty_subs[sub] = false;
-               continue;
-            }
-            let image = DynamicImage::ImageRgba8(sub_image);
-            let encoder = webp::Encoder::from_image(&image).unwrap();
-            let bytes = encoder.encode(Self::WEBP_QUALITY);
-            self.webp_data[sub] = Some(bytes.to_owned());
-            self.non_empty_subs[sub] = true;
-         }
-      }
-      self.webp_data[sub].as_deref()
+   /// Encodes an image to WebP asynchronously.
+   async fn encode_webp_data(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+      Ok(tokio::task::spawn_blocking(move || {
+         let image = DynamicImage::ImageRgba8(image);
+         let encoder = webp::Encoder::from_image(&image).unwrap();
+         encoder.encode(Self::WEBP_QUALITY).to_owned()
+      })
+      .await?)
    }
 
-   /// Returns the image file data of the given sub-chunk within this master chunk, in a format
-   /// appropriate for network transmission.
-   ///
-   /// This first checks whether the number of bytes of PNG data of the sub-chunk exceeds
-   /// [`Chunk::MAX_PNG_SIZE`]. If so, WebP is used. Otherwise PNG is used.
-   fn network_data(&mut self, sub: usize) -> Option<&[u8]> {
-      let png_data = self.png_data(sub)?;
-      let png_size = png_data.len();
-      if png_size > Self::MAX_PNG_SIZE {
-         log::debug!(
-            "png data is larger than {} KiB, fetching webp data instead",
-            Self::MAX_PNG_SIZE / 1024
-         );
-         let webp_data = self.webp_data(sub)?;
-         log::debug!(
-            "the webp data came out to be {}% the size of the png data",
-            (webp_data.len() as f32 / png_size as f32 * 100.0) as i32
-         );
-         Some(webp_data)
+   /// Encodes a network image asynchronously. This encodes PNG, as well as WebP if the PNG is too
+   /// large, and returns both images.
+   async fn encode_network_data(image: RgbaImage) -> anyhow::Result<(Vec<u8>, Option<Vec<u8>>)> {
+      let png_data = Self::encode_png_data(image.clone()).await?;
+      let webp_data = if png_data.len() > Self::MAX_PNG_SIZE {
+         Some(Self::encode_webp_data(image).await?)
       } else {
-         // Need to call the function here a second time because otherwise the borrow checker
-         // gets mad.
-         self.png_data(sub)
-      }
+         None
+      };
+      Ok((png_data, webp_data))
    }
 
    /// Decodes a PNG file into the given sub-chunk.
-   fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+   fn decode_png_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
       let decoder = PngDecoder::new(Cursor::new(data))?;
       if decoder.color_type() != ColorType::Rgba8 {
          log::warn!("received non-RGBA image data, ignoring");
-         return Ok(());
-      }
-      if decoder.dimensions() != Self::SIZE {
-         log::error!(
-            "received chunk with invalid size. got: {:?}, expected: {:?}",
-            decoder.dimensions(),
-            Self::SIZE
-         );
-         return Ok(());
+         anyhow::bail!("non-RGBA chunk image");
       }
       let mut image = RgbaImage::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
       decoder.read_image(&mut image)?;
-      if !Self::image_is_empty(&image) {
-         self.upload_image(image, Self::sub_screen_position(sub));
-         self.png_data[sub] = Some(Vec::from(data));
-         self.non_empty_subs[sub] = true;
-      }
-      Ok(())
+      Ok(image)
    }
 
    /// Decodes a WebP file into the given sub-chunk.
-   fn decode_webp_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
-      let image = match webp::Decoder::new(data).decode() {
+   fn decode_webp_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
+      let decoder = webp::Decoder::new(data);
+      let image = match decoder.decode() {
          Some(image) => image.to_image(),
          None => anyhow::bail!("got non-webp image"),
       }
       .into_rgba8();
-      if !Self::image_is_empty(&image) {
-         self.upload_image(image, Self::sub_screen_position(sub));
-         self.webp_data[sub] = Some(Vec::from(data));
-         self.non_empty_subs[sub] = true;
-      }
-      Ok(())
+      Ok(image)
    }
 
    /// Decodes a PNG or WebP file into the given sub-chunk, depending on what's actually stored in
    /// `data`.
-   fn decode_network_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+   fn decode_network_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
       // Try WebP first.
-      if let Ok(()) = self.decode_webp_data(sub, data) {
-         Ok(())
-      } else {
-         self.decode_png_data(sub, data)
+      let image = Self::decode_webp_data(data).or_else(|_| Self::decode_png_data(data))?;
+      if image.dimensions() != Self::SIZE {
+         log::error!(
+            "received chunk with invalid size. got: {:?}, expected {:?}",
+            image.dimensions(),
+            Self::SIZE
+         );
+         anyhow::bail!("invalid chunk image size");
       }
+      Ok(image)
    }
 
    /// Marks the given sub-chunk within this master chunk as dirty - that is, invalidates any
    /// cached PNG and WebP data, marks the sub-chunk as non-empty, and marks it as unsaved.
-   fn mark_dirty(&mut self, sub: usize) {
-      self.image_data.set(None);
-      self.png_data[sub] = None;
-      self.webp_data[sub] = None;
-      self.non_empty_subs[sub] = true;
-      self.saved_subs[sub] = false;
-   }
+   fn mark_dirty(&mut self) {}
 
    /// Marks the given sub-chunk within this master chunk as saved.
-   fn mark_saved(&mut self, sub: usize) {
-      self.saved_subs[sub] = true;
+   fn mark_saved(&mut self) {
+      self.saved = true;
    }
 
    /// Iterates through all pixels within the image and checks whether any pixels in the image are
@@ -303,6 +175,11 @@ pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
    /// The path to the `.netcanv` directory this paint canvas was saved to.
    filename: Option<PathBuf>,
+
+   runtime: Arc<Runtime>,
+   chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+   decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
+   decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 }
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
@@ -317,10 +194,24 @@ struct CanvasToml {
 
 impl PaintCanvas {
    /// Creates a new, empty paint canvas.
-   pub fn new() -> Self {
+   pub fn new(runtime: Arc<Runtime>) -> Self {
+      // Set up decoding supervisor thread.
+      let (to_decode_tx, to_decode_rx) = mpsc::unbounded_channel();
+      let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
+      let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
+      let runtime2 = Arc::clone(&runtime);
+      let decoder_join_handle = runtime.spawn(async move {
+         Self::chunk_decoding_loop(runtime2, to_decode_rx, decoded_chunks_tx, decoder_quit_rx)
+            .await;
+      });
+
       Self {
          chunks: HashMap::new(),
          filename: None,
+         runtime,
+         chunks_to_decode_tx: to_decode_tx,
+         decoded_chunks_rx,
+         decoder_quitter: Some((decoder_quit_tx, decoder_join_handle)),
       }
    }
 
@@ -331,15 +222,15 @@ impl PaintCanvas {
       }
    }
 
-   /// Returns the left, top, bottom, right sides covered by the rectangle, in master chunk
+   /// Returns the left, top, bottom, right sides covered by the rectangle, in chunk
    /// coordinates.
    fn chunk_coverage(coverage: Rect) -> (i32, i32, i32, i32) {
       let coverage = coverage.sort();
       (
-         (coverage.left() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
-         (coverage.top() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
-         (coverage.bottom() / Chunk::SURFACE_SIZE.0 as f32).floor() as i32,
-         (coverage.right() / Chunk::SURFACE_SIZE.1 as f32).floor() as i32,
+         (coverage.left() / Chunk::SIZE.0 as f32).floor() as i32,
+         (coverage.top() / Chunk::SIZE.1 as f32).floor() as i32,
+         (coverage.bottom() / Chunk::SIZE.0 as f32).floor() as i32,
+         (coverage.right() / Chunk::SIZE.1 as f32).floor() as i32,
       )
    }
 
@@ -366,16 +257,14 @@ impl PaintCanvas {
             let chunk = self.chunks.get_mut(&master_chunk).unwrap();
             renderer.push();
             renderer.translate(vector(
-               -x as f32 * Chunk::SURFACE_SIZE.0 as f32,
-               -y as f32 * Chunk::SURFACE_SIZE.0 as f32,
+               -x as f32 * Chunk::SIZE.0 as f32,
+               -y as f32 * Chunk::SIZE.0 as f32,
             ));
             renderer.draw_to(&chunk.framebuffer, |renderer| {
                callback(renderer);
             });
             renderer.pop();
-            for i in 0..Chunk::SUB_COUNT {
-               chunk.mark_dirty(i);
-            }
+            chunk.mark_dirty();
          }
       }
    }
@@ -394,12 +283,12 @@ impl PaintCanvas {
    /// Downloads the color of the pixel at the provided position.
    pub fn get_pixel(&self, position: (i64, i64)) -> Color {
       if let Some(chunk) = self.chunks.get(&(
-         (position.0.div_euclid(Chunk::SURFACE_SIZE.0 as i64)) as i32,
-         (position.1.div_euclid(Chunk::SURFACE_SIZE.1 as i64)) as i32,
+         (position.0.div_euclid(Chunk::SIZE.0 as i64)) as i32,
+         (position.1.div_euclid(Chunk::SIZE.1 as i64)) as i32,
       )) {
          let position_in_chunk = (
-            (position.0.rem_euclid(Chunk::SURFACE_SIZE.0 as i64)) as u32,
-            (position.1.rem_euclid(Chunk::SURFACE_SIZE.1 as i64)) as u32,
+            (position.0.rem_euclid(Chunk::SIZE.0 as i64)) as u32,
+            (position.1.rem_euclid(Chunk::SIZE.1 as i64)) as u32,
          );
          let mut rgba = [0u8; 4];
          chunk.framebuffer.download_rgba(position_in_chunk, (1, 1), &mut rgba);
@@ -410,12 +299,12 @@ impl PaintCanvas {
       }
    }
 
-   /// Draws the paint canvas onto the given Skia canvas.
+   /// Draws the paint canvas using the given renderer.
    ///
    /// The provided viewport and window size are used to only render chunks that are visible at a
    /// given moment.
    pub fn draw_to(&self, renderer: &mut Backend, viewport: &Viewport, window_size: Vector) {
-      for chunk_position in viewport.visible_tiles(Chunk::SURFACE_SIZE, window_size) {
+      for chunk_position in viewport.visible_tiles(Chunk::SIZE, window_size) {
          if let Some(chunk) = self.chunks.get(&chunk_position) {
             let screen_position = Chunk::screen_position(chunk_position);
             renderer.framebuffer(chunk.framebuffer.rect(screen_position), &chunk.framebuffer);
@@ -423,25 +312,101 @@ impl PaintCanvas {
       }
    }
 
-   /// Returns the image data for the chunk at the given position, if it's not empty.
-   pub fn network_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
-      log::info!(
-         "fetching data for network transmission from chunk {:?}",
-         chunk_position
-      );
-      self.chunks.get_mut(&Chunk::master(chunk_position))?.network_data(Chunk::sub(chunk_position))
+   /// The decoding supervisor thread.
+   async fn chunk_decoding_loop(
+      runtime: Arc<Runtime>,
+      mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
+      output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
+      mut quit: oneshot::Receiver<()>,
+   ) {
+      log::info!("starting chunk decoding supervisor thread");
+      loop {
+         tokio::select! {
+            biased;
+            Ok(_) = &mut quit => break,
+            data = input.recv() => {
+               if let Some((chunk_position, image_data)) = data {
+                  let output = output.clone();
+                  runtime.spawn_blocking(move || match Chunk::decode_network_data(&image_data) {
+                     Ok(image) => {
+                        // Doesn't matter if the receiving half is closed.
+                        let _ = output.send((chunk_position, image));
+                     }
+                     Err(error) => log::error!("image decoding failed: {}", error),
+                  });
+               } else {
+                  log::info!("decoding supervisor: chunk data sender was dropped, quitting");
+                  break;
+               }
+            },
+         }
+      }
+      log::info!("exiting chunk decoding supervisor thread");
    }
 
-   /// Decodes image data to the chunk at the given position.
-   pub fn decode_network_data(
+   /// Updates chunks that have been decoded between the last call to `update` and the current one.
+   pub fn update(&mut self, renderer: &mut Backend) {
+      while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
+         self.ensure_chunk_exists(renderer, chunk_position);
+         let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+         chunk.upload_image(&image, (0, 0));
+      }
+   }
+
+   /// Returns a receiver for the image data of the chunk at the given position, if it's not empty.
+   ///
+   /// The chunk data that arrives from the receiver may be `None` if encoding failed.
+   pub fn enqueue_network_data_encoding(
       &mut self,
-      renderer: &mut Backend,
+      output_channel: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+      chunk_position: (i32, i32),
+   ) {
+      log::info!(
+         "fetching data for network transmission of chunk {:?}",
+         chunk_position
+      );
+      if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+         let image = chunk.download_image();
+         if Chunk::image_is_empty(&image) {
+            return;
+         }
+         self.runtime.spawn(async move {
+            log::debug!("encoding image data for chunk {:?}", chunk_position);
+            let image_data = Chunk::encode_network_data(image).await;
+            log::debug!("encoding done for chunk {:?}", chunk_position);
+            match image_data {
+               Ok((_png, Some(webp))) => {
+                  log::debug!("sending webp data back to main thread");
+                  let _ = output_channel.send((chunk_position, webp));
+               }
+               Ok((png, None)) => {
+                  log::debug!("sending png data back to main thread");
+                  let _ = output_channel.send((chunk_position, png));
+               }
+               Err(error) => {
+                  log::error!(
+                     "error while encoding image for chunk {:?}: {}",
+                     chunk_position,
+                     error
+                  );
+               }
+            }
+         });
+      }
+   }
+
+   /// Enqueues image data for decoding to the chunk at the given position.
+   pub fn enqueue_network_data_decoding(
+      &mut self,
       to_chunk: (i32, i32),
-      data: &[u8],
+      data: Vec<u8>,
    ) -> anyhow::Result<()> {
-      self.ensure_chunk_exists(renderer, Chunk::master(to_chunk));
-      let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
-      chunk.decode_network_data(Chunk::sub(to_chunk), data)
+      self
+         .chunks_to_decode_tx
+         .send((to_chunk, data))
+         .expect("Decoding supervisor thread should never quit");
+      // chunk.decode_network_data(Chunk::sub(to_chunk), data)
+      Ok(())
    }
 
    /// Saves the entire paint to a PNG file.
@@ -464,15 +429,15 @@ impl PaintCanvas {
       if left == i32::MAX {
          anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
       }
-      let width = ((right - left + 1) * Chunk::SURFACE_SIZE.0 as i32) as u32;
-      let height = ((bottom - top + 1) * Chunk::SURFACE_SIZE.1 as i32) as u32;
+      let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
+      let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
       log::debug!("size: {:?}", (width, height));
       let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
       for (chunk_position, chunk) in &self.chunks {
          log::debug!("writing chunk {:?}", chunk_position);
          let pixel_position = (
-            (Chunk::SURFACE_SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
-            (Chunk::SURFACE_SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
+            (Chunk::SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
+            (Chunk::SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
          );
          log::debug!("   - pixel position: {:?}", pixel_position);
 
@@ -480,8 +445,8 @@ impl PaintCanvas {
          let mut sub_image = image.sub_image(
             pixel_position.0,
             pixel_position.1,
-            Chunk::SURFACE_SIZE.0 as u32,
-            Chunk::SURFACE_SIZE.1 as u32,
+            Chunk::SIZE.0 as u32,
+            Chunk::SIZE.1 as u32,
          );
          sub_image.copy_from(&chunk_image, 0, 0)?;
       }
@@ -522,7 +487,7 @@ impl PaintCanvas {
    }
 
    /// Saves the paint canvas as a `.netcanv` canvas.
-   fn save_as_netcanv(&mut self, path: &Path) -> anyhow::Result<()> {
+   async fn save_as_netcanv(&mut self, path: &Path) -> anyhow::Result<()> {
       // create the directory
       log::info!("creating or reusing existing directory ({:?})", path);
       let path = Self::validate_netcanv_save_path(path)?;
@@ -541,26 +506,15 @@ impl PaintCanvas {
       )?;
       // save all the chunks
       log::info!("saving chunks");
-      for (master_position, chunk) in &mut self.chunks {
-         for sub in 0..Chunk::SUB_COUNT {
-            if !chunk.non_empty_subs[sub] || chunk.saved_subs[sub] {
-               continue;
-            }
-            let chunk_position = Chunk::chunk_position(*master_position, sub);
-            log::debug!("chunk {:?}", chunk_position);
-            let saved = if let Some(png_data) = chunk.png_data(sub) {
-               let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
-               let filepath = path.join(Path::new(&filename));
-               log::debug!("saving to {:?}", filepath);
-               std::fs::write(filepath, png_data)?;
-               true
-            } else {
-               false
-            };
-            if saved {
-               chunk.mark_saved(sub);
-            }
-         }
+      for (chunk_position, chunk) in &mut self.chunks {
+         log::debug!("chunk {:?}", chunk_position);
+         let image = chunk.download_image();
+         let image_data = Chunk::encode_png_data(image).await?;
+         let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
+         let filepath = path.join(Path::new(&filename));
+         log::debug!("saving to {:?}", filepath);
+         std::fs::write(filepath, image_data)?;
+         chunk.mark_saved();
       }
       self.filename = Some(path);
       Ok(())
@@ -575,7 +529,10 @@ impl PaintCanvas {
       if let Some(ext) = path.extension() {
          match ext.to_str() {
             Some("png") => self.save_as_png(&path),
-            Some("netcanv") | Some("toml") => self.save_as_netcanv(&path),
+            Some("netcanv") | Some("toml") => {
+               let runtime = Arc::clone(&self.runtime);
+               runtime.block_on(async { self.save_as_netcanv(&path).await })
+            }
             _ => anyhow::bail!("Unsupported save format. Please choose either .png or .netcanv"),
          }
       } else {
@@ -607,21 +564,15 @@ impl PaintCanvas {
          for x in 0..chunks_x {
             let chunk_position = (x, y);
             let offset_chunk_position = (x - origin_x, y - origin_y);
-            // From the bottom of my heart, screw this stupid master-sub chunk system.
-            // I wish Skia wasn't so slow at rendering large amounts of surfaces.
-            let master_chunk = Chunk::master(offset_chunk_position);
-            let sub_chunk = Chunk::sub_position(Chunk::sub(offset_chunk_position));
-            self.ensure_chunk_exists(renderer, master_chunk);
-            let chunk = self.chunks.get_mut(&master_chunk).unwrap();
+            self.ensure_chunk_exists(renderer, offset_chunk_position);
+            let chunk = self.chunks.get_mut(&offset_chunk_position).unwrap();
             let pixel_position = (
                Chunk::SIZE.0 * chunk_position.0 as u32,
                Chunk::SIZE.1 * chunk_position.1 as u32,
             );
             log::debug!(
-               "plopping chunk at {:?} (master {:?} sub {:?} pxp {:?})",
+               "plopping chunk at {:?} (pxp {:?})",
                offset_chunk_position,
-               master_chunk,
-               sub_chunk,
                pixel_position
             );
             let right = (pixel_position.0 + Chunk::SIZE.0).min(image.width() - 1);
@@ -635,11 +586,8 @@ impl PaintCanvas {
             if Chunk::image_is_empty(&chunk_image) {
                continue;
             }
-            chunk.non_empty_subs = [true; Chunk::SUB_COUNT];
-            chunk.upload_image(
-               chunk_image,
-               (sub_chunk.0 * Chunk::SIZE.0, sub_chunk.1 * Chunk::SIZE.1),
-            );
+            chunk.mark_dirty();
+            chunk.upload_image(&chunk_image, (0, 0));
          }
       }
 
@@ -680,17 +628,17 @@ impl PaintCanvas {
       log::debug!("loading chunks");
       for entry in std::fs::read_dir(path.clone())? {
          let path = entry?.path();
+         // Please let me have if let chains.
          if path.is_file() && path.extension() == Some(OsStr::new("png")) {
             if let Some(position_osstr) = path.file_stem() {
                if let Some(position_str) = position_osstr.to_str() {
                   let chunk_position = Self::parse_chunk_position(&position_str)?;
                   log::debug!("chunk {:?}", chunk_position);
-                  let master = Chunk::master(chunk_position);
-                  let sub = Chunk::sub(chunk_position);
-                  self.ensure_chunk_exists(renderer, master);
-                  let chunk = self.chunks.get_mut(&master).unwrap();
-                  chunk.decode_png_data(sub, &std::fs::read(path)?)?;
-                  chunk.mark_saved(sub);
+                  self.ensure_chunk_exists(renderer, chunk_position);
+                  let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+                  let image_data = Chunk::decode_png_data(&std::fs::read(path)?)?;
+                  chunk.upload_image(&image_data, (0, 0));
+                  chunk.mark_saved();
                }
             }
          }
@@ -713,19 +661,21 @@ impl PaintCanvas {
 
    /// Returns a vector containing all the chunk positions in the paint canvas.
    pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
-      let mut result = Vec::new();
-      for (master_position, chunk) in &self.chunks {
-         for (sub, non_empty) in chunk.non_empty_subs.iter().enumerate() {
-            if *non_empty {
-               result.push(Chunk::chunk_position(*master_position, sub));
-            }
-         }
-      }
-      result
+      self.chunks.keys().copied().collect()
    }
 
    /// Returns what filename the canvas was saved under.
    pub fn filename(&self) -> Option<&Path> {
       self.filename.as_deref()
+   }
+}
+
+impl Drop for PaintCanvas {
+   fn drop(&mut self) {
+      self.runtime.block_on(async {
+         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
+         let _ = channel.send(());
+         let _ = join_handle.await;
+      });
    }
 }

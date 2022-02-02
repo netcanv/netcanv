@@ -138,7 +138,7 @@ impl PeerId {
 
 impl Display for PeerId {
    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-      write!(f, "p:{:16x}", self.0)
+      write!(f, "p:{:016x}", self.0)
    }
 }
 
