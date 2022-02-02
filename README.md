@@ -72,7 +72,7 @@ Individual episodes:
 1. [Introduction](https://www.youtube.com/watch?v=ZeSXVgjrivY)
 2. [Drawing and GUI](https://www.youtube.com/watch?v=MVEILFrPKnY)
 3. [Refactoring and ∞](https://www.youtube.com/watch?v=mECVCb87sAQ)
-4. Networking – coming soon
+4. Networking – coming soon (never)
 
 Again, note that the tutorials are in Polish.
 
