@@ -53,6 +53,8 @@ maintenance burden. The last tag to feature this backend is [0.5.0](https://gith
 NetCanv assumes that you have your own relay server up: currently the default value
 in the relay textbox is `localhost`, for easy testing.
 
+I might set up an official relay server sometime in March 2022.
+
 To run the relay server, simply do:
 ```sh
 $ cargo run -p netcanv-relay
