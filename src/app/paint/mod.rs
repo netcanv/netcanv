@@ -258,8 +258,8 @@ impl State {
    }
 
    /// Decodes canvas data to the given chunk.
-   fn canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: &[u8]) {
-      catch!(self.paint_canvas.decode_network_data(ui.render(), chunk_position, image_data));
+   fn decode_canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: Vec<u8>) {
+      catch!(self.paint_canvas.enqueue_network_data_decoding(chunk_position, image_data));
    }
 
    /// Processes the message log.
@@ -372,6 +372,8 @@ impl State {
       //
       // Rendering
       //
+
+      self.paint_canvas.update(ui);
 
       ui.draw(|ui| {
          ui.render().push();
@@ -717,7 +719,7 @@ impl State {
          MessageKind::Chunks(chunks) => {
             log::debug!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
-               self.canvas_data(ui, chunk_position, &image_data);
+               self.decode_canvas_data(ui, chunk_position, image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
             }
          }

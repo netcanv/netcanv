@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::{
@@ -14,15 +15,15 @@ use ::image::{
 use netcanv_renderer::paws::{vector, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
 
 /// A chunk on the infinite canvas.
 pub struct Chunk {
-   // Right now NetCanv's chunk handling is quite scuffed, mainly due to Skia's poor performance rendering many things
-   // at once. Maybe it'll become less terrible if issue #29 ever gets implemented.
-   // https://github.com/liquidev/netcanv/issues/29
    framebuffer: Framebuffer,
    image_data: Cell<Option<RgbaImage>>,
    png_data: [Option<Vec<u8>>; Self::SUB_COUNT],
@@ -94,7 +95,7 @@ impl Chunk {
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
-   fn upload_image(&mut self, image: RgbaImage, offset: (u32, u32)) {
+   fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
       for sub in 0..Self::SUB_COUNT {
          self.mark_dirty(sub)
       }
@@ -226,11 +227,11 @@ impl Chunk {
    }
 
    /// Decodes a PNG file into the given sub-chunk.
-   fn decode_png_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+   fn decode_png_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
       let decoder = PngDecoder::new(Cursor::new(data))?;
       if decoder.color_type() != ColorType::Rgba8 {
          log::warn!("received non-RGBA image data, ignoring");
-         return Ok(());
+         anyhow::bail!("non-RGBA chunk image");
       }
       if decoder.dimensions() != Self::SIZE {
          log::error!(
@@ -238,42 +239,45 @@ impl Chunk {
             decoder.dimensions(),
             Self::SIZE
          );
-         return Ok(());
+         anyhow::bail!("invalid chunk image size");
       }
       let mut image = RgbaImage::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
       decoder.read_image(&mut image)?;
-      if !Self::image_is_empty(&image) {
-         self.upload_image(image, Self::sub_screen_position(sub));
-         self.png_data[sub] = Some(Vec::from(data));
-         self.non_empty_subs[sub] = true;
-      }
-      Ok(())
+      // if !Self::image_is_empty(&image) {
+      //    self.upload_image(image, Self::sub_screen_position(sub));
+      //    self.png_data[sub] = Some(Vec::from(data));
+      //    self.non_empty_subs[sub] = true;
+      // }
+      Ok(image)
    }
 
    /// Decodes a WebP file into the given sub-chunk.
-   fn decode_webp_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+   fn decode_webp_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
       let image = match webp::Decoder::new(data).decode() {
          Some(image) => image.to_image(),
          None => anyhow::bail!("got non-webp image"),
       }
       .into_rgba8();
-      if !Self::image_is_empty(&image) {
-         self.upload_image(image, Self::sub_screen_position(sub));
-         self.webp_data[sub] = Some(Vec::from(data));
-         self.non_empty_subs[sub] = true;
-      }
-      Ok(())
+      // if !Self::image_is_empty(&image) {
+      //    self.upload_image(image, Self::sub_screen_position(sub));
+      //    self.webp_data[sub] = Some(Vec::from(data));
+      //    self.non_empty_subs[sub] = true;
+      // }
+      Ok(image)
    }
 
    /// Decodes a PNG or WebP file into the given sub-chunk, depending on what's actually stored in
    /// `data`.
-   fn decode_network_data(&mut self, sub: usize, data: &[u8]) -> anyhow::Result<()> {
+   fn decode_network_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
       // Try WebP first.
-      if let Ok(()) = self.decode_webp_data(sub, data) {
-         Ok(())
-      } else {
-         self.decode_png_data(sub, data)
-      }
+      Self::decode_webp_data(data).or_else(|_| Self::decode_png_data(data))
+   }
+
+   /// Uploads an image to a sub-chunk.
+   fn upload_sub(&mut self, sub: usize, image: &RgbaImage) {
+      assert!(image.width() == Self::SIZE.0 && image.height() == Self::SIZE.1);
+      let offset = Self::sub_screen_position(sub);
+      self.upload_image(image, offset);
    }
 
    /// Marks the given sub-chunk within this master chunk as dirty - that is, invalidates any
@@ -303,6 +307,11 @@ pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
    /// The path to the `.netcanv` directory this paint canvas was saved to.
    filename: Option<PathBuf>,
+
+   _runtime: Arc<Runtime>,
+   chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+   decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
+   decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 }
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
@@ -318,9 +327,28 @@ struct CanvasToml {
 impl PaintCanvas {
    /// Creates a new, empty paint canvas.
    pub fn new() -> Self {
+      log::info!("creating paint canvas");
+      let runtime = tokio::runtime::Builder::new_multi_thread()
+         .max_blocking_threads(10)
+         .build()
+         .expect("Cannot start async image decoding runtime");
+      let runtime = Arc::new(runtime);
+      let (to_decode_tx, to_decode_rx) = mpsc::unbounded_channel();
+      let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
+      let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
+      let runtime2 = Arc::clone(&runtime);
+      let decoder_join_handle = runtime.spawn(async move {
+         Self::chunk_decoding_loop(runtime2, to_decode_rx, decoded_chunks_tx, decoder_quit_rx)
+            .await;
+      });
+
       Self {
          chunks: HashMap::new(),
          filename: None,
+         _runtime: runtime,
+         chunks_to_decode_tx: to_decode_tx,
+         decoded_chunks_rx,
+         decoder_quitter: Some((decoder_quit_tx, decoder_join_handle)),
       }
    }
 
@@ -423,6 +451,49 @@ impl PaintCanvas {
       }
    }
 
+   /// The decoding supervisor thread.
+   async fn chunk_decoding_loop(
+      runtime: Arc<Runtime>,
+      mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
+      output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
+      mut quit: oneshot::Receiver<()>,
+   ) {
+      log::info!("starting chunk decoding supervisor thread");
+      loop {
+         tokio::select! {
+            biased;
+            Ok(_) = &mut quit => break,
+            data = input.recv() => {
+               if let Some((chunk_position, image_data)) = data {
+                  let output = output.clone();
+                  runtime.spawn_blocking(move || match Chunk::decode_network_data(&image_data) {
+                     Ok(image) => {
+                        // Doesn't matter if the receiving half is closed.
+                        let _ = output.send((chunk_position, image));
+                     }
+                     Err(error) => log::error!("image decoding failed: {}", error),
+                  });
+               } else {
+                  log::info!("decoding supervisor: chunk data sender was dropped, quitting");
+                  break;
+               }
+            },
+         }
+      }
+      log::info!("exiting chunk decoding supervisor thread");
+   }
+
+   /// Updates chunks that have been decoded between the last call to `update` and the current one.
+   pub fn update(&mut self, renderer: &mut Backend) {
+      while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
+         let master = Chunk::master(chunk_position);
+         let sub = Chunk::sub(chunk_position);
+         self.ensure_chunk_exists(renderer, master);
+         let chunk = self.chunks.get_mut(&master).unwrap();
+         chunk.upload_sub(sub, &image);
+      }
+   }
+
    /// Returns the image data for the chunk at the given position, if it's not empty.
    pub fn network_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
       log::info!(
@@ -432,16 +503,18 @@ impl PaintCanvas {
       self.chunks.get_mut(&Chunk::master(chunk_position))?.network_data(Chunk::sub(chunk_position))
    }
 
-   /// Decodes image data to the chunk at the given position.
-   pub fn decode_network_data(
+   /// Enqueues image data for decoding to the chunk at the given position.
+   pub fn enqueue_network_data_decoding(
       &mut self,
-      renderer: &mut Backend,
       to_chunk: (i32, i32),
-      data: &[u8],
+      data: Vec<u8>,
    ) -> anyhow::Result<()> {
-      self.ensure_chunk_exists(renderer, Chunk::master(to_chunk));
-      let chunk = self.chunks.get_mut(&Chunk::master(to_chunk)).unwrap();
-      chunk.decode_network_data(Chunk::sub(to_chunk), data)
+      self
+         .chunks_to_decode_tx
+         .send((to_chunk, data))
+         .expect("Decoding supervisor thread should never quit");
+      // chunk.decode_network_data(Chunk::sub(to_chunk), data)
+      Ok(())
    }
 
    /// Saves the entire paint to a PNG file.
@@ -637,7 +710,7 @@ impl PaintCanvas {
             }
             chunk.non_empty_subs = [true; Chunk::SUB_COUNT];
             chunk.upload_image(
-               chunk_image,
+               &chunk_image,
                (sub_chunk.0 * Chunk::SIZE.0, sub_chunk.1 * Chunk::SIZE.1),
             );
          }
@@ -689,7 +762,8 @@ impl PaintCanvas {
                   let sub = Chunk::sub(chunk_position);
                   self.ensure_chunk_exists(renderer, master);
                   let chunk = self.chunks.get_mut(&master).unwrap();
-                  chunk.decode_png_data(sub, &std::fs::read(path)?)?;
+                  let image_data = Chunk::decode_png_data(&std::fs::read(path)?)?;
+                  chunk.upload_sub(sub, &image_data);
                   chunk.mark_saved(sub);
                }
             }
@@ -727,5 +801,15 @@ impl PaintCanvas {
    /// Returns what filename the canvas was saved under.
    pub fn filename(&self) -> Option<&Path> {
       self.filename.as_deref()
+   }
+}
+
+impl Drop for PaintCanvas {
+   fn drop(&mut self) {
+      self._runtime.block_on(async {
+         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
+         let _ = channel.send(());
+         let _ = join_handle.await;
+      });
    }
 }
