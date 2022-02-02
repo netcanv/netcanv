@@ -1,6 +1,6 @@
 //! Configurable, framerate-independent timer for use in `process()`.
 
-use std::time::{Duration, Instant};
+use instant::{Duration, Instant};
 
 /// A framerate-independent timer.
 pub struct Timer {

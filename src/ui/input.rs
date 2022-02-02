@@ -1,7 +1,7 @@
 //! Simplified input handling facility.
 
 use std::ops::{BitAnd, BitOr};
-use std::time::Instant;
+use instant::Instant;
 
 use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
