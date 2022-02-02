@@ -9,12 +9,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 
 use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tool_bar::ToolbarArgs;
@@ -69,6 +71,11 @@ pub struct GlobalControls {
    pub color_picker: ColorPicker,
 }
 
+struct EncodeChannels {
+   tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+   rx: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
+}
+
 /// The paint app state.
 pub struct State {
    assets: Assets,
@@ -84,6 +91,7 @@ pub struct State {
    peer: Peer,
    update_timer: Timer,
    chunk_downloads: HashMap<(i32, i32), ChunkDownload>,
+   encoded_chunks: HashMap<PeerId, EncodeChannels>,
 
    fatal_error: bool,
    log: Log,
@@ -158,6 +166,7 @@ impl State {
          peer,
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
+         encoded_chunks: HashMap::new(),
 
          save_to_file: None,
          last_autosave: Instant::now(),
@@ -449,6 +458,7 @@ impl State {
                &self.global_controls
             ))
          });
+
          // Chunk downloading
          if self.save_to_file.is_some() {
             // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
@@ -469,6 +479,28 @@ impl State {
                      *state = ChunkDownload::Queued;
                   }
                }
+            }
+         }
+
+         // Chunk sending
+         for (&peer_id, EncodeChannels { rx, .. }) in &mut self.encoded_chunks {
+            const KIBIBYTE: usize = 1024;
+            const MAX_BYTES_PER_PACKET: usize = 128 * KIBIBYTE;
+
+            let mut bytes_in_packet = 0;
+            let mut packet = Vec::new();
+            while let Ok((chunk_position, image_data)) = rx.try_recv() {
+               if bytes_in_packet + image_data.len() > MAX_BYTES_PER_PACKET {
+                  catch!(self
+                     .peer
+                     .send_chunks(peer_id, std::mem::replace(&mut packet, Vec::new())));
+                  bytes_in_packet = 0;
+               }
+               bytes_in_packet += image_data.len();
+               packet.push((chunk_position, image_data));
+            }
+            if packet.len() > 0 {
+               catch!(self.peer.send_chunks(peer_id, packet));
             }
          }
       }
@@ -732,12 +764,7 @@ impl State {
             }
          }
          MessageKind::GetChunks(requester, positions) => {
-            let packets = self.runtime.block_on(async {
-               Self::get_encoded_chunks(&mut self.paint_canvas, &positions).await
-            });
-            for packet in packets {
-               self.peer.send_chunks(requester, packet)?;
-            }
+            self.enqueue_chunks_for_encoding(requester, &positions);
          }
          MessageKind::Tool(sender, name, payload) => {
             if let Some(tool_id) = self.toolbar.tool_by_name(&name) {
@@ -784,37 +811,18 @@ impl State {
       Ok(())
    }
 
-   async fn get_encoded_chunks(
-      paint_canvas: &mut PaintCanvas,
-      positions: &[(i32, i32)],
-   ) -> Vec<Vec<((i32, i32), Vec<u8>)>> {
-      const KILOBYTE: usize = 1024;
-      const MAX_BYTES_PER_PACKET: usize = 128 * KILOBYTE;
-
-      let mut chunk_data = Vec::new();
+   fn enqueue_chunks_for_encoding(&mut self, requester: PeerId, positions: &[(i32, i32)]) {
+      let tx = &self
+         .encoded_chunks
+         .entry(requester)
+         .or_insert_with(|| {
+            let (tx, rx) = mpsc::unbounded_channel();
+            EncodeChannels { tx, rx }
+         })
+         .tx;
       for &chunk_position in positions {
-         let image_data = paint_canvas.network_data(chunk_position);
-         if let Some(image_data) = image_data {
-            chunk_data.push((chunk_position, image_data));
-         }
+         self.paint_canvas.enqueue_network_data_encoding(tx.clone(), chunk_position);
       }
-
-      let mut packets = Vec::new();
-      let mut packet = Vec::new();
-      let mut bytes_of_image_data = 0;
-      for (chunk_position, image_data) in chunk_data {
-         if bytes_of_image_data > MAX_BYTES_PER_PACKET {
-            let packet = std::mem::replace(&mut packet, Vec::new());
-            bytes_of_image_data = 0;
-            packets.push(packet);
-         }
-         if let Ok(Some(image_data)) = image_data.await {
-            bytes_of_image_data += image_data.len();
-            packet.push((chunk_position, image_data));
-         }
-      }
-      packets.push(packet);
-      packets
    }
 
    fn reflow_layout(&mut self, root_view: &View) -> () {

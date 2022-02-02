@@ -356,40 +356,42 @@ impl PaintCanvas {
    /// Returns a receiver for the image data of the chunk at the given position, if it's not empty.
    ///
    /// The chunk data that arrives from the receiver may be `None` if encoding failed.
-   pub fn network_data(
+   pub fn enqueue_network_data_encoding(
       &mut self,
+      output_channel: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
       chunk_position: (i32, i32),
-   ) -> Option<oneshot::Receiver<Option<Vec<u8>>>> {
+   ) {
       log::info!(
          "fetching data for network transmission of chunk {:?}",
          chunk_position
       );
       if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
-         let (tx, rx) = oneshot::channel();
          let image = chunk.download_image();
          if Chunk::image_is_empty(&image) {
-            return None;
+            return;
          }
          self.runtime.spawn(async move {
             log::debug!("encoding image data for chunk {:?}", chunk_position);
             let image_data = Chunk::encode_network_data(image).await;
             log::debug!("encoding done for chunk {:?}", chunk_position);
-            tx.send(match image_data {
-               Ok((_png, Some(webp))) => Some(webp),
-               Ok((png, None)) => Some(png),
+            match image_data {
+               Ok((_png, Some(webp))) => {
+                  log::debug!("sending webp data back to main thread");
+                  let _ = output_channel.send((chunk_position, webp));
+               }
+               Ok((png, None)) => {
+                  log::debug!("sending png data back to main thread");
+                  let _ = output_channel.send((chunk_position, png));
+               }
                Err(error) => {
                   log::error!(
                      "error while encoding image for chunk {:?}: {}",
                      chunk_position,
                      error
                   );
-                  None
                }
-            })
+            }
          });
-         Some(rx)
-      } else {
-         None
       }
    }
 
