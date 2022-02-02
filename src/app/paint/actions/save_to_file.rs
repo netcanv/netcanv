@@ -1,6 +1,6 @@
 //! The `Save to file` action.
 
-use std::time::{Duration, Instant};
+use instant::{Duration, Instant};
 
 use native_dialog::FileDialog;
 
