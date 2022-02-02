@@ -333,6 +333,8 @@ impl PaintCanvas {
          .build()
          .expect("Cannot start async image decoding runtime");
       let runtime = Arc::new(runtime);
+
+      // Set up decoding supervisor thread.
       let (to_decode_tx, to_decode_rx) = mpsc::unbounded_channel();
       let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
       let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
