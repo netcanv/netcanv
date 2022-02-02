@@ -9,12 +9,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
+use tokio::runtime::Runtime;
 
 use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tool_bar::ToolbarArgs;
@@ -73,6 +73,7 @@ pub struct GlobalControls {
 pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
+   runtime: Arc<Runtime>,
 
    paint_canvas: PaintCanvas,
 
@@ -138,12 +139,19 @@ impl State {
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
    ) -> Result<Self, (anyhow::Error, Assets)> {
+      let runtime = tokio::runtime::Builder::new_multi_thread()
+         .max_blocking_threads(16)
+         .build()
+         .expect("Cannot start async compute runtime");
+      let runtime = Arc::new(runtime);
+
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
          _socket_system: socket_system,
 
-         paint_canvas: PaintCanvas::new(),
+         paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
+         runtime,
 
          actions: Vec::new(),
 
@@ -724,7 +732,12 @@ impl State {
             }
          }
          MessageKind::GetChunks(requester, positions) => {
-            self.send_chunks(requester, &positions)?;
+            let packets = self.runtime.block_on(async {
+               Self::get_encoded_chunks(&mut self.paint_canvas, &positions).await
+            });
+            for packet in packets {
+               self.peer.send_chunks(requester, packet)?;
+            }
          }
          MessageKind::Tool(sender, name, payload) => {
             if let Some(tool_id) = self.toolbar.tool_by_name(&name) {
@@ -771,26 +784,35 @@ impl State {
       Ok(())
    }
 
-   fn send_chunks(&mut self, peer_id: PeerId, positions: &[(i32, i32)]) -> anyhow::Result<()> {
+   async fn get_encoded_chunks(
+      paint_canvas: &mut PaintCanvas,
+      positions: &[(i32, i32)],
+   ) -> Vec<Vec<((i32, i32), Vec<u8>)>> {
       const KILOBYTE: usize = 1024;
       const MAX_BYTES_PER_PACKET: usize = 128 * KILOBYTE;
 
+      let mut chunk_data = Vec::new();
+      for &chunk_position in positions {
+         let image_data = paint_canvas.network_data(chunk_position).await;
+         if let Some(image_data) = image_data {
+            chunk_data.push((chunk_position, image_data.to_owned()));
+         }
+      }
+
+      let mut packets = Vec::new();
       let mut packet = Vec::new();
       let mut bytes_of_image_data = 0;
-      for &chunk_position in positions {
+      for (chunk_position, image_data) in chunk_data {
          if bytes_of_image_data > MAX_BYTES_PER_PACKET {
             let packet = std::mem::replace(&mut packet, Vec::new());
             bytes_of_image_data = 0;
-            self.peer.send_chunks(peer_id, packet)?;
+            packets.push(packet);
          }
-         if let Some(image_data) = self.paint_canvas.network_data(chunk_position) {
-            packet.push((chunk_position, image_data.to_owned()));
-            bytes_of_image_data += image_data.len();
-         }
+         packet.push((chunk_position, image_data.to_owned()));
+         bytes_of_image_data += image_data.len();
       }
-      self.peer.send_chunks(peer_id, packet)?;
-
-      Ok(())
+      packets.push(packet);
+      packets
    }
 
    fn reflow_layout(&mut self, root_view: &View) -> () {
