@@ -793,9 +793,9 @@ impl State {
 
       let mut chunk_data = Vec::new();
       for &chunk_position in positions {
-         let image_data = paint_canvas.network_data(chunk_position).await;
+         let image_data = paint_canvas.network_data(chunk_position);
          if let Some(image_data) = image_data {
-            chunk_data.push((chunk_position, image_data.to_owned()));
+            chunk_data.push((chunk_position, image_data));
          }
       }
 
@@ -808,8 +808,10 @@ impl State {
             bytes_of_image_data = 0;
             packets.push(packet);
          }
-         packet.push((chunk_position, image_data.to_owned()));
-         bytes_of_image_data += image_data.len();
+         if let Ok(Some(image_data)) = image_data.await {
+            bytes_of_image_data += image_data.len();
+            packet.push((chunk_position, image_data));
+         }
       }
       packets.push(packet);
       packets

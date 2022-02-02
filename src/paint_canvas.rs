@@ -353,18 +353,44 @@ impl PaintCanvas {
       }
    }
 
-   /// Returns the image data for the chunk at the given position, if it's not empty.
-   pub async fn network_data(&mut self, chunk_position: (i32, i32)) -> Option<&[u8]> {
-      todo!()
-      // log::info!(
-      //    "fetching data for network transmission from chunk {:?}",
-      //    chunk_position
-      // );
-      // self
-      //    .chunks
-      //    .get_mut(&Chunk::master(chunk_position))?
-      //    .network_data(Chunk::sub(chunk_position))
-      //    .await
+   /// Returns a receiver for the image data of the chunk at the given position, if it's not empty.
+   ///
+   /// The chunk data that arrives from the receiver may be `None` if encoding failed.
+   pub fn network_data(
+      &mut self,
+      chunk_position: (i32, i32),
+   ) -> Option<oneshot::Receiver<Option<Vec<u8>>>> {
+      log::info!(
+         "fetching data for network transmission of chunk {:?}",
+         chunk_position
+      );
+      if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+         let (tx, rx) = oneshot::channel();
+         let image = chunk.download_image();
+         if Chunk::image_is_empty(&image) {
+            return None;
+         }
+         self.runtime.spawn(async move {
+            log::debug!("encoding image data for chunk {:?}", chunk_position);
+            let image_data = Chunk::encode_network_data(image).await;
+            log::debug!("encoding done for chunk {:?}", chunk_position);
+            tx.send(match image_data {
+               Ok((_png, Some(webp))) => Some(webp),
+               Ok((png, None)) => Some(png),
+               Err(error) => {
+                  log::error!(
+                     "error while encoding image for chunk {:?}: {}",
+                     chunk_position,
+                     error
+                  );
+                  None
+               }
+            })
+         });
+         Some(rx)
+      } else {
+         None
+      }
    }
 
    /// Enqueues image data for decoding to the chunk at the given position.
