@@ -65,7 +65,7 @@ impl Viewport {
    /// exponential _zoom factor_.
    pub fn zoom_in(&mut self, delta: f32) {
       self.zoom_level += delta;
-      self.zoom_level = self.zoom_level.clamp(-16.0, 24.0);
+      self.zoom_level = self.zoom_level.clamp(-8.0, 20.0);
    }
 
    /// Returns the rectangle visible from the viewport, given the provided window size.
