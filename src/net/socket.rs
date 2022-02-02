@@ -5,13 +5,17 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{SinkExt, StreamExt};
 use instant::Duration;
 use netcanv_protocol::relay;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{lookup_host, tcp, TcpStream};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use nysa::global as bus;
+use tokio::net::TcpStream;
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use crate::common::Fatal;
 
@@ -31,46 +35,69 @@ impl SocketSystem {
    }
 
    /// Resolves the socket addresses the given hostname could refer to.
-   async fn resolve_address_with_default_port(hostname: &str) -> anyhow::Result<Vec<SocketAddr>> {
-      if let Ok(addresses) = lookup_host(hostname).await {
-         Ok(addresses.collect())
-      } else {
-         Ok(lookup_host((hostname, relay::DEFAULT_PORT)).await?.collect())
+   async fn resolve_address_with_default_port(hostname: &str) -> anyhow::Result<url::Url> {
+      let mut url = url::Url::parse(&format!("ws://{}", hostname))?;
+
+      if let None = url.port() {
+         // Url::set_port on Error does nothing, so it is fine to ignore it
+         #[allow(unused_must_use)]
+         {
+            url.set_port(Some(relay::DEFAULT_PORT));
+         }
       }
+
+      Ok(url)
    }
 
    async fn connect_inner(self: Arc<Self>, hostname: String) -> anyhow::Result<Socket> {
-      let addresses = Self::resolve_address_with_default_port(&hostname)
+      let address = Self::resolve_address_with_default_port(&hostname)
          .await
-         .context("Could not resolve address. Are you sure the IP is correct?")?;
-      log::info!("resolved addresses: {:?}", addresses);
-      let stream = TcpStream::connect(addresses.as_slice()).await?;
-      stream.set_nodelay(true)?;
-      let (mut read_half, write_half) = stream.into_split();
+         .context("Could not resolve address. Are you sure the address is correct?")?;
+      let (stream, _) = connect_async(address).await?;
+      let (sink, mut stream) = stream.split();
       log::info!("connection established");
 
-      let version = read_half.read_u32().await?;
+      let version = if let Some(version) = stream.next().await {
+         match version {
+            Ok(Message::Binary(version)) => {
+               let array: [u8; 4] = match version.try_into() {
+                  Ok(a) => a,
+                  Err(_) => anyhow::bail!("Relay sent invalid version."),
+               };
+
+               u32::from_le_bytes(array)
+            }
+            Ok(_) => anyhow::bail!("Relay sent invalid packet."),
+            Err(e) => anyhow::bail!(e),
+         }
+      } else {
+         anyhow::bail!("Didn't received version packet.")
+      };
+
       match version.cmp(&relay::PROTOCOL_VERSION) {
          Ordering::Equal => (),
          Ordering::Less => anyhow::bail!("Relay version is too old. Try downgrading your client"),
          Ordering::Greater => anyhow::bail!("Relay version is too new. Try updating your client"),
       }
+
       log::debug!("version ok");
+
+      let (quit_tx, _) = broadcast::channel(1);
 
       log::debug!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
-      let (recv_quit_tx, recv_quit_rx) = oneshot::channel();
+      let recv_quit = (quit_tx.clone(), quit_tx.subscribe());
       let recv_join_handle = self.runtime.spawn(async move {
-         if let Err(error) = Socket::receiver_loop(read_half, recv_tx, recv_quit_rx).await {
-            log::error!("receiver loop error: {:?}", error);
+         if let Err(error) = Socket::receiver_loop(stream, recv_tx, recv_quit).await {
+            log::error!("receiver loop erro: {:?}", error);
          }
       });
 
       log::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
-      let (send_quit_tx, send_quit_rx) = oneshot::channel();
+      let send_quit = (quit_tx.clone(), quit_tx.subscribe());
       let send_join_handle = self.runtime.spawn(async move {
-         if let Err(error) = Socket::sender_loop(write_half, send_rx, send_quit_rx).await {
+         if let Err(error) = Socket::sender_loop(sink, send_rx, send_quit).await {
             log::error!("sender loop error: {:?}", error);
          }
       });
@@ -78,8 +105,7 @@ impl SocketSystem {
       log::debug!("registering quitters");
       let mut quitters = self.quitters.lock().await;
       quitters.push(SocketQuitter {
-         quit_send: send_quit_tx,
-         quit_recv: recv_quit_tx,
+         quit: quit_tx,
          send_join_handle,
          recv_join_handle,
       });
@@ -121,39 +147,70 @@ pub struct Socket {
    rx: mpsc::UnboundedReceiver<relay::Packet>,
 }
 
+type Stream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+type Sink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+
 impl Socket {
    async fn read_packet(
-      read_half: &mut tcp::OwnedReadHalf,
-      len: usize,
+      data: Vec<u8>,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
    ) -> anyhow::Result<()> {
-      if len > relay::MAX_PACKET_SIZE as usize {
+      if data.len() > relay::MAX_PACKET_SIZE as usize {
          anyhow::bail!("Packet is too big");
       }
-      let mut bytes = vec![0; len as usize];
-      read_half.read_exact(&mut bytes).await?;
-      let packet = bincode::deserialize(&bytes).context("Invalid packet")?;
+      let packet = bincode::deserialize(&data).context("Invalid packet")?;
       output.send(packet)?;
       Ok(())
    }
 
    async fn receiver_loop(
-      mut read_half: tcp::OwnedReadHalf,
+      mut stream: Stream,
       mut output: mpsc::UnboundedSender<relay::Packet>,
-      mut quit: oneshot::Receiver<Quit>,
+      quit: (broadcast::Sender<Quit>, broadcast::Receiver<Quit>),
    ) -> anyhow::Result<()> {
+      let (tx, mut rx) = quit;
       loop {
          tokio::select! {
             biased;
-            Ok(_) = &mut quit => {
+            Ok(_) = rx.recv() => {
                log::info!("receiver: received quit signal");
                break;
             },
-            len = read_half.read_u32() => Self::read_packet(
-               &mut read_half,
-               len? as usize,
-               &mut output
-            ).await?,
+            Some(message) = stream.next() => {
+               match message {
+                  Ok(Message::Binary(data)) => {
+                     Self::read_packet(data, &mut output).await?
+                  },
+                  Ok(Message::Close(frame)) => {
+                     bus::push(Fatal(anyhow::anyhow!("Relay has been disconnected.")));
+
+                     if let Some(frame) = frame {
+                        log::warn!("Relay has been disconnected, reason: \"{}\", code: {}", frame.reason, frame.code);
+                     } else {
+                        log::warn!("Relay has been disconnected, due to unknown reason.");
+                     }
+
+                     tx.send(Quit)?;
+
+                     break;
+                  },
+                  Err(e) => {
+                     use tokio_tungstenite::tungstenite::{Error::*, error::ProtocolError};
+                     match e {
+                        ConnectionClosed => break,
+                        // Relay can force a closing handshake, and WebSockets requires a closing handshake.
+                        // If we do not get it, it means that relay has been closed and we have to close the session.
+                        AlreadyClosed | Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
+                           log::error!("the connection has been closed, but the client is trying to work with already closed connection. (relay probably crashed)");
+                           bus::push(Fatal(anyhow::anyhow!("Relay has been disconnected.")));
+                           break;
+                        },
+                        _ => anyhow::bail!(e)
+                     }
+                  }
+                  _ => log::info!("got unused message"),
+               }
+            },
             else => (),
          }
       }
@@ -161,10 +218,7 @@ impl Socket {
       Ok(())
    }
 
-   async fn write_packet(
-      write_half: &mut tcp::OwnedWriteHalf,
-      packet: relay::Packet,
-   ) -> anyhow::Result<()> {
+   async fn write_packet(sink: &mut Sink, packet: relay::Packet) -> anyhow::Result<()> {
       let bytes = bincode::serialize(&packet)?;
       if bytes.len() > relay::MAX_PACKET_SIZE as usize {
          anyhow::bail!(
@@ -173,27 +227,28 @@ impl Socket {
             bytes.len(),
          );
       }
-      write_half.write_u32(u32::try_from(bytes.len()).context("Packet is too big (wtf)")?).await?;
-      write_half.write_all(&bytes).await?;
-      write_half.flush().await?;
+      u32::try_from(bytes.len()).context("Packet is too big (wtf)")?;
+
+      sink.send(Message::Binary(bytes)).await?;
       Ok(())
    }
 
    async fn sender_loop(
-      mut write_half: tcp::OwnedWriteHalf,
+      mut sink: Sink,
       mut input: mpsc::UnboundedReceiver<relay::Packet>,
-      mut quit: oneshot::Receiver<Quit>,
+      quit: (broadcast::Sender<Quit>, broadcast::Receiver<Quit>),
    ) -> anyhow::Result<()> {
+      let (_, mut rx) = quit;
       loop {
          tokio::select! {
             biased;
-            Ok(_) = &mut quit => {
+            Ok(_) = rx.recv() => {
                log::info!("sender: received quit signal");
                break;
             },
             packet = input.recv() => {
                if let Some(packet) = packet {
-                  Self::write_packet(&mut write_half, packet).await?;
+                  Self::write_packet(&mut sink, packet).await?;
                } else {
                   break;
                }
@@ -216,11 +271,11 @@ impl Socket {
    }
 }
 
+#[derive(Clone, Debug)]
 struct Quit;
 
 struct SocketQuitter {
-   quit_send: oneshot::Sender<Quit>,
-   quit_recv: oneshot::Sender<Quit>,
+   quit: broadcast::Sender<Quit>,
    send_join_handle: JoinHandle<()>,
    recv_join_handle: JoinHandle<()>,
 }
@@ -228,8 +283,7 @@ struct SocketQuitter {
 impl SocketQuitter {
    async fn quit(self) {
       const QUIT_TIMEOUT: Duration = Duration::from_millis(250);
-      let _ = self.quit_send.send(Quit);
-      let _ = self.quit_recv.send(Quit);
+      let _ = self.quit.send(Quit);
       let _ = timeout(QUIT_TIMEOUT, self.send_join_handle).await;
       let _ = timeout(QUIT_TIMEOUT, self.recv_join_handle).await;
    }
