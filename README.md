@@ -62,7 +62,7 @@ This will allow you to host and join new rooms locally.
 
 ## "Tutorial"
 
-NetCanv was originally made as part of a YouTube "tutorial" series.
+<details><summary>NetCanv was originally made as part of a YouTube "tutorial" series.</summary>
 
 The series is in Polish (!) and can be found on
 [YouTube](https://www.youtube.com/playlist?list=PL1Hg-PZUNFkeRdErHKx3Z7IwhJNgij3bJ).
@@ -87,3 +87,5 @@ showcase the cool and interesting parts about the development process. So don't
 consider this as a general Rust application development tutorial – treat it more
 like a devlog with some educational, comedic, and artistic value sprinkled
 over it.
+
+</details>
