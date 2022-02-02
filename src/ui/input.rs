@@ -1,7 +1,7 @@
 //! Simplified input handling facility.
 
+use instant::Instant;
 use std::ops::{BitAnd, BitOr};
-use std::time::Instant;
 
 use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
@@ -214,10 +214,24 @@ impl Input {
 
          WindowEvent::MouseWheel { delta, .. } => {
             use crate::backend::winit::event::MouseScrollDelta::*;
-            self.mouse_scroll = match *delta {
-               LineDelta(x, y) => Vector::new(x, y),
-               PixelDelta(PhysicalPosition { x, y }) => Vector::new(x as f32, y as f32),
-            };
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+               self.mouse_scroll = match *delta {
+                  LineDelta(x, y) => Vector::new(x, y),
+                  PixelDelta(PhysicalPosition { x, y }) => Vector::new(x as f32, y as f32),
+               };
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+               self.mouse_scroll = match *delta {
+                  LineDelta(x, y) => Vector::new(x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0)),
+                  PixelDelta(PhysicalPosition { x, y }) => {
+                     Vector::new(x.clamp(-1.0, 1.0) as f32, y.clamp(-1.0, 1.0) as f32)
+                  }
+               };
+            }
          }
 
          WindowEvent::ReceivedCharacter(c) => self.char_buffer.push(*c),

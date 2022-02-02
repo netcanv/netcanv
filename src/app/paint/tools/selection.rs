@@ -1,6 +1,6 @@
+use instant::Instant;
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::time::Instant;
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;

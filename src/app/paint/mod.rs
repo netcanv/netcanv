@@ -7,7 +7,7 @@ mod tools;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use instant::{Duration, Instant};
 
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{

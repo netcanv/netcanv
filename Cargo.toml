@@ -54,6 +54,7 @@ directories = "3.0.2"
 tempfile = "3.3.0"
 toml = "0.5.8"
 url = "2.2.2"
+instant = "0.1.12"
 
 # Clipboard
 arboard = "2.0.1"
