@@ -13,6 +13,7 @@ mod input;
 mod radio_button;
 mod slider;
 mod text_field;
+mod tooltip;
 pub mod view;
 pub mod wm;
 
@@ -24,6 +25,7 @@ pub use input::*;
 pub use radio_button::*;
 pub use slider::*;
 pub use text_field::*;
+pub use tooltip::*;
 
 pub type Ui = paws::Ui<Backend>;
 

@@ -29,7 +29,7 @@ pub trait Tool {
    /// Returns the name of the tool.
    ///
    /// This is usually a constant, but `&self` must be included for the trait to be object-safe.
-   fn name(&self) -> &str;
+   fn name(&self) -> &'static str;
 
    /// Returns the icon this tool uses.
    fn icon(&self) -> &Image;

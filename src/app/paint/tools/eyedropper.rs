@@ -31,7 +31,7 @@ impl EyedropperTool {
 }
 
 impl Tool for EyedropperTool {
-   fn name(&self) -> &str {
+   fn name(&self) -> &'static str {
       "Eyedropper"
    }
 

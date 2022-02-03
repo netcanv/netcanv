@@ -122,7 +122,7 @@ impl BrushTool {
 }
 
 impl Tool for BrushTool {
-   fn name(&self) -> &str {
+   fn name(&self) -> &'static str {
       "Brush"
    }
 

@@ -180,11 +180,7 @@ impl State {
    fn process_menu(&mut self, ui: &mut Ui, input: &mut Input) -> Option<Box<dyn AppState>> {
       ui.push((ui.width(), ui.remaining_height()), Layout::Vertical);
 
-      let button = ButtonArgs {
-         height: 32.0,
-         colors: &self.assets.colors.button.clone(),
-         corner_radius: 16.0,
-      };
+      let button = ButtonArgs::new(ui, &self.assets.colors.button).height(32.0).pill();
       let textfield = TextFieldArgs {
          font: &self.assets.sans,
          width: 160.0,
@@ -271,7 +267,7 @@ impl State {
             },
          );
          ui.offset(vector(8.0, 16.0));
-         if Button::with_text(ui, input, button, &self.assets.sans, "Join").clicked()
+         if Button::with_text(ui, input, &button, &self.assets.sans, "Join").clicked()
             || room_id_field.done()
          {
             match Self::join_room(
@@ -338,11 +334,11 @@ impl State {
          }
 
          ui.push((ui.remaining_width(), 32.0), Layout::Horizontal);
-         if Button::with_text(ui, input, button, &self.assets.sans, "Host").clicked() {
+         if Button::with_text(ui, input, &button, &self.assets.sans, "Host").clicked() {
             host_room!();
          }
          ui.space(8.0);
-         if Button::with_text(ui, input, button, &self.assets.sans, "from File").clicked() {
+         if Button::with_text(ui, input, &button, &self.assets.sans, "from File").clicked() {
             match FileDialog::new()
                .set_filename("canvas.png")
                .add_filter("Supported image files", &["png", "jpg", "jpeg", "jfif"])
@@ -424,15 +420,16 @@ impl State {
       if Button::with_icon(
          ui,
          input,
-         ButtonArgs {
-            height: 32.0,
-            colors: &self.assets.colors.action_button,
-            corner_radius: 16.0,
-         },
-         if config().ui.color_scheme == config::ColorScheme::Dark {
-            &self.assets.icons.lobby.light_mode
-         } else {
-            &self.assets.icons.lobby.dark_mode
+         &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill().tooltip(
+            &self.assets.sans,
+            Tooltip::left(match config().ui.color_scheme {
+               config::ColorScheme::Light => "Switch to dark mode",
+               config::ColorScheme::Dark => "Switch to light mode",
+            }),
+         ),
+         match config().ui.color_scheme {
+            config::ColorScheme::Dark => &self.assets.icons.lobby.light_mode,
+            config::ColorScheme::Light => &self.assets.icons.lobby.dark_mode,
          },
       )
       .clicked()
@@ -453,11 +450,10 @@ impl State {
          && Button::with_icon(
             ui,
             input,
-            ButtonArgs {
-               height: 32.0,
-               colors: &self.assets.colors.action_button,
-               corner_radius: 16.0,
-            },
+            &ButtonArgs::new(ui, &self.assets.colors.action_button)
+               .height(32.0)
+               .pill()
+               .tooltip(&self.assets.sans, Tooltip::left("Open source licenses")),
             &self.assets.icons.lobby.legal,
          )
          .clicked()
