@@ -53,11 +53,21 @@ pub struct UiConfig {
    pub toolbar_position: ToolbarPosition,
 }
 
+/// Window position and size.
+#[derive(Deserialize, Serialize)]
+pub struct WindowConfig {
+   pub x: i32,
+   pub y: i32,
+   pub width: u32,
+   pub height: u32,
+}
+
 /// A user `config.toml` file.
 #[derive(Deserialize, Serialize)]
 pub struct UserConfig {
    pub lobby: LobbyConfig,
    pub ui: UiConfig,
+   pub window: Option<WindowConfig>,
 
    #[serde(default)]
    pub keymap: Keymap,
@@ -126,6 +136,7 @@ impl Default for UserConfig {
             color_scheme: ColorScheme::Light,
             toolbar_position: ToolbarPosition::Left,
          },
+         window: None,
          keymap: Default::default(),
       }
    }

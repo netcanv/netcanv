@@ -43,18 +43,19 @@
 
 use std::fmt::Write;
 
-use crate::backend::winit::dpi::LogicalSize;
 use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 #[cfg(target_family = "unix")]
 use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
+use crate::config::WindowConfig;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_renderer::paws::{vector, Layout};
 
+use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::UiRenderFrame;
 #[cfg(feature = "renderer-skia")]
@@ -86,29 +87,41 @@ fn inner_main() -> anyhow::Result<()> {
    SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
    log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
 
+   // Load user configuration.
+   config::load_or_create()?;
+
    // Set up the winit event loop and open the window.
    log::debug!("opening window");
    let event_loop = EventLoop::new();
    let window_builder = {
       let b = WindowBuilder::new()
-         .with_inner_size(LogicalSize::<u16>::new(1024, 600))
+         .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
          .with_title("NetCanv")
          .with_resizable(true);
+      let b = if let Some(window) = &config().window {
+         b.with_inner_size(PhysicalSize::new(window.width, window.height))
+      } else {
+         b
+      };
       // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
       // our window apart from others.
       #[cfg(target_os = "linux")]
       let b = b.with_app_id("netcanv".into());
+
       b
    };
 
-   // Load the user configuration and color scheme.
+   // Load color scheme.
    // TODO: User-definable color schemes, anyone?
-   config::load_or_create()?;
    let color_scheme = ColorScheme::from(config().ui.color_scheme);
 
    // Build the render backend.
    log::debug!("initializing render backend");
    let renderer = Backend::new(window_builder, &event_loop)?;
+   // Position the window.
+   if let Some(window) = &config().window {
+      renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
+   }
    // Also, initialize the clipboard because we now have a window handle.
    match clipboard::init() {
       Ok(_) => (),
@@ -159,6 +172,20 @@ fn inner_main() -> anyhow::Result<()> {
                log::error!("render error: {}", error)
             }
             input.finish_frame(ui.window());
+         }
+
+         Event::LoopDestroyed => {
+            let window = ui.window();
+            let position = window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+            let size = window.inner_size();
+            config::write(|config| {
+               config.window = Some(WindowConfig {
+                  x: position.x,
+                  y: position.y,
+                  width: size.width,
+                  height: size.height,
+               });
+            });
          }
 
          _ => (),
