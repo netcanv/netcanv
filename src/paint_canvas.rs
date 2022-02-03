@@ -1,6 +1,5 @@
 //! NetCanv's infinite paint canvas.
 
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Cursor;
