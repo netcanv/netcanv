@@ -168,7 +168,7 @@ impl Peers {
    fn free_peer_id(&mut self, address: SocketAddr) {
       if let Some(id) = self.peer_ids.remove(&address) {
          self.occupied_peer_ids.remove(&id);
-         self.peer_streams.remove(&id);
+         self.peer_sinks.remove(&id);
       }
    }
 
@@ -298,8 +298,8 @@ async fn relay(
    let packet = Packet::Relayed(sender_id, data);
    if target_id.is_broadcast() {
       broadcast_packet(state, room_id, sender_id, packet).await?;
-   } else if let Some(stream) = state.peers.peer_streams.get(&target_id) {
-      send_packet(stream, packet).await?;
+   } else if let Some(sink) = state.peers.peer_sinks.get(&target_id) {
+      send_packet(sink, packet).await?;
    } else {
       send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
    }
