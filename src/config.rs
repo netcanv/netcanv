@@ -120,7 +120,7 @@ impl Default for UserConfig {
       Self {
          lobby: LobbyConfig {
             nickname: "Anon".to_owned(),
-            relay: "localhost".to_owned(),
+            relay: "ws://localhost".to_owned(),
          },
          ui: UiConfig {
             color_scheme: ColorScheme::Light,
