@@ -163,8 +163,9 @@ impl Socket {
       let bytes = bincode::serialize(&packet)?;
       if bytes.len() > relay::MAX_PACKET_SIZE as usize {
          anyhow::bail!(
-            "Cannot send packet that is bigger than {} bytes",
-            relay::MAX_PACKET_SIZE
+            "Cannot send packet that is bigger than {} bytes (got {})",
+            relay::MAX_PACKET_SIZE,
+            bytes.len(),
          );
       }
       write_half.write_u32(u32::try_from(bytes.len()).context("Packet is too big (wtf)")?).await?;
