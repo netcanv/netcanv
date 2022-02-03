@@ -4,11 +4,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use instant::Duration;
 use netcanv_protocol::relay;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{lookup_host, tcp, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 use crate::common::Fatal;
 
@@ -22,7 +24,7 @@ impl SocketSystem {
    /// Starts the socket system.
    pub fn new() -> Arc<Self> {
       Arc::new(Self {
-         runtime: tokio::runtime::Builder::new_multi_thread().enable_io().build().unwrap(),
+         runtime: tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
          quitters: Mutex::new(Vec::new()),
       })
    }
@@ -159,8 +161,15 @@ impl Socket {
       packet: relay::Packet,
    ) -> anyhow::Result<()> {
       let bytes = bincode::serialize(&packet)?;
+      if bytes.len() > relay::MAX_PACKET_SIZE as usize {
+         anyhow::bail!(
+            "Cannot send packet that is bigger than {} bytes",
+            relay::MAX_PACKET_SIZE
+         );
+      }
       write_half.write_u32(u32::try_from(bytes.len()).context("Packet is too big (wtf)")?).await?;
       write_half.write_all(&bytes).await?;
+      write_half.flush().await?;
       Ok(())
    }
 
@@ -212,9 +221,10 @@ struct SocketQuitter {
 
 impl SocketQuitter {
    async fn quit(self) {
+      const QUIT_TIMEOUT: Duration = Duration::from_millis(250);
       let _ = self.quit_send.send(Quit);
       let _ = self.quit_recv.send(Quit);
-      let _ = self.send_join_handle.await;
-      let _ = self.recv_join_handle.await;
+      let _ = timeout(QUIT_TIMEOUT, self.send_join_handle).await;
+      let _ = timeout(QUIT_TIMEOUT, self.recv_join_handle).await;
    }
 }

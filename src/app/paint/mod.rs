@@ -4,10 +4,10 @@ mod actions;
 pub mod tool_bar;
 mod tools;
 
+use instant::{Duration, Instant};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use instant::{Duration, Instant};
 
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
@@ -149,6 +149,7 @@ impl State {
    ) -> Result<Self, (anyhow::Error, Assets)> {
       let runtime = tokio::runtime::Builder::new_multi_thread()
          .max_blocking_threads(16)
+         .enable_all()
          .build()
          .expect("Cannot start async compute runtime");
       let runtime = Arc::new(runtime);
