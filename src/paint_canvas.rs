@@ -11,6 +11,7 @@ use ::image::{
    ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
    RgbaImage,
 };
+use instant::{Duration, Instant};
 use netcanv_renderer::paws::{vector, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
@@ -194,6 +195,7 @@ pub struct PaintCanvas {
 
    encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
    encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+   chunk_cache_timers: HashMap<(i32, i32), Instant>,
 }
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
@@ -207,6 +209,10 @@ struct CanvasToml {
 }
 
 impl PaintCanvas {
+   /// The duration for which encoded chunk images are held in memory.
+   /// Once this duration expires, the cached images are dropped.
+   const CHUNK_CACHE_DURATION: Duration = Duration::from_secs(5 * 60);
+
    /// Creates a new, empty paint canvas.
    pub fn new(runtime: Arc<Runtime>) -> Self {
       // Set up decoding supervisor thread.
@@ -233,6 +239,7 @@ impl PaintCanvas {
 
          encoded_chunks_tx,
          encoded_chunks_rx,
+         chunk_cache_timers: HashMap::new(),
       }
    }
 
@@ -372,6 +379,14 @@ impl PaintCanvas {
       while let Ok((chunk_position, image)) = self.encoded_chunks_rx.try_recv() {
          let chunk = self.ensure_chunk(renderer, chunk_position);
          chunk.image_cache = Some(image);
+         self.chunk_cache_timers.insert(chunk_position, Instant::now());
+      }
+      for (chunk_position, instant) in &self.chunk_cache_timers {
+         if instant.elapsed() > Self::CHUNK_CACHE_DURATION {
+            if let Some(chunk) = self.chunks.get_mut(chunk_position) {
+               chunk.image_cache = None;
+            }
+         }
       }
    }
 
@@ -391,6 +406,8 @@ impl PaintCanvas {
          // If there is a cached image already, there's no point in encoding it all over again.
          if let Some(image) = chunk.image_cache.as_ref() {
             let _ = output_channel.send((chunk_position, image.clone()));
+            // Reset timers for recently accessed chunks.
+            self.chunk_cache_timers.insert(chunk_position, Instant::now());
             return;
          }
          // If the chunk's image is empty, there's no point in sending it.
