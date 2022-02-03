@@ -60,14 +60,18 @@ impl SocketSystem {
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = oneshot::channel();
       let recv_join_handle = self.runtime.spawn(async move {
-         Socket::receiver_loop(read_half, recv_tx, recv_quit_rx).await.unwrap()
+         if let Err(error) = Socket::receiver_loop(read_half, recv_tx, recv_quit_rx).await {
+            log::error!("receiver loop error: {:?}", error);
+         }
       });
 
       log::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
       let (send_quit_tx, send_quit_rx) = oneshot::channel();
       let send_join_handle = self.runtime.spawn(async move {
-         Socket::sender_loop(write_half, send_rx, send_quit_rx).await.unwrap()
+         if let Err(error) = Socket::sender_loop(write_half, send_rx, send_quit_rx).await {
+            log::error!("sender loop error: {:?}", error);
+         }
       });
 
       log::debug!("registering quitters");
