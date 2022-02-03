@@ -362,7 +362,7 @@ async fn read_packets(
                   // According to the documentation this error is the fault of the programmer.
                   // However, this error would crash the entire relay and *all* rooms,
                   // so it's better to treat it as a simple error and end the connection.
-                  log::error!("the connection has been closed, but the relay is trying to work with already closed connection.");
+                  log::error!("cannot work with already closed connection");
                   break;
                }
                _ => anyhow::bail!(e),
