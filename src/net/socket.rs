@@ -35,11 +35,11 @@ impl SocketSystem {
    }
 
    /// Resolves the socket addresses the given hostname could refer to.
-   async fn resolve_address_with_default_port(hostname: &str) -> anyhow::Result<url::Url> {
-      let url = if !hostname.starts_with("ws://") && !hostname.starts_with("wss://") {
-         format!("wss://{}", hostname)
+   async fn resolve_address_with_default_port(url: &str) -> anyhow::Result<url::Url> {
+      let url = if !url.starts_with("ws://") && !url.starts_with("wss://") {
+         format!("wss://{}", url)
       } else {
-         hostname.to_owned()
+         url.to_owned()
       };
 
       let mut url = url::Url::parse(&url)?;
@@ -155,7 +155,7 @@ impl Socket {
    async fn read_packet(
       message: tungstenite::Result<Message>,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
-      tx: &broadcast::Sender<Quit>,
+      quit: &broadcast::Sender<Quit>,
    ) -> anyhow::Result<Option<()>> {
       match message {
          Ok(Message::Binary(data)) => {
@@ -178,7 +178,7 @@ impl Socket {
                log::warn!("the relay has been disconnected (reason unknown)");
             }
 
-            tx.send(Quit)?;
+            quit.send(Quit)?;
 
             return Ok(None);
          }
@@ -206,17 +206,17 @@ impl Socket {
    async fn receiver_loop(
       mut stream: Stream,
       mut output: mpsc::UnboundedSender<relay::Packet>,
-      tx: broadcast::Sender<Quit>,
-      mut rx: broadcast::Receiver<Quit>,
+      quit_tx: broadcast::Sender<Quit>,
+      mut quit_rx: broadcast::Receiver<Quit>,
    ) -> anyhow::Result<()> {
       loop {
          tokio::select! {
             biased;
-            Ok(_) = rx.recv() => {
+            Ok(_) = quit_rx.recv() => {
                log::info!("receiver: received quit signal");
                break;
             },
-            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &tx).await?.is_none() {
+            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &quit_tx).await?.is_none() {
                break
             },
             else => (),
@@ -244,12 +244,12 @@ impl Socket {
    async fn sender_loop(
       mut sink: Sink,
       mut input: mpsc::UnboundedReceiver<relay::Packet>,
-      mut rx: broadcast::Receiver<Quit>,
+      mut quit: broadcast::Receiver<Quit>,
    ) -> anyhow::Result<()> {
       loop {
          tokio::select! {
             biased;
-            Ok(_) = rx.recv() => {
+            Ok(_) = quit.recv() => {
                log::info!("sender: received quit signal");
                break;
             },
