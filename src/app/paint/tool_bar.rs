@@ -13,7 +13,10 @@ use crate::common::{ControlFlow, RectMath};
 use crate::config::{self, config, ToolbarPosition};
 use crate::ui::view::{self, Dimensions, View};
 use crate::ui::wm::{HitTest, WindowContent, WindowContentArgs, WindowId, WindowManager};
-use crate::ui::{Button, ButtonArgs, ButtonState, Input, Ui, UiElements, UiInput};
+use crate::ui::{
+   Button, ButtonArgs, ButtonColors, ButtonState, Input, Tooltip, TooltipPosition, Ui, UiElements,
+   UiInput,
+};
 
 use super::tools::Tool;
 
@@ -310,6 +313,12 @@ impl WindowContent for ToolbarWindow {
       ui.pop();
 
       // The tools.
+
+      let tooltip_position = match config().ui.toolbar_position {
+         ToolbarPosition::Left => TooltipPosition::Right,
+         ToolbarPosition::Right => TooltipPosition::Left,
+      };
+
       let tools = data.tools.borrow_mut();
       for (i, tool) in tools.iter().enumerate() {
          let i = ToolId(i);
@@ -317,15 +326,17 @@ impl WindowContent for ToolbarWindow {
          if Button::with_icon(
             ui,
             input,
-            ButtonArgs {
-               height: Self::TOOL_SIZE,
-               colors: if data.current_tool == i {
-                  &assets.colors.selected_toolbar_button
-               } else {
-                  &assets.colors.toolbar_button
-               },
-               corner_radius: ui.width() / 2.0,
-            },
+            &ButtonArgs::new(
+               ui,
+               ButtonColors::toggle(
+                  data.current_tool == i,
+                  &assets.colors.toolbar_button,
+                  &assets.colors.selected_toolbar_button,
+               ),
+            )
+            .height(Self::TOOL_SIZE)
+            .corner_radius(ui.width() / 2.0)
+            .tooltip(&assets.sans, Tooltip::new(tool.name(), tooltip_position)),
             tool.icon(),
          )
          .clicked()

@@ -33,11 +33,48 @@ impl ButtonColors {
 }
 
 /// The layout and color scheme arguments for processing the button.
-#[derive(Clone, Copy)]
-pub struct ButtonArgs<'c> {
-   pub height: f32,
-   pub colors: &'c ButtonColors,
-   pub corner_radius: f32,
+#[derive(Clone)]
+pub struct ButtonArgs<'c, 'f> {
+   height: f32,
+   colors: &'c ButtonColors,
+   corner_radius: f32,
+   tooltip: Option<(&'f Font, Tooltip)>,
+}
+
+impl<'c, 'f> ButtonArgs<'c, 'f> {
+   /// Creates a new button style with the given color scheme.
+   pub fn new(ui: &Ui, colors: &'c ButtonColors) -> Self {
+      Self {
+         height: ui.height(),
+         colors,
+         corner_radius: 0.0,
+         tooltip: None,
+      }
+   }
+
+   /// Sets the height of a button.
+   pub fn height(mut self, new_height: f32) -> Self {
+      self.height = new_height;
+      self
+   }
+
+   /// Sets the corner radius of a button.
+   pub fn corner_radius(mut self, new_corner_radius: f32) -> Self {
+      self.corner_radius = new_corner_radius;
+      self
+   }
+
+   /// Sets the button's tooltip.
+   pub fn tooltip(mut self, font: &'f Font, tooltip: Tooltip) -> Self {
+      self.tooltip = Some((font, tooltip));
+      self
+   }
+
+   /// Makes the button pill-shaped.
+   pub fn pill(self) -> Self {
+      let height = self.height;
+      self.corner_radius(height / 2.0)
+   }
 }
 
 /// The result of button interaction computed after processing it.
@@ -59,24 +96,28 @@ impl Button {
          height,
          colors,
          corner_radius,
-      }: ButtonArgs,
+         tooltip,
+      }: &ButtonArgs,
       width_hint: Option<f32>,
       extra: impl FnOnce(&mut Ui),
    ) -> ButtonProcessResult {
       // horizontal because we need to fit() later
-      ui.push((width_hint.unwrap_or(0.0), height), Layout::Horizontal);
-      ui.fill_rounded(colors.fill, corner_radius);
+      ui.push((width_hint.unwrap_or(0.0), *height), Layout::Horizontal);
+      ui.fill_rounded(colors.fill, *corner_radius);
 
       extra(ui);
       ui.fit();
 
-      ui.outline_rounded(colors.outline, corner_radius, 1.0);
+      ui.outline_rounded(colors.outline, *corner_radius, 1.0);
       if ui.hover(input) {
          let fill_color = match input.action(MouseButton::Left) {
             (true, ButtonState::Pressed | ButtonState::Down) => colors.pressed,
             _ => colors.hover,
          };
-         ui.fill_rounded(fill_color, corner_radius);
+         ui.fill_rounded(fill_color, *corner_radius);
+      }
+      if let Some((font, tooltip)) = tooltip {
+         tooltip.process(ui, input, font);
       }
       let clicked = ui.clicked(input, MouseButton::Left);
 
@@ -89,19 +130,15 @@ impl Button {
    pub fn with_text(
       ui: &mut Ui,
       input: &Input,
-      args: ButtonArgs,
+      args: &ButtonArgs,
       font: &Font,
       text: &str,
    ) -> ButtonProcessResult {
       let width = font.text_width(text) + args.height;
+      let color = args.colors.text;
       Self::process(ui, input, args, Some(width), |ui| {
          ui.push((width, ui.height()), Layout::Freeform);
-         ui.text(
-            font,
-            text,
-            args.colors.text,
-            (AlignH::Center, AlignV::Middle),
-         );
+         ui.text(font, text, color, (AlignH::Center, AlignV::Middle));
          ui.pop();
       })
    }
@@ -110,15 +147,13 @@ impl Button {
    pub fn with_icon(
       ui: &mut Ui,
       input: &Input,
-      args: ButtonArgs,
+      args: &ButtonArgs,
       icon: &Image,
    ) -> ButtonProcessResult {
-      Self::process(ui, input, args, Some(args.height), |ui| {
-         ui.icon(
-            icon,
-            args.colors.text,
-            Some(vector(args.height, args.height)),
-         );
+      let color = args.colors.text;
+      let height = args.height;
+      Self::process(ui, input, args, Some(height), |ui| {
+         ui.icon(icon, color, Some(vector(height, height)));
       })
    }
 }
