@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
+use url::Url;
 
 use crate::common::Fatal;
 
@@ -35,14 +36,14 @@ impl SocketSystem {
    }
 
    /// Resolves the socket addresses the given hostname could refer to.
-   async fn resolve_address_with_default_port(url: &str) -> anyhow::Result<url::Url> {
+   async fn resolve_address_with_default_port(url: &str) -> anyhow::Result<Url> {
       let url = if !url.starts_with("ws://") && !url.starts_with("wss://") {
          format!("wss://{}", url)
       } else {
          url.to_owned()
       };
 
-      let mut url = url::Url::parse(&url)?;
+      let mut url = Url::parse(&url)?;
 
       if url.port().is_none() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
