@@ -114,10 +114,10 @@ impl Toolbar {
    }
 
    /// Borrows each tool mutably to the given closure.
-   pub fn with_each_tool<B>(
-      &mut self,
-      mut f: impl FnMut(ToolId, &mut Box<dyn Tool>) -> ControlFlow<B>,
-   ) -> Option<B> {
+   pub fn with_each_tool<B, F>(&mut self, mut f: F) -> Option<B>
+   where
+      F: FnMut(ToolId, &mut Box<dyn Tool>) -> ControlFlow<B>,
+   {
       let mut value = None;
       let mut tools = self.tools.borrow_mut();
       for (i, tool) in tools.iter_mut().enumerate() {

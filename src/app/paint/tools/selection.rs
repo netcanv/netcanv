@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
 use crate::config::config;
+use crate::keymap::KeyBinding;
 use image::io::Reader;
 use image::png::PngEncoder;
 use image::{ColorType, ImageFormat, RgbaImage};
@@ -292,6 +293,10 @@ impl Tool for SelectionTool {
 
    fn icon(&self) -> &Image {
       &self.icons.tool
+   }
+
+   fn key_shortcut(&self) -> KeyBinding {
+      config().keymap.tools.selection
    }
 
    /// When the tool is deactivated, the selection should be deselected.

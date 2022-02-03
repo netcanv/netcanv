@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 use crate::ui::Modifier;
 
 /// A key binding with a modifier.
-type KeyBinding = (Modifier, VirtualKeyCode);
+pub type KeyBinding = (Modifier, VirtualKeyCode);
 
 /// The key map.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Keymap {
    pub edit: EditKeymap,
+   #[serde(default)]
+   pub tools: ToolKeymap,
    pub brush: BrushKeymap,
 }
 
@@ -23,6 +25,24 @@ pub struct EditKeymap {
    pub paste: KeyBinding,
    pub delete: KeyBinding,
    pub select_all: KeyBinding,
+}
+
+/// The key map for selecting tools.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ToolKeymap {
+   pub selection: KeyBinding,
+   pub brush: KeyBinding,
+   pub eyedropper: KeyBinding,
+}
+
+impl Default for ToolKeymap {
+   fn default() -> Self {
+      Self {
+         selection: (Modifier::NONE, VirtualKeyCode::Key1),
+         brush: (Modifier::NONE, VirtualKeyCode::Key2),
+         eyedropper: (Modifier::NONE, VirtualKeyCode::Key3),
+      }
+   }
 }
 
 /// The key mappings for the brush tool.
@@ -42,6 +62,7 @@ impl Default for Keymap {
             delete: (Modifier::NONE, VirtualKeyCode::Delete),
             select_all: (Modifier::CTRL, VirtualKeyCode::A),
          },
+         tools: Default::default(),
          brush: BrushKeymap {
             decrease_thickness: (Modifier::NONE, VirtualKeyCode::LBracket),
             increase_thickness: (Modifier::NONE, VirtualKeyCode::RBracket),

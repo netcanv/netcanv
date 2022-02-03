@@ -321,7 +321,7 @@ impl State {
          KeyShortcutAction::SwitchToThisTool => (),
       }
 
-      let switch_tool = self
+      let mut switch_tool = self
          .toolbar
          .with_each_tool(|tool_id, tool| {
             match tool.global_key_shortcuts(
@@ -336,6 +336,13 @@ impl State {
             ControlFlow::Continue
          })
          .flatten();
+
+      self.toolbar.with_each_tool::<(), _>(|tool_id, tool| {
+         if input.action(tool.key_shortcut()) == (true, true) {
+            switch_tool = Some(tool_id);
+         }
+         ControlFlow::Continue
+      });
 
       if let Some(tool) = switch_tool {
          self.set_current_tool(ui, tool);

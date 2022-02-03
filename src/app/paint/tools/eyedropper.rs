@@ -4,6 +4,8 @@ use netcanv_renderer_opengl::winit::event::MouseButton;
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 use crate::common::ColorMath;
+use crate::config::config;
+use crate::keymap::KeyBinding;
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{view, ColorPicker, ColorPickerArgs};
 use crate::viewport::Viewport;
@@ -35,6 +37,10 @@ impl Tool for EyedropperTool {
 
    fn icon(&self) -> &Image {
       &self.icon
+   }
+
+   fn key_shortcut(&self) -> KeyBinding {
+      config().keymap.tools.eyedropper
    }
 
    fn process_paint_canvas_input(

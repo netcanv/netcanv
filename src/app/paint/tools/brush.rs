@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::backend::winit::event::MouseButton;
 use crate::config::config;
+use crate::keymap::KeyBinding;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, LineCap, Point, Rect, Renderer,
@@ -127,6 +128,10 @@ impl Tool for BrushTool {
 
    fn icon(&self) -> &Image {
       &self.icon
+   }
+
+   fn key_shortcut(&self) -> KeyBinding {
+      config().keymap.tools.brush
    }
 
    /// Handles input and drawing to the paint canvas with the brush.
