@@ -541,11 +541,7 @@ impl State {
       if Button::with_icon(
          ui,
          input,
-         ButtonArgs {
-            height: ui.height(),
-            colors: &self.assets.colors.action_button,
-            corner_radius: 0.0,
-         },
+         &ButtonArgs::new(ui, &self.assets.colors.action_button),
          &self.assets.icons.navigation.menu,
       )
       .clicked()
@@ -592,11 +588,7 @@ impl State {
          if Button::with_icon(
             ui,
             input,
-            ButtonArgs {
-               height: ui.height(),
-               colors: &self.assets.colors.action_button,
-               corner_radius: 4.0,
-            },
+            &ButtonArgs::new(ui, &self.assets.colors.action_button).corner_radius(4.0),
             &self.assets.icons.navigation.copy,
          )
          .clicked()
@@ -674,11 +666,9 @@ impl State {
             let action_button = Button::process(
                ui,
                input,
-               ButtonArgs {
-                  height: 32.0,
-                  colors: &self.assets.colors.action_button,
-                  corner_radius: 4.0,
-               },
+               &ButtonArgs::new(ui, &self.assets.colors.action_button)
+                  .height(32.0)
+                  .corner_radius(4.0),
                Some(ui.width()),
                |ui| {
                   ui.push(ui.size(), Layout::Horizontal);

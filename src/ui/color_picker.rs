@@ -21,7 +21,8 @@ use super::wm::{
 };
 use super::{
    Button, ButtonArgs, ButtonColors, ButtonState, Focus, Input, RadioButton, RadioButtonArgs,
-   SliderStep, TextField, TextFieldArgs, TextFieldColors, Ui, UiInput, ValueSliderArgs, ValueUnit,
+   SliderStep, TextField, TextFieldArgs, TextFieldColors, Tooltip, Ui, UiInput, ValueSliderArgs,
+   ValueUnit,
 };
 
 /// Arguments for processing the color picker.
@@ -126,6 +127,9 @@ impl ColorPicker {
                0.8
             };
          let y_offset = y_offset.round();
+         if self.index == index && self.window_id().is_none() {
+            Tooltip::top("Click to edit color").process(ui, input, &assets.sans);
+         }
          if ui.hover(input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.eraser = false;
             if self.index == index && !self.eraser {
@@ -147,15 +151,15 @@ impl ColorPicker {
          if Button::with_icon(
             ui,
             input,
-            ButtonArgs {
-               height: ui.height(),
-               colors: ButtonColors::toggle(
+            &ButtonArgs::new(
+               ui,
+               ButtonColors::toggle(
                   self.eraser,
                   &assets.colors.toolbar_button,
                   &assets.colors.selected_toolbar_button,
                ),
-               corner_radius: 0.0,
-            },
+            )
+            .tooltip(&assets.sans, Tooltip::top("Eraser")),
             &assets.icons.color_picker.eraser,
          )
          .clicked()

@@ -60,15 +60,12 @@ where
          if Button::with_text(
             ui,
             input,
-            ButtonArgs {
-               height,
-               colors: if self.selected == item {
-                  &colors.selected
-               } else {
-                  &colors.normal
-               },
-               corner_radius,
-            },
+            &ButtonArgs::new(
+               ui,
+               ButtonColors::toggle(self.selected == item, &colors.selected, &colors.normal),
+            )
+            .height(height)
+            .corner_radius(corner_radius),
             font,
             item.get_message().expect("one of the enum variants did not have a message"),
          )

@@ -287,7 +287,7 @@ impl SelectionTool {
 }
 
 impl Tool for SelectionTool {
-   fn name(&self) -> &str {
+   fn name(&self) -> &'static str {
       "Selection"
    }
 

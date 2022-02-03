@@ -56,6 +56,9 @@ pub trait VectorMath {
    /// Floors the vector component-wise.
    fn floor(self) -> Self;
 
+   /// Rounds the vector component-wise.
+   fn round(self) -> Self;
+
    /// Returns whether the point is located in the given circle.
    fn is_in_circle(&self, center: Self, radius: f32) -> bool;
 
@@ -66,6 +69,10 @@ pub trait VectorMath {
 impl VectorMath for Vector {
    fn floor(self) -> Self {
       vector(self.x.floor(), self.y.floor())
+   }
+
+   fn round(self) -> Self {
+      vector(self.x.round(), self.y.round())
    }
 
    fn is_in_circle(&self, center: Vector, radius: f32) -> bool {
