@@ -60,21 +60,17 @@ impl SocketSystem {
       let (sink, mut stream) = stream.split();
       log::info!("connection established");
 
-      let version = if let Some(version) = stream.next().await {
-         match version {
-            Ok(Message::Binary(version)) => {
-               let array: [u8; 4] = match version.try_into() {
-                  Ok(a) => a,
-                  Err(_) => anyhow::bail!("The relay sent an invalid version packet."),
-               };
+      let version =
+         stream.next().await.ok_or_else(|| anyhow::anyhow!("Didn't receive version packet."))?;
 
-               u32::from_le_bytes(array)
-            }
-            Ok(_) => anyhow::bail!("The relay sent an invalid packet."),
-            Err(e) => anyhow::bail!(e),
+      let version = match version? {
+         Message::Binary(version) => {
+            let array: [u8; 4] = version
+               .try_into()
+               .map_err(|_| anyhow::anyhow!("The relay sent an invalid version packet."))?;
+            u32::from_le_bytes(array)
          }
-      } else {
-         anyhow::bail!("Didn't receive version packet.")
+         _ => anyhow::bail!("The relay sent an invalid packet."),
       };
 
       match version.cmp(&relay::PROTOCOL_VERSION) {
