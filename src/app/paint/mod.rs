@@ -72,8 +72,8 @@ pub struct GlobalControls {
 }
 
 struct EncodeChannels {
-   tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
-   rx: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
+   tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
+   rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
 }
 
 /// The paint app state.
@@ -496,7 +496,14 @@ impl State {
 
             let mut bytes_in_packet = 0;
             let mut packet = Vec::new();
-            while let Ok((chunk_position, image_data)) = rx.try_recv() {
+            while let Ok((chunk_position, images)) = rx.try_recv() {
+               let image_data = match images {
+                  ChunkImage {
+                     png: _,
+                     webp: Some(webp),
+                  } => webp,
+                  ChunkImage { png, webp: None } => png,
+               };
                if bytes_in_packet + image_data.len() > MAX_BYTES_PER_PACKET {
                   catch!(self.peer.send_chunks(peer_id, std::mem::take(&mut packet)));
                   bytes_in_packet = 0;

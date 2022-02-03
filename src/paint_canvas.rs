@@ -21,9 +21,16 @@ use tokio::task::JoinHandle;
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
 
+#[derive(Clone)]
+pub struct ChunkImage {
+   pub png: Vec<u8>,
+   pub webp: Option<Vec<u8>>,
+}
+
 /// A chunk on the infinite canvas.
 pub struct Chunk {
    framebuffer: Framebuffer,
+   image_cache: Option<ChunkImage>,
    saved: bool,
 }
 
@@ -44,6 +51,7 @@ impl Chunk {
    fn new(renderer: &mut Backend) -> Self {
       Self {
          framebuffer: renderer.create_framebuffer(Self::SIZE.0, Self::SIZE.1),
+         image_cache: None,
          saved: true,
       }
    }
@@ -104,14 +112,14 @@ impl Chunk {
 
    /// Encodes a network image asynchronously. This encodes PNG, as well as WebP if the PNG is too
    /// large, and returns both images.
-   async fn encode_network_data(image: RgbaImage) -> anyhow::Result<(Vec<u8>, Option<Vec<u8>>)> {
-      let png_data = Self::encode_png_data(image.clone()).await?;
-      let webp_data = if png_data.len() > Self::MAX_PNG_SIZE {
+   async fn encode_network_data(image: RgbaImage) -> anyhow::Result<ChunkImage> {
+      let png = Self::encode_png_data(image.clone()).await?;
+      let webp = if png.len() > Self::MAX_PNG_SIZE {
          Some(Self::encode_webp_data(image).await?)
       } else {
          None
       };
-      Ok((png_data, webp_data))
+      Ok(ChunkImage { png, webp })
    }
 
    /// Decodes a PNG file into the given sub-chunk.
@@ -153,9 +161,12 @@ impl Chunk {
       Ok(image)
    }
 
-   /// Marks the given sub-chunk within this master chunk as dirty - that is, invalidates any
-   /// cached PNG and WebP data, marks the sub-chunk as non-empty, and marks it as unsaved.
-   fn mark_dirty(&mut self) {}
+   /// Marks the chunk as dirty - that is, invalidates any cached PNG and WebP data,
+   /// and marks it as unsaved.
+   fn mark_dirty(&mut self) {
+      self.image_cache = None;
+      self.saved = false;
+   }
 
    /// Marks the given sub-chunk within this master chunk as saved.
    fn mark_saved(&mut self) {
@@ -176,9 +187,13 @@ pub struct PaintCanvas {
    filename: Option<PathBuf>,
 
    runtime: Arc<Runtime>,
+
    chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
    decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
    decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
+
+   encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
+   encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
 }
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
@@ -204,19 +219,27 @@ impl PaintCanvas {
             .await;
       });
 
+      let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
+
       Self {
          chunks: HashMap::new(),
          filename: None,
+
          runtime,
+
          chunks_to_decode_tx: to_decode_tx,
          decoded_chunks_rx,
          decoder_quitter: Some((decoder_quit_tx, decoder_join_handle)),
+
+         encoded_chunks_tx,
+         encoded_chunks_rx,
       }
    }
 
    /// Creates the chunk at the given position, if it doesn't already exist.
-   fn ensure_chunk_exists(&mut self, renderer: &mut Backend, position: (i32, i32)) {
-      self.chunks.entry(position).or_insert_with(|| Chunk::new(renderer));
+   #[must_use]
+   fn ensure_chunk(&mut self, renderer: &mut Backend, position: (i32, i32)) -> &mut Chunk {
+      self.chunks.entry(position).or_insert_with(|| Chunk::new(renderer))
    }
 
    /// Returns the left, top, bottom, right sides covered by the rectangle, in chunk
@@ -249,9 +272,8 @@ impl PaintCanvas {
       assert!(top <= bottom);
       for y in top..=bottom {
          for x in left..=right {
-            let master_chunk = (x, y);
-            self.ensure_chunk_exists(renderer, master_chunk);
-            let chunk = self.chunks.get_mut(&master_chunk).unwrap();
+            let chunk_position = (x, y);
+            let chunk = self.ensure_chunk(renderer, chunk_position);
             renderer.push();
             renderer.translate(vector(
                -x as f32 * Chunk::SIZE.0 as f32,
@@ -344,9 +366,12 @@ impl PaintCanvas {
    /// Updates chunks that have been decoded between the last call to `update` and the current one.
    pub fn update(&mut self, renderer: &mut Backend) {
       while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
-         self.ensure_chunk_exists(renderer, chunk_position);
-         let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+         let chunk = self.ensure_chunk(renderer, chunk_position);
          chunk.upload_image(&image, (0, 0));
+      }
+      while let Ok((chunk_position, image)) = self.encoded_chunks_rx.try_recv() {
+         let chunk = self.ensure_chunk(renderer, chunk_position);
+         chunk.image_cache = Some(image);
       }
    }
 
@@ -355,7 +380,7 @@ impl PaintCanvas {
    /// The chunk data that arrives from the receiver may be `None` if encoding failed.
    pub fn enqueue_network_data_encoding(
       &mut self,
-      output_channel: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
+      output_channel: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
       chunk_position: (i32, i32),
    ) {
       log::info!(
@@ -363,22 +388,27 @@ impl PaintCanvas {
          chunk_position
       );
       if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+         // If there is a cached image already, there's no point in encoding it all over again.
+         if let Some(image) = chunk.image_cache.as_ref() {
+            let _ = output_channel.send((chunk_position, image.clone()));
+            return;
+         }
+         // If the chunk's image is empty, there's no point in sending it.
          let image = chunk.download_image();
          if Chunk::image_is_empty(&image) {
             return;
          }
+         // Otherwise, we can start encoding the chunk image.
+         let own_output_channel = self.encoded_chunks_tx.clone();
          self.runtime.spawn(async move {
             log::debug!("encoding image data for chunk {:?}", chunk_position);
             let image_data = Chunk::encode_network_data(image).await;
             log::debug!("encoding done for chunk {:?}", chunk_position);
             match image_data {
-               Ok((_png, Some(webp))) => {
-                  log::debug!("sending webp data back to main thread");
-                  let _ = output_channel.send((chunk_position, webp));
-               }
-               Ok((png, None)) => {
-                  log::debug!("sending png data back to main thread");
-                  let _ = output_channel.send((chunk_position, png));
+               Ok(data) => {
+                  log::debug!("sending image data back to main thread");
+                  let _ = own_output_channel.send((chunk_position, data.clone()));
+                  let _ = output_channel.send((chunk_position, data));
                }
                Err(error) => {
                   log::error!(
@@ -562,8 +592,7 @@ impl PaintCanvas {
          for x in 0..chunks_x {
             let chunk_position = (x, y);
             let offset_chunk_position = (x - origin_x, y - origin_y);
-            self.ensure_chunk_exists(renderer, offset_chunk_position);
-            let chunk = self.chunks.get_mut(&offset_chunk_position).unwrap();
+            let chunk = self.ensure_chunk(renderer, offset_chunk_position);
             let pixel_position = (
                Chunk::SIZE.0 * chunk_position.0 as u32,
                Chunk::SIZE.1 * chunk_position.1 as u32,
@@ -632,8 +661,7 @@ impl PaintCanvas {
                if let Some(position_str) = position_osstr.to_str() {
                   let chunk_position = Self::parse_chunk_position(position_str)?;
                   log::debug!("chunk {:?}", chunk_position);
-                  self.ensure_chunk_exists(renderer, chunk_position);
-                  let chunk = self.chunks.get_mut(&chunk_position).unwrap();
+                  let chunk = self.ensure_chunk(renderer, chunk_position);
                   let image_data = Chunk::decode_png_data(&std::fs::read(path)?)?;
                   chunk.upload_image(&image_data, (0, 0));
                   chunk.mark_saved();
