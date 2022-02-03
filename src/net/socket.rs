@@ -36,7 +36,13 @@ impl SocketSystem {
 
    /// Resolves the socket addresses the given hostname could refer to.
    async fn resolve_address_with_default_port(hostname: &str) -> anyhow::Result<url::Url> {
-      let mut url = url::Url::parse(&format!("ws://{}", hostname))?;
+      let url = if !hostname.starts_with("ws://") && !hostname.starts_with("wss://") {
+         format!("wss://{}", hostname)
+      } else {
+         hostname.to_owned()
+      };
+
+      let mut url = url::Url::parse(&url)?;
 
       if url.port().is_none() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
