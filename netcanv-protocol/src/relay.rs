@@ -15,8 +15,9 @@ pub const PROTOCOL_VERSION: u32 = 1;
 
 /// The maximum length of a serialized packet. If a packet is larger than this amount, the
 /// connection shall be closed.
-// 1 MiB for now, should be plenty. Chunk packets are never larger than 128 KiB.
-pub const MAX_PACKET_SIZE: u32 = 1 * 1024 * 1024;
+// 4 MiB for now, should be plenty. Chunk packets are never larger than 128 KiB, and clipboard
+// images are downscaled to max 1024x1024. A 1024x1024 PNG of RGB noise is about 2 MiB.
+pub const MAX_PACKET_SIZE: u32 = 4 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Packet {
