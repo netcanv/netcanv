@@ -343,9 +343,8 @@ async fn read_packets(
             if buffer.len() > relay::MAX_PACKET_SIZE as usize {
                anyhow::bail!("packet is too big");
             }
-
             let packet = bincode::deserialize(&buffer)?;
-            handle_packet(&write, address, &state, packet).await?;
+            handle_packet(&write, address, state, packet).await?;
          }
          Ok(Message::Close(frame)) => {
             if let Some(frame) = frame {

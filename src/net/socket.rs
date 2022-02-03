@@ -1,7 +1,6 @@
 //! An abstraction for sockets, communicating over the global bus.
 
 use std::cmp::Ordering;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
