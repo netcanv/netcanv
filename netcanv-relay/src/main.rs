@@ -6,15 +6,20 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use anyhow::Context;
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{SinkExt, StreamExt};
 use log::LevelFilter;
 use nanorand::Rng;
 use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
 use simple_logger::SimpleLogger;
 use structopt::StructOpt;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{accept_async, tungstenite, WebSocketStream};
+
+type Sink = SplitSink<WebSocketStream<TcpStream>, Message>;
+type Stream = SplitStream<WebSocketStream<TcpStream>>;
 
 #[derive(StructOpt)]
 #[structopt(name = "netcanv-relay")]
@@ -133,7 +138,7 @@ impl Rooms {
 struct Peers {
    occupied_peer_ids: HashSet<PeerId>,
    peer_ids: HashMap<SocketAddr, PeerId>,
-   peer_streams: HashMap<PeerId, Arc<Mutex<OwnedWriteHalf>>>,
+   peer_sinks: HashMap<PeerId, Arc<Mutex<Sink>>>,
 }
 
 impl Peers {
@@ -141,22 +146,18 @@ impl Peers {
       Self {
          occupied_peer_ids: HashSet::new(),
          peer_ids: HashMap::new(),
-         peer_streams: HashMap::new(),
+         peer_sinks: HashMap::new(),
       }
    }
 
    /// Allocates a new peer ID for the given socket address.
-   fn allocate_peer_id(
-      &mut self,
-      stream: Arc<Mutex<OwnedWriteHalf>>,
-      address: SocketAddr,
-   ) -> Option<PeerId> {
+   fn allocate_peer_id(&mut self, sink: Arc<Mutex<Sink>>, address: SocketAddr) -> Option<PeerId> {
       let mut rng = nanorand::tls_rng();
       for _attempt in 0..50 {
          let id = PeerId(rng.generate_range(PeerId::FIRST_PEER..=PeerId::LAST_PEER));
          if self.occupied_peer_ids.insert(id) {
             self.peer_ids.insert(address, id);
-            self.peer_streams.insert(id, stream);
+            self.peer_sinks.insert(id, sink);
             return Some(id);
          }
       }
@@ -167,7 +168,7 @@ impl Peers {
    fn free_peer_id(&mut self, address: SocketAddr) {
       if let Some(id) = self.peer_ids.remove(&address) {
          self.occupied_peer_ids.remove(&id);
-         self.peer_streams.remove(&id);
+         self.peer_sinks.remove(&id);
       }
    }
 
@@ -191,11 +192,12 @@ impl State {
    }
 }
 
-async fn send_packet(stream: &Mutex<OwnedWriteHalf>, packet: Packet) -> anyhow::Result<()> {
+async fn send_packet(sink: &Mutex<Sink>, packet: Packet) -> anyhow::Result<()> {
    let encoded = bincode::serialize(&packet)?;
-   let mut stream = stream.lock().await;
-   stream.write_u32(u32::try_from(encoded.len()).context("packet is too big")?).await?;
-   stream.write_all(&encoded).await?;
+   let mut sink = sink.lock().await;
+   u32::try_from(encoded.len()).context("packet is too big")?;
+
+   sink.send(Message::Binary(encoded)).await?;
    Ok(())
 }
 
@@ -216,15 +218,8 @@ async fn broadcast_packet(
    if let Some(iter) = peers_in_room {
       for peer_id in iter {
          if peer_id != sender_id {
-            if let Some(stream) = state.peers.peer_streams.get(&peer_id) {
-               match stream.lock().await.write_u32(packet.len() as u32).await {
-                  Ok(()) => (),
-                  Err(error) => {
-                     result = Err(error);
-                     continue;
-                  }
-               }
-               match stream.lock().await.write_all(&packet).await {
+            if let Some(stream) = state.peers.peer_sinks.get(&peer_id) {
+               match stream.lock().await.send(Message::Binary(packet.to_owned())).await {
                   Ok(()) => (),
                   Err(error) => result = Err(error),
                }
@@ -236,7 +231,7 @@ async fn broadcast_packet(
 }
 
 async fn host(
-   write: &Arc<Mutex<OwnedWriteHalf>>,
+   write: &Arc<Mutex<Sink>>,
    address: SocketAddr,
    state: &mut State,
 ) -> anyhow::Result<()> {
@@ -262,7 +257,7 @@ async fn host(
 }
 
 async fn join(
-   write: &Arc<Mutex<OwnedWriteHalf>>,
+   write: &Arc<Mutex<Sink>>,
    address: SocketAddr,
    state: &mut State,
    room_id: RoomId,
@@ -289,7 +284,7 @@ async fn join(
 
 /// Relays a packet to the peer with the given ID.
 async fn relay(
-   write: &Mutex<OwnedWriteHalf>,
+   write: &Mutex<Sink>,
    address: SocketAddr,
    state: &mut State,
    target_id: PeerId,
@@ -303,8 +298,8 @@ async fn relay(
    let packet = Packet::Relayed(sender_id, data);
    if target_id.is_broadcast() {
       broadcast_packet(state, room_id, sender_id, packet).await?;
-   } else if let Some(stream) = state.peers.peer_streams.get(&target_id) {
-      send_packet(stream, packet).await?;
+   } else if let Some(sink) = state.peers.peer_sinks.get(&target_id) {
+      send_packet(sink, packet).await?;
    } else {
       send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
    }
@@ -313,7 +308,7 @@ async fn relay(
 }
 
 async fn handle_packet(
-   write: &Arc<Mutex<OwnedWriteHalf>>,
+   write: &Arc<Mutex<Sink>>,
    address: SocketAddr,
    state: &Mutex<State>,
    packet: Packet,
@@ -337,24 +332,46 @@ async fn handle_packet(
 }
 
 async fn read_packets(
-   mut read: OwnedReadHalf,
-   write: Arc<Mutex<OwnedWriteHalf>>,
+   mut read: Stream,
+   write: Arc<Mutex<Sink>>,
    address: SocketAddr,
    state: &Mutex<State>,
 ) -> anyhow::Result<()> {
-   loop {
-      // This is a bit of a workaround because bincode can't read from async streams.
-      let packet: Packet = {
-         let packet_size = read.read_u32().await?;
-         if packet_size > relay::MAX_PACKET_SIZE {
-            anyhow::bail!("packet is too big");
+   while let Some(message) = read.next().await {
+      match message {
+         Ok(Message::Binary(buffer)) => {
+            if buffer.len() > relay::MAX_PACKET_SIZE as usize {
+               anyhow::bail!("packet is too big");
+            }
+
+            let packet = bincode::deserialize(&buffer)?;
+            handle_packet(&write, address, &state, packet).await?;
          }
-         let mut buffer = vec![0; packet_size as usize];
-         read.read_exact(&mut buffer).await?;
-         bincode::deserialize(&buffer)?
-      };
-      handle_packet(&write, address, state, packet).await?;
+         Ok(Message::Close(frame)) => {
+            if let Some(frame) = frame {
+               log::info!("client disconnected, reason: {}", frame.reason);
+               return Ok(());
+            }
+         }
+         Ok(_) => log::info!("got ignored message"),
+         Err(e) => {
+            use tungstenite::Error::*;
+            match e {
+               ConnectionClosed => break,
+               AlreadyClosed => {
+                  // According to the documentation this error is the fault of the programmer.
+                  // However, this error would crash the entire relay and *all* rooms,
+                  // so it's better to treat it as a simple error and end the connection.
+                  log::error!("cannot work with already closed connection");
+                  break;
+               }
+               _ => anyhow::bail!(e),
+            }
+         }
+      }
    }
+
+   Ok(())
 }
 
 /// Performs the host transferrence procedure.
@@ -383,8 +400,13 @@ async fn handle_connection(
    log::info!("{} has connected", address);
    stream.set_nodelay(true)?;
 
-   let (read, mut write) = stream.into_split();
-   write.write_u32(relay::PROTOCOL_VERSION).await?;
+   let (mut write, read) = {
+      let stream = accept_async(stream).await?;
+      stream.split()
+   };
+
+   let version = relay::PROTOCOL_VERSION.to_le_bytes();
+   write.send(tungstenite::Message::binary(version)).await?;
    let write = Arc::new(Mutex::new(write));
 
    match read_packets(read, write, address, &state).await {
