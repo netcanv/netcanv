@@ -104,7 +104,7 @@ pub struct ContextMenuBeginResult {
 
 impl ContextMenuBeginResult {
    /// Returns whether the context menu is currently open.
-   pub fn is_open(self) -> bool {
+   pub fn is_open(&self) -> bool {
       self.is_open
    }
 }

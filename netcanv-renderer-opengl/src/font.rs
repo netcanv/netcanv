@@ -127,7 +127,7 @@ impl FontFace {
 
 impl Drop for FontFace {
    fn drop(&mut self) {
-      for (_, size) in &self.sizes {
+      for size in self.sizes.values() {
          unsafe {
             self.gl.delete_texture(size.texture);
          }
@@ -270,7 +270,7 @@ impl<'font, 'text> Typeset<'font, 'text> {
    /// position is calculated, without any of the intermediate glyph positions.
    pub fn fast_forward(mut self) -> f32 {
       let mut renderer = self.store.glyph_renderer(self.font.size);
-      while let Some(c) = self.text.next() {
+      for c in self.text.by_ref() {
          if let Ok(glyph) = renderer.get_or_render_glyph(c) {
             self.pen_x += glyph.advance_x;
          }

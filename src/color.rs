@@ -1,5 +1,7 @@
 //! Color space conversions.
 
+#![allow(clippy::excessive_precision)]
+
 // A lot of the code was adapted from Björn Ottosson's blog posts:
 // https://bottosson.github.io/posts/colorwrong/
 // https://bottosson.github.io/posts/oklab/
@@ -133,7 +135,7 @@ impl Srgb {
    }
 
    /// Converts an sRGB color to a `Color`. The provided alpha value is used.
-   pub fn to_color(&self, alpha: f32) -> Color {
+   pub fn as_color(&self, alpha: f32) -> Color {
       Color {
          r: (self.r * 255.0) as u8,
          g: (self.g * 255.0) as u8,
@@ -236,17 +238,17 @@ impl From<Hsv> for Srgb {
       let h = h.rem_euclid(6.0);
       let c = v * s;
       let x = c * (1.0 - f32::abs(h.rem_euclid(2.0) - 1.0));
-      let (r1, g1, b1) = if h >= 0.0 && h < 1.0 {
+      let (r1, g1, b1) = if (0.0..1.0).contains(&h) {
          (c, x, 0.0)
-      } else if h >= 1.0 && h < 2.0 {
+      } else if (1.0..2.0).contains(&h) {
          (x, c, 0.0)
-      } else if h >= 2.0 && h < 3.0 {
+      } else if (2.0..3.0).contains(&h) {
          (0.0, c, x)
-      } else if h >= 3.0 && h < 4.0 {
+      } else if (3.0..4.0).contains(&h) {
          (0.0, x, c)
-      } else if h >= 4.0 && h < 5.0 {
+      } else if (4.0..5.0).contains(&h) {
          (x, 0.0, c)
-      } else if h >= 5.0 && h < 6.0 {
+      } else if (5.0..6.0).contains(&h) {
          (c, 0.0, x)
       } else {
          (0.0, 0.0, 0.0)
@@ -278,11 +280,11 @@ impl From<LinearRgb> for Oklab {
       let m_ = m.cbrt();
       let s_ = s.cbrt();
 
-      return Self {
+      Self {
          l: 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
          a: 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
          b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
-      };
+      }
    }
 }
 
@@ -296,11 +298,11 @@ impl From<Oklab> for LinearRgb {
       let m = m_ * m_ * m_;
       let s = s_ * s_ * s_;
 
-      return Self {
+      Self {
          r: 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
          g: -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
          b: -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
-      };
+      }
    }
 }
 
@@ -427,10 +429,10 @@ impl Okhsv {
          let f1 = wl * l_ds + wm * m_ds + ws * s_ds;
          let f2 = wl * l_ds2 + wm * m_ds2 + ws * s_ds2;
 
-         s = s - f * f1 / (f1 * f1 - 0.5 * f * f2);
+         s -= f * f1 / (f1 * f1 - 0.5 * f * f2);
       }
 
-      return s;
+      s
    }
 
    fn find_cusp(a: f32, b: f32) -> Lc {
@@ -446,24 +448,24 @@ impl Okhsv {
       let l_cusp = (1.0 / f32::max(f32::max(rgb_at_max.r, rgb_at_max.g), rgb_at_max.b)).cbrt();
       let c_cusp = l_cusp * s_cusp;
 
-      return Lc {
+      Lc {
          l: l_cusp,
          c: c_cusp,
-      };
+      }
    }
 
    fn toe(x: f32) -> f32 {
       const K1: f32 = 0.206;
       const K2: f32 = 0.03;
       const K3: f32 = (1.0 + K1) / (1.0 + K2);
-      return 0.5 * (K3 * x - K1 + f32::sqrt((K3 * x - K1) * (K3 * x - K1) + 4.0 * K2 * K3 * x));
+      0.5 * (K3 * x - K1 + f32::sqrt((K3 * x - K1) * (K3 * x - K1) + 4.0 * K2 * K3 * x))
    }
 
    fn toe_inv(x: f32) -> f32 {
       const K1: f32 = 0.206;
       const K2: f32 = 0.03;
       const K3: f32 = (1.0 + K1) / (1.0 + K2);
-      return (x * x + K1 * x) / (K3 * (x + K2));
+      (x * x + K1 * x) / (K3 * (x + K2))
    }
 }
 
@@ -524,7 +526,7 @@ impl From<Oklab> for Okhsv {
 
       let v = v / Okhsv::MAGIC_WHITE_MULTIPLIER;
 
-      return Okhsv { h, s, v };
+      Okhsv { h, s, v }
    }
 }
 
@@ -573,8 +575,8 @@ impl From<Okhsv> for Oklab {
          0.0
       };
 
-      l = l * scale_l;
-      c = c * scale_l;
+      l *= scale_l;
+      c *= scale_l;
 
       Oklab {
          l,

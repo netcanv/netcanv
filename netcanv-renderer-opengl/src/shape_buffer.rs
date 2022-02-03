@@ -4,7 +4,8 @@ use glam::{Mat3A, Vec3};
 use netcanv_renderer::paws::{point, vector, Point, Vector};
 use smallvec::SmallVec;
 
-use crate::{common::VectorMath, rendering::Vertex};
+use crate::common::VectorMath;
+use crate::rendering::Vertex;
 
 pub(crate) struct ShapeBuffer {
    transform: Mat3A,
@@ -39,7 +40,7 @@ impl ShapeBuffer {
 
    /// Pushes a list of indices into the shape buffer.
    pub fn push_indices(&mut self, indices: &[u32]) {
-      self.indices.extend(indices.iter().map(|x| *x));
+      self.indices.extend(indices.iter().copied());
    }
 
    /// Winds a quad using the given indices into the shape buffer.

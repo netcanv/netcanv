@@ -105,19 +105,13 @@ impl BrushTool {
    }
 
    fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerBrush {
-      if !self.peers.contains_key(&peer_id) {
-         self.peers.insert(
-            peer_id,
-            PeerBrush {
-               mouse_position: point(0.0, 0.0),
-               previous_mouse_position: point(0.0, 0.0),
-               last_cursor_packet: Instant::now(),
-               thickness: 4.0,
-               color: Color::BLACK,
-            },
-         );
-      }
-      self.peers.get_mut(&peer_id).unwrap()
+      self.peers.entry(peer_id).or_insert(PeerBrush {
+         mouse_position: point(0.0, 0.0),
+         previous_mouse_position: point(0.0, 0.0),
+         last_cursor_packet: Instant::now(),
+         thickness: 4.0,
+         color: Color::BLACK,
+      })
    }
 
    /// Returns the color currently selected in the color picker.

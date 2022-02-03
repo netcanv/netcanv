@@ -224,7 +224,7 @@ impl WindowManager {
       if let Some(window_id) = steal_focus {
          self.steal_focus(window_id);
       } else if mouse_clicked {
-         for (_, window) in &mut self.windows {
+         for window in self.windows.values_mut() {
             window.focused = false;
          }
       }

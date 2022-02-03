@@ -140,7 +140,7 @@ fn inner_main() -> anyhow::Result<()> {
 
          Event::MainEventsCleared => {
             let window_size = ui.window().inner_size();
-            match ui.render_frame(|ui| {
+            if let Err(error) = ui.render_frame(|ui| {
                ui.root(
                   vector(window_size.width as f32, window_size.height as f32),
                   Layout::Freeform,
@@ -156,8 +156,7 @@ fn inner_main() -> anyhow::Result<()> {
                });
                app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
-               Err(error) => log::error!("render error: {}", error),
-               _ => (),
+               log::error!("render error: {}", error)
             }
             input.finish_frame(ui.window());
          }

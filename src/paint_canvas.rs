@@ -68,12 +68,12 @@ impl Chunk {
    /// chunk.
    fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
       self.mark_dirty();
-      self.framebuffer.upload_rgba(offset, Self::SIZE, &image);
+      self.framebuffer.upload_rgba(offset, Self::SIZE, image);
    }
 
    /// Encodes an image to PNG data asynchronously.
    async fn encode_png_data(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
-      Ok(tokio::task::spawn_blocking(move || {
+      tokio::task::spawn_blocking(move || {
          let mut bytes: Vec<u8> = Vec::new();
          match PngEncoder::new(Cursor::new(&mut bytes)).encode(
             &image,
@@ -89,7 +89,7 @@ impl Chunk {
          }
          Ok(bytes)
       })
-      .await??)
+      .await?
    }
 
    /// Encodes an image to WebP asynchronously.
@@ -216,9 +216,7 @@ impl PaintCanvas {
 
    /// Creates the chunk at the given position, if it doesn't already exist.
    fn ensure_chunk_exists(&mut self, renderer: &mut Backend, position: (i32, i32)) {
-      if !self.chunks.contains_key(&position) {
-         self.chunks.insert(position, Chunk::new(renderer));
-      }
+      self.chunks.entry(position).or_insert_with(|| Chunk::new(renderer));
    }
 
    /// Returns the left, top, bottom, right sides covered by the rectangle, in chunk
@@ -412,7 +410,7 @@ impl PaintCanvas {
    fn save_as_png(&self, path: &Path) -> anyhow::Result<()> {
       log::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
-      for (chunk_position, _) in &self.chunks {
+      for chunk_position in self.chunks.keys() {
          left = left.min(chunk_position.0);
          top = top.min(chunk_position.1);
          right = right.max(chunk_position.0);
@@ -474,12 +472,11 @@ impl PaintCanvas {
       log::info!("clearing older netcanv save {:?}", path);
       for entry in std::fs::read_dir(path)? {
          let path = entry?.path();
-         if path.is_file() {
-            if path.extension() == Some(OsStr::new("png"))
-               || path.file_name() == Some(OsStr::new("canvas.toml"))
-            {
-               std::fs::remove_file(path)?;
-            }
+         if path.is_file()
+            && (path.extension() == Some(OsStr::new("png"))
+               || path.file_name() == Some(OsStr::new("canvas.toml")))
+         {
+            std::fs::remove_file(path)?;
          }
       }
       Ok(())
@@ -523,8 +520,10 @@ impl PaintCanvas {
    ///
    /// If `path` is `None`, this performs an autosave of an already saved `.netcanv` directory.
    pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<()> {
-      let path =
-         path.map(|p| p.to_path_buf()).or(self.filename.clone()).expect("no save path provided");
+      let path = path
+         .map(|p| p.to_path_buf())
+         .or_else(|| self.filename.clone())
+         .expect("no save path provided");
       if let Some(ext) = path.extension() {
          match ext.to_str() {
             Some("png") => self.save_as_png(&path),
@@ -631,7 +630,7 @@ impl PaintCanvas {
          if path.is_file() && path.extension() == Some(OsStr::new("png")) {
             if let Some(position_osstr) = path.file_stem() {
                if let Some(position_str) = position_osstr.to_str() {
-                  let chunk_position = Self::parse_chunk_position(&position_str)?;
+                  let chunk_position = Self::parse_chunk_position(position_str)?;
                   log::debug!("chunk {:?}", chunk_position);
                   self.ensure_chunk_exists(renderer, chunk_position);
                   let chunk = self.chunks.get_mut(&chunk_position).unwrap();

@@ -57,10 +57,10 @@ pub trait VectorMath {
    fn floor(self) -> Self;
 
    /// Returns whether the point is located in the given circle.
-   fn is_in_circle(self, center: Self, radius: f32) -> bool;
+   fn is_in_circle(&self, center: Self, radius: f32) -> bool;
 
    /// Returns whether the point is located inside the given rectangle.
-   fn is_in_rect(self, rect: Rect) -> bool;
+   fn is_in_rect(&self, rect: Rect) -> bool;
 }
 
 impl VectorMath for Vector {
@@ -68,12 +68,12 @@ impl VectorMath for Vector {
       vector(self.x.floor(), self.y.floor())
    }
 
-   fn is_in_circle(self, center: Vector, radius: f32) -> bool {
-      let d = self - center;
+   fn is_in_circle(&self, center: Vector, radius: f32) -> bool {
+      let d = *self - center;
       d.x * d.x + d.y * d.y <= radius * radius
    }
 
-   fn is_in_rect(self, rect: Rect) -> bool {
+   fn is_in_rect(&self, rect: Rect) -> bool {
       self.x >= rect.left()
          && self.y >= rect.top()
          && self.x < rect.right()

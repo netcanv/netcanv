@@ -293,7 +293,7 @@ impl State {
             renderer.text(
                Rect::new(point(8.0, y), vector(0.0, 0.0)),
                &self.assets.sans,
-               &entry,
+               entry,
                Color::WHITE.with_alpha(240),
                (AlignH::Left, AlignV::Bottom),
             );
@@ -340,8 +340,6 @@ impl State {
       if let Some(tool) = switch_tool {
          self.set_current_tool(ui, tool);
       }
-
-      return;
    }
 
    /// Processes the paint canvas.
@@ -470,7 +468,7 @@ impl State {
             // downloading all chunks may stall the host for too long, lagging everything to death.
             // If a client wants to download all the chunks, they should probably just explore
             // enough of the canvas such that all the chunks get loaded.
-            catch!(self.paint_canvas.save(Some(&self.save_to_file.as_ref().unwrap())));
+            catch!(self.paint_canvas.save(Some(self.save_to_file.as_ref().unwrap())));
             self.last_autosave = Instant::now();
             self.save_to_file = None;
          } else {
@@ -493,15 +491,13 @@ impl State {
             let mut packet = Vec::new();
             while let Ok((chunk_position, image_data)) = rx.try_recv() {
                if bytes_in_packet + image_data.len() > MAX_BYTES_PER_PACKET {
-                  catch!(self
-                     .peer
-                     .send_chunks(peer_id, std::mem::replace(&mut packet, Vec::new())));
+                  catch!(self.peer.send_chunks(peer_id, std::mem::take(&mut packet)));
                   bytes_in_packet = 0;
                }
                bytes_in_packet += image_data.len();
                packet.push((chunk_position, image_data));
             }
-            if packet.len() > 0 {
+            if !packet.is_empty() {
                catch!(self.peer.send_chunks(peer_id, packet));
             }
          }
@@ -661,7 +657,7 @@ impl State {
          ui.space(8.0);
 
          for action in &mut self.actions {
-            if Button::process(
+            let action_button = Button::process(
                ui,
                input,
                ButtonArgs {
@@ -686,9 +682,8 @@ impl State {
                   );
                   ui.pop();
                },
-            )
-            .clicked()
-            {
+            );
+            if action_button.clicked() {
                if let Err(error) = action.perform(ActionArgs {
                   paint_canvas: &mut self.paint_canvas,
                }) {
@@ -733,7 +728,7 @@ impl State {
                   self.toolbar.with_tool(tool_id, |tool| {
                      tool.network_peer_deactivate(
                         ui,
-                        Net::new(&mut self.peer),
+                        Net::new(&self.peer),
                         &mut self.paint_canvas,
                         peer_id,
                      )
@@ -773,7 +768,7 @@ impl State {
                self.toolbar.with_tool(tool_id, |tool| {
                   tool.network_receive(
                      ui,
-                     Net::new(&mut self.peer),
+                     Net::new(&self.peer),
                      &mut self.paint_canvas,
                      sender,
                      payload.clone(),
@@ -794,7 +789,7 @@ impl State {
                   self.toolbar.with_tool(tool_id, |tool| {
                      tool.network_peer_deactivate(
                         ui,
-                        Net::new(&mut self.peer),
+                        Net::new(&self.peer),
                         &mut self.paint_canvas,
                         address,
                      )
@@ -805,7 +800,7 @@ impl State {
             if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
                log::debug!(" - valid tool - {:?}", tool_id);
                self.toolbar.with_tool(tool_id, |tool| {
-                  tool.network_peer_activate(Net::new(&mut self.peer), address)
+                  tool.network_peer_activate(Net::new(&self.peer), address)
                })?;
             }
          }
@@ -827,7 +822,7 @@ impl State {
       }
    }
 
-   fn reflow_layout(&mut self, root_view: &View) -> () {
+   fn reflow_layout(&mut self, root_view: &View) {
       // The bottom bar and the canvas.
       view::layout::vertical(
          root_view,
@@ -880,7 +875,7 @@ impl AppState for State {
          .into_iter()
          .map(|message| message.consume().0)
          .collect();
-      if needed_chunks.len() > 0 {
+      if !needed_chunks.is_empty() {
          for &chunk_position in &needed_chunks {
             self.chunk_downloads.insert(chunk_position, ChunkDownload::Requested);
          }

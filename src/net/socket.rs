@@ -1,5 +1,6 @@
 //! An abstraction for sockets, communicating over the global bus.
 
+use std::cmp::Ordering;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -49,10 +50,10 @@ impl SocketSystem {
       log::info!("connection established");
 
       let version = read_half.read_u32().await?;
-      if version < relay::PROTOCOL_VERSION {
-         anyhow::bail!("Relay version is too old. Try downgrading your client");
-      } else if version > relay::PROTOCOL_VERSION {
-         anyhow::bail!("Relay version is too new. Try updating your client");
+      match version.cmp(&relay::PROTOCOL_VERSION) {
+         Ordering::Equal => (),
+         Ordering::Less => anyhow::bail!("Relay version is too old. Try downgrading your client"),
+         Ordering::Greater => anyhow::bail!("Relay version is too new. Try updating your client"),
       }
       log::debug!("version ok");
 
@@ -95,7 +96,7 @@ impl SocketSystem {
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
       self.runtime.spawn(async move {
-         if let Err(_) = socket_tx.send(self2.connect_inner(hostname).await) {
+         if socket_tx.send(self2.connect_inner(hostname).await).is_err() {
             panic!("Could not send ready socket to receiver");
          }
       });

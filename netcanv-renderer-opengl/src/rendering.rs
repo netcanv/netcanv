@@ -479,13 +479,13 @@ impl Renderer for OpenGlBackend {
    type Font = Font;
 
    fn push(&mut self) {
-      self.state.stack.push(self.state.transform().clone());
+      self.state.stack.push(*self.state.transform());
    }
 
    fn pop(&mut self) {
       self.state.stack.pop();
       assert!(
-         self.state.stack.len() > 0,
+         !self.state.stack.is_empty(),
          "pop() called at the bottom of the stack"
       );
       self.state.apply_transform();

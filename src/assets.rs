@@ -66,7 +66,7 @@ pub fn open_license_page() -> anyhow::Result<()> {
          .suffix(".html")
          .tempfile()
          .context("could not create temporary file for licensing info")?;
-      license_file.write(about_html)?;
+      license_file.write_all(about_html)?;
       let (_, path) = license_file.keep()?;
       let url = Url::from_file_path(path)
          .map_err(|_| anyhow::anyhow!("could not create license page URL"))?;

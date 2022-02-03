@@ -136,7 +136,7 @@ static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
 /// Loads or creates the user config.
 pub fn load_or_create() -> anyhow::Result<()> {
    let config = UserConfig::load_or_create()?;
-   if let Err(_) = CONFIG.set(RwLock::new(config)) {
+   if CONFIG.set(RwLock::new(config)).is_err() {
       anyhow::bail!("the user config is already loaded");
    }
    Ok(())

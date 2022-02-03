@@ -449,8 +449,8 @@ impl State {
 
       ui.space(4.0);
 
-      if assets::has_license_page() {
-         if Button::with_icon(
+      if assets::has_license_page()
+         && Button::with_icon(
             ui,
             input,
             ButtonArgs {
@@ -461,9 +461,8 @@ impl State {
             &self.assets.icons.lobby.legal,
          )
          .clicked()
-         {
-            catch!(assets::open_license_page());
-         }
+      {
+         catch!(assets::open_license_page());
       }
    }
 

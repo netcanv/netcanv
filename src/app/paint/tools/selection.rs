@@ -172,17 +172,11 @@ impl SelectionTool {
    /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
    /// said selection.
    fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerSelection {
-      if !self.peer_selections.contains_key(&peer_id) {
-         self.peer_selections.insert(
-            peer_id,
-            PeerSelection {
-               selection: Selection::new(),
-               previous_normalized_rect: None,
-               last_rect_packet: Instant::now(),
-            },
-         );
-      }
-      self.peer_selections.get_mut(&peer_id).unwrap()
+      self.peer_selections.entry(peer_id).or_insert(PeerSelection {
+         selection: Selection::new(),
+         previous_normalized_rect: None,
+         last_rect_packet: Instant::now(),
+      })
    }
 
    /// Sends a `Rect` packet containing the current selection rectangle.
@@ -501,7 +495,7 @@ impl Tool for SelectionTool {
                let rect = Rect::new(top_left, bottom_right - top_left);
                let renderer = ui.render();
                if let Some(capture) = self.selection.capture.as_ref() {
-                  renderer.framebuffer(rect, &capture);
+                  renderer.framebuffer(rect, capture);
                }
                renderer.outline(
                   rect,
@@ -763,7 +757,7 @@ impl Selection {
    /// Does not do anything else with the selection; the rectangle must be initialized separately.
    fn upload_rgba(&mut self, renderer: &mut Backend, image: &RgbaImage) {
       let mut capture = renderer.create_framebuffer(image.width(), image.height());
-      capture.upload_rgba((0, 0), (image.width(), image.height()), &image);
+      capture.upload_rgba((0, 0), (image.width(), image.height()), image);
       self.capture = Some(capture);
    }
 
@@ -799,11 +793,10 @@ impl Selection {
                rect.height().clamp(-(Self::MAX_SIZE as f32), Self::MAX_SIZE as f32),
             ),
          );
-         let rect = Rect::new(
+         Rect::new(
             point(rect.x().floor(), rect.y().floor()),
             vector(rect.width().ceil(), rect.height().ceil()),
-         );
-         rect
+         )
       })
    }
 

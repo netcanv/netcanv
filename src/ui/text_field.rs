@@ -103,7 +103,7 @@ impl TextField {
 
       // Rendering: hint
       if let Some(hint) = hint {
-         if self.text.len() == 0 {
+         if self.text.is_empty() {
             ui.text(font, hint, colors.text_hint, (AlignH::Left, AlignV::Middle));
          }
       }
@@ -113,7 +113,7 @@ impl TextField {
       {
          ui.draw(|ui| {
             let current_text = &self.text[..self.selection.cursor()];
-            let x = font.text_width(&current_text);
+            let x = font.text_width(current_text);
 
             // While we have the caret's horizontal position already calculated,
             // also process scrolling.
@@ -463,6 +463,8 @@ impl TextFieldProcessResult {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct TextPosition(usize);
 
+// This impl groups bits to make UTF-8 decoding more readable.
+#[allow(clippy::unusual_byte_groupings)]
 impl TextPosition {
    /// Returns the next character position in the UTF-8 string.
    fn next(mut self, text: &str) -> Self {

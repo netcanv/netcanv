@@ -125,7 +125,7 @@ impl Rooms {
    }
 
    /// Returns an iterator over all the peers in a given room.
-   fn peers_in_room<'r>(&'r self, room_id: RoomId) -> Option<impl Iterator<Item = PeerId> + 'r> {
+   fn peers_in_room(&self, room_id: RoomId) -> Option<impl Iterator<Item = PeerId> + '_> {
       Some(self.room_clients.get(&room_id)?.iter().cloned())
    }
 }
@@ -243,20 +243,20 @@ async fn host(
    let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
+      send_packet(write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let room_id = if let Some(id) = state.rooms.find_room_id() {
       id
    } else {
-      send_packet(&write, Packet::Error(relay::Error::NoFreeRooms)).await?;
+      send_packet(write, Packet::Error(relay::Error::NoFreeRooms)).await?;
       anyhow::bail!("no more free room IDs");
    };
 
    state.rooms.make_host(room_id, peer_id);
    state.rooms.join_room(peer_id, room_id);
-   send_packet(&write, Packet::RoomCreated(room_id, peer_id)).await?;
+   send_packet(write, Packet::RoomCreated(room_id, peer_id)).await?;
 
    Ok(())
 }
@@ -270,19 +270,19 @@ async fn join(
    let peer_id = if let Some(id) = state.peers.allocate_peer_id(Arc::clone(write), address) {
       id
    } else {
-      send_packet(&write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
+      send_packet(write, Packet::Error(relay::Error::NoFreePeerIDs)).await?;
       anyhow::bail!("no more free peer IDs");
    };
 
    let host_id = if let Some(id) = state.rooms.host_id(room_id) {
       id
    } else {
-      send_packet(&write, Packet::Error(relay::Error::RoomDoesNotExist)).await?;
+      send_packet(write, Packet::Error(relay::Error::RoomDoesNotExist)).await?;
       anyhow::bail!("no room with the given ID");
    };
 
    state.rooms.join_room(peer_id, room_id);
-   send_packet(&write, Packet::Joined { peer_id, host_id }).await?;
+   send_packet(write, Packet::Joined { peer_id, host_id }).await?;
 
    Ok(())
 }
@@ -303,12 +303,10 @@ async fn relay(
    let packet = Packet::Relayed(sender_id, data);
    if target_id.is_broadcast() {
       broadcast_packet(state, room_id, sender_id, packet).await?;
+   } else if let Some(stream) = state.peers.peer_streams.get(&target_id) {
+      send_packet(stream, packet).await?;
    } else {
-      if let Some(stream) = state.peers.peer_streams.get(&target_id) {
-         send_packet(stream, packet).await?;
-      } else {
-         send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
-      }
+      send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
    }
 
    Ok(())
@@ -321,10 +319,10 @@ async fn handle_packet(
    packet: Packet,
 ) -> anyhow::Result<()> {
    match packet {
-      Packet::Host => host(&write, address, &mut *state.lock().await).await?,
-      Packet::Join(room_id) => join(&write, address, &mut *state.lock().await, room_id).await?,
+      Packet::Host => host(write, address, &mut *state.lock().await).await?,
+      Packet::Join(room_id) => join(write, address, &mut *state.lock().await, room_id).await?,
       Packet::Relay(target_id, data) => {
-         relay(&write, address, &mut *state.lock().await, target_id, data).await?
+         relay(write, address, &mut *state.lock().await, target_id, data).await?
       }
 
       // These ones shouldn't happen, ignore.
@@ -355,7 +353,7 @@ async fn read_packets(
          read.read_exact(&mut buffer).await?;
          bincode::deserialize(&buffer)?
       };
-      handle_packet(&write, address, &state, packet).await?;
+      handle_packet(&write, address, state, packet).await?;
    }
 }
 

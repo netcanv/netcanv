@@ -98,8 +98,7 @@ impl Expand {
                colors.pressed
             } else {
                colors.hover
-            }
-            .into();
+            };
             let y = (height * 1.1).round();
             ui.line(
                point(0.0, y),

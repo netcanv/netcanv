@@ -155,16 +155,11 @@ impl Peer {
 
    /// Checks the message bus for any established connections.
    fn poll_for_new_connections(&mut self) -> anyhow::Result<()> {
-      match &mut self.state {
-         // If a new connection was established and we're trying to connect to a relay, check if
-         // the connection is ours.
-         State::WaitingForRelay(socket) => {
-            if let Ok(socket) = socket.try_recv() {
-               let socket = catch!(socket, as Fatal, return Ok(()));
-               self.connected_to_relay(socket)?;
-            }
+      if let State::WaitingForRelay(socket) = &mut self.state {
+         if let Ok(socket) = socket.try_recv() {
+            let socket = catch!(socket, as Fatal, return Ok(()));
+            self.connected_to_relay(socket)?;
          }
-         _ => (),
       }
       Ok(())
    }
@@ -372,12 +367,10 @@ impl Peer {
    pub fn host_name(&self) -> Option<&str> {
       if self.is_host() {
          None
+      } else if let Some(mate) = self.mates.get(&self.host?) {
+         Some(&mate.nickname)
       } else {
-         if let Some(mate) = self.mates.get(&self.host?) {
-            Some(&mate.nickname)
-         } else {
-            None
-         }
+         None
       }
    }
 

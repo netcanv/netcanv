@@ -87,7 +87,7 @@ impl ColorPicker {
       if self.eraser {
          Color::TRANSPARENT
       } else {
-         Srgb::from(self.palette[self.index]).to_color(1.0)
+         Srgb::from(self.palette[self.index]).as_color(1.0)
       }
    }
 
@@ -120,13 +120,13 @@ impl ColorPicker {
          let y_offset = ui.height()
             * if index == self.index && !self.eraser {
                0.5
-            } else if ui.hover(&input) {
+            } else if ui.hover(input) {
                0.7
             } else {
                0.8
             };
          let y_offset = y_offset.round();
-         if ui.hover(&input) && input.mouse_button_just_pressed(MouseButton::Left) {
+         if ui.hover(input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.eraser = false;
             if self.index == index && !self.eraser {
                self.toggle_picker_window(ui, wm, window_view.clone());
@@ -136,7 +136,7 @@ impl ColorPicker {
          }
          ui.draw(|ui| {
             let rect = Rect::new(point(0.0, y_offset), ui.size());
-            let color = Srgb::from(color).to_color(1.0);
+            let color = Srgb::from(color).as_color(1.0);
             ui.render().fill(rect, color, 4.0);
          });
          ui.pop();
@@ -342,17 +342,10 @@ impl PickerWindow {
       [
          ValueSlider::new("R", rgb.clone(), r, 0.0, 255.0, SliderStep::Discrete(1.0)),
          ValueSlider::new("G", rgb.clone(), g, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new("B", rgb.clone(), b, 0.0, 255.0, SliderStep::Discrete(1.0)),
-         ValueSlider::new(
-            "H",
-            degrees.clone(),
-            h,
-            0.0,
-            360.0,
-            SliderStep::Discrete(1.0),
-         ),
+         ValueSlider::new("B", rgb, b, 0.0, 255.0, SliderStep::Discrete(1.0)),
+         ValueSlider::new("H", degrees, h, 0.0, 360.0, SliderStep::Discrete(1.0)),
          ValueSlider::new("S", percent.clone(), s, 0.0, 100.0, SliderStep::Smooth),
-         ValueSlider::new("V", percent.clone(), v, 0.0, 100.0, SliderStep::Smooth),
+         ValueSlider::new("V", percent, v, 0.0, 100.0, SliderStep::Smooth),
       ]
    }
 
@@ -367,7 +360,7 @@ impl PickerWindow {
                s: 1.0,
                v: 1.0,
             })
-            .to_color(1.0);
+            .as_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
          ColorSpace::Oklab => RgbaImage::from_fn(width, height, |_x, y| {
@@ -377,7 +370,7 @@ impl PickerWindow {
                s: 0.9,
                v: 1.0,
             }))
-            .to_color(1.0);
+            .as_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
@@ -400,7 +393,7 @@ impl PickerWindow {
                s: saturation,
                v: value,
             })
-            .to_color(1.0);
+            .as_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
          ColorSpace::Oklab => RgbaImage::from_fn(width, height, |x, y| {
@@ -411,7 +404,7 @@ impl PickerWindow {
                s: saturation,
                v: value,
             }))
-            .to_color(1.0);
+            .as_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
@@ -537,7 +530,7 @@ impl PickerWindow {
       data: &mut PickerWindowData,
    ) {
       ui.push((ui.remaining_width(), ui.height()), Layout::Vertical);
-      let color = Srgb::from(data.color).to_color(1.0);
+      let color = Srgb::from(data.color).as_color(1.0);
 
       // The hex code text field.
       let text_color = if color.brightness() > 0.5 {
@@ -706,7 +699,7 @@ impl PickerWindow {
    /// Parses a hex code into a color. If the given text is not a valid hex code, returns `None`.
    fn parse_hex_code(text: &str) -> Option<Color> {
       // Empty string? Not a hex code.
-      if text.len() == 0 {
+      if text.is_empty() {
          return None;
       }
       // Strip the optional, leading #.
@@ -733,7 +726,7 @@ impl PickerWindow {
 
    /// Updates the widgets to reflect the currently picked color.
    fn update_widgets(&mut self, data: &PickerWindowData) {
-      let color = Srgb::from(data.color).to_color(1.0);
+      let color = Srgb::from(data.color).as_color(1.0);
 
       // Make sure the color canvas shows the correct hue.
       Self::update_canvas(&mut self.canvas_image, data.color, data.color_space);

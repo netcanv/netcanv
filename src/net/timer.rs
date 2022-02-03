@@ -20,7 +20,7 @@ impl Timer {
    }
 
    /// Sets the timer up such that `update()` can be called to process ticks.
-   pub fn tick<'a>(&'a mut self) {
+   pub fn tick(&mut self) {
       let now = Instant::now();
       let elapsed = now - self.last_tick;
       self.last_tick = now;
