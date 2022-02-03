@@ -15,7 +15,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 
 use crate::common::Fatal;
 
@@ -40,10 +40,7 @@ impl SocketSystem {
 
       if let None = url.port() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
-         #[allow(unused_must_use)]
-         {
-            url.set_port(Some(relay::DEFAULT_PORT));
-         }
+         let _ = url.set_port(Some(relay::DEFAULT_PORT));
       }
 
       Ok(url)
@@ -62,16 +59,16 @@ impl SocketSystem {
             Ok(Message::Binary(version)) => {
                let array: [u8; 4] = match version.try_into() {
                   Ok(a) => a,
-                  Err(_) => anyhow::bail!("Relay sent invalid version."),
+                  Err(_) => anyhow::bail!("The relay sent an invalid version packet."),
                };
 
                u32::from_le_bytes(array)
             }
-            Ok(_) => anyhow::bail!("Relay sent invalid packet."),
+            Ok(_) => anyhow::bail!("The relay sent an invalid packet."),
             Err(e) => anyhow::bail!(e),
          }
       } else {
-         anyhow::bail!("Didn't received version packet.")
+         anyhow::bail!("Didn't receive version packet.")
       };
 
       match version.cmp(&relay::PROTOCOL_VERSION) {
@@ -86,18 +83,20 @@ impl SocketSystem {
 
       log::debug!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
-      let recv_quit = (quit_tx.clone(), quit_tx.subscribe());
+      let (recv_quit_tx, recv_quit_rx) = (quit_tx.clone(), quit_tx.subscribe());
       let recv_join_handle = self.runtime.spawn(async move {
-         if let Err(error) = Socket::receiver_loop(stream, recv_tx, recv_quit).await {
+         if let Err(error) =
+            Socket::receiver_loop(stream, recv_tx, recv_quit_tx, recv_quit_rx).await
+         {
             log::error!("receiver loop erro: {:?}", error);
          }
       });
 
       log::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
-      let send_quit = (quit_tx.clone(), quit_tx.subscribe());
+      let send_quit_rx = quit_tx.subscribe();
       let send_join_handle = self.runtime.spawn(async move {
-         if let Err(error) = Socket::sender_loop(sink, send_rx, send_quit).await {
+         if let Err(error) = Socket::sender_loop(sink, send_rx, send_quit_rx).await {
             log::error!("sender loop error: {:?}", error);
          }
       });
@@ -152,23 +151,62 @@ type Sink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 
 impl Socket {
    async fn read_packet(
-      data: Vec<u8>,
+      message: tungstenite::Result<Message>,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
-   ) -> anyhow::Result<()> {
-      if data.len() > relay::MAX_PACKET_SIZE as usize {
-         anyhow::bail!("Packet is too big");
+      tx: &broadcast::Sender<Quit>,
+   ) -> anyhow::Result<Option<()>> {
+      match message {
+         Ok(Message::Binary(data)) => {
+            if data.len() > relay::MAX_PACKET_SIZE as usize {
+               anyhow::bail!("Packet is too big");
+            }
+            let packet = bincode::deserialize(&data).context("Invalid packet")?;
+            output.send(packet)?;
+         }
+         Ok(Message::Close(frame)) => {
+            bus::push(Fatal(anyhow::anyhow!("The relay has been disconnected.")));
+
+            if let Some(frame) = frame {
+               log::warn!(
+                  "the relay has been disconnected: {:?}, code: {}",
+                  frame.reason,
+                  frame.code
+               );
+            } else {
+               log::warn!("the relay has been disconnected (reason unknown)");
+            }
+
+            tx.send(Quit)?;
+
+            return Ok(None);
+         }
+         Err(e) => {
+            use tokio_tungstenite::tungstenite::error::ProtocolError;
+            use tokio_tungstenite::tungstenite::Error::*;
+            match e {
+               ConnectionClosed => return Ok(None),
+               // Relay can force a closing handshake, and WebSockets requires a closing handshake.
+               // If we do not get it, it means that relay has been closed and we have to close the session.
+               AlreadyClosed | Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
+                  log::error!("the connection was closed without a closing handshake (relay probably crashed)");
+                  bus::push(Fatal(anyhow::anyhow!("The relay has been disconnected.")));
+                  return Ok(None);
+               }
+               _ => anyhow::bail!(e),
+            }
+         }
+         _ => log::info!("got unused message"),
       }
-      let packet = bincode::deserialize(&data).context("Invalid packet")?;
-      output.send(packet)?;
-      Ok(())
+
+      Ok(Some(()))
    }
 
    async fn receiver_loop(
       mut stream: Stream,
       mut output: mpsc::UnboundedSender<relay::Packet>,
-      quit: (broadcast::Sender<Quit>, broadcast::Receiver<Quit>),
+      tx: broadcast::Sender<Quit>,
+      mut rx: broadcast::Receiver<Quit>,
    ) -> anyhow::Result<()> {
-      let (tx, mut rx) = quit;
       loop {
          tokio::select! {
             biased;
@@ -176,40 +214,8 @@ impl Socket {
                log::info!("receiver: received quit signal");
                break;
             },
-            Some(message) = stream.next() => {
-               match message {
-                  Ok(Message::Binary(data)) => {
-                     Self::read_packet(data, &mut output).await?
-                  },
-                  Ok(Message::Close(frame)) => {
-                     bus::push(Fatal(anyhow::anyhow!("Relay has been disconnected.")));
-
-                     if let Some(frame) = frame {
-                        log::warn!("Relay has been disconnected, reason: \"{}\", code: {}", frame.reason, frame.code);
-                     } else {
-                        log::warn!("Relay has been disconnected, due to unknown reason.");
-                     }
-
-                     tx.send(Quit)?;
-
-                     break;
-                  },
-                  Err(e) => {
-                     use tokio_tungstenite::tungstenite::{Error::*, error::ProtocolError};
-                     match e {
-                        ConnectionClosed => break,
-                        // Relay can force a closing handshake, and WebSockets requires a closing handshake.
-                        // If we do not get it, it means that relay has been closed and we have to close the session.
-                        AlreadyClosed | Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
-                           log::error!("the connection has been closed, but the client is trying to work with already closed connection. (relay probably crashed)");
-                           bus::push(Fatal(anyhow::anyhow!("Relay has been disconnected.")));
-                           break;
-                        },
-                        _ => anyhow::bail!(e)
-                     }
-                  }
-                  _ => log::info!("got unused message"),
-               }
+            Some(message) = stream.next() => if let None = Self::read_packet(message, &mut output, &tx).await? {
+               break
             },
             else => (),
          }
@@ -236,9 +242,8 @@ impl Socket {
    async fn sender_loop(
       mut sink: Sink,
       mut input: mpsc::UnboundedReceiver<relay::Packet>,
-      quit: (broadcast::Sender<Quit>, broadcast::Receiver<Quit>),
+      mut rx: broadcast::Receiver<Quit>,
    ) -> anyhow::Result<()> {
-      let (_, mut rx) = quit;
       loop {
          tokio::select! {
             biased;

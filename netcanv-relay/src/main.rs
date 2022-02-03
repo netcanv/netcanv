@@ -353,23 +353,14 @@ async fn read_packets(
                return Ok(());
             }
          }
-<<<<<<< HEAD
-         let mut buffer = vec![0; packet_size as usize];
-         read.read_exact(&mut buffer).await?;
-         bincode::deserialize(&buffer)?
-      };
-      handle_packet(&write, address, state, packet).await?;
-=======
          Ok(_) => log::info!("got ignored message"),
          Err(e) => {
             use tungstenite::Error::*;
             match e {
-               ConnectionClosed => {
-                  break;
-               }
+               ConnectionClosed => break,
                AlreadyClosed => {
                   // According to the documentation this error is the fault of the programmer.
-                  // However, this error would crash the entire matchmaker and *all* rooms,
+                  // However, this error would crash the entire relay and *all* rooms,
                   // so it's better to treat it as a simple error and end the connection.
                   log::error!("the connection has been closed, but the relay is trying to work with already closed connection.");
                   break;
@@ -378,7 +369,6 @@ async fn read_packets(
             }
          }
       }
->>>>>>> db62f63 (Make relay use websockets instead of tcp)
    }
 
    Ok(())
