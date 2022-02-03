@@ -97,23 +97,25 @@ impl Tool for EyedropperTool {
          },
       );
 
-      ui.space(16.0);
-      ui.push((72.0, ui.height()), Layout::Freeform);
-      ui.fill(self.color);
-      ui.text(
-         &assets.monospace,
-         &format!(
-            "#{:02x}{:02x}{:02x}",
-            self.color.r, self.color.g, self.color.b
-         ),
-         if self.color.brightness() > 0.5 {
-            Color::BLACK
-         } else {
-            Color::WHITE
-         }
-         .with_alpha(220),
-         (AlignH::Center, AlignV::Middle),
-      );
-      ui.pop();
+      if self.color.a != 0 {
+         ui.space(16.0);
+         ui.push((72.0, ui.height()), Layout::Freeform);
+         ui.fill(self.color);
+         ui.text(
+            &assets.monospace,
+            &format!(
+               "#{:02x}{:02x}{:02x}",
+               self.color.r, self.color.g, self.color.b
+            ),
+            if self.color.brightness() > 0.5 {
+               Color::BLACK
+            } else {
+               Color::WHITE
+            }
+            .with_alpha(220),
+            (AlignH::Center, AlignV::Middle),
+         );
+         ui.pop();
+      }
    }
 }
