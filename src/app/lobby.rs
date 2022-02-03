@@ -420,11 +420,16 @@ impl State {
       if Button::with_icon(
          ui,
          input,
-         &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill(),
-         if config().ui.color_scheme == config::ColorScheme::Dark {
-            &self.assets.icons.lobby.light_mode
-         } else {
-            &self.assets.icons.lobby.dark_mode
+         &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill().tooltip(
+            &self.assets.sans,
+            Tooltip::left(match config().ui.color_scheme {
+               config::ColorScheme::Light => "Switch to dark mode",
+               config::ColorScheme::Dark => "Switch to light mode",
+            }),
+         ),
+         match config().ui.color_scheme {
+            config::ColorScheme::Dark => &self.assets.icons.lobby.light_mode,
+            config::ColorScheme::Light => &self.assets.icons.lobby.dark_mode,
          },
       )
       .clicked()
@@ -445,7 +450,10 @@ impl State {
          && Button::with_icon(
             ui,
             input,
-            &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill(),
+            &ButtonArgs::new(ui, &self.assets.colors.action_button)
+               .height(32.0)
+               .pill()
+               .tooltip(&self.assets.sans, Tooltip::left("Open source licenses")),
             &self.assets.icons.lobby.legal,
          )
          .clicked()

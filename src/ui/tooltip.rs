@@ -38,6 +38,11 @@ impl Tooltip {
       Self::new(text, TooltipPosition::Top)
    }
 
+   /// Shorthand for constructing a tooltip positioned to the left of a group.
+   pub fn left(text: impl Into<Cow<'static, str>>) -> Self {
+      Self::new(text, TooltipPosition::Left)
+   }
+
    /// Processes a tooltip. This should be called inside of the group that triggers the tooltip
    /// on hover.
    pub fn process(&self, ui: &mut Ui, input: &Input, font: &Font) {
