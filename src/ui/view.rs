@@ -229,8 +229,6 @@ pub mod layout {
    /// Vertical layout direction.
    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
    pub enum DirectionV {
-      /// Views are laid out from top to bottom.
-      TopToBottom,
       /// Views are laid out from bottom to top.
       BottomToTop,
    }
@@ -247,7 +245,6 @@ pub mod layout {
          view.position = point(
             0.0,
             match direction {
-               DirectionV::TopToBottom => cursor,
                DirectionV::BottomToTop => parent_size.y - cursor - height,
             },
          );
