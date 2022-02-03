@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
@@ -86,6 +86,8 @@ pub struct SelectionTool {
       oneshot::Receiver<RgbaImage>,
       oneshot::Receiver<Vec<u8>>,
    )>,
+   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Point, RgbaImage)>,
+   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Point, RgbaImage)>,
 }
 
 impl SelectionTool {
@@ -95,6 +97,7 @@ impl SelectionTool {
    const HANDLE_RADIUS: f32 = 4.0;
 
    pub fn new(renderer: &mut Backend, runtime: Arc<Runtime>) -> Self {
+      let (peer_pastes_tx, peer_pastes_rx) = mpsc::unbounded_channel();
       Self {
          icons: Icons {
             tool: Assets::load_svg(
@@ -122,6 +125,8 @@ impl SelectionTool {
 
          runtime,
          paste: None,
+         peer_pastes_tx,
+         peer_pastes_rx,
       }
    }
 
@@ -258,6 +263,13 @@ impl SelectionTool {
             self.paste = None;
          }
       }
+
+      while let Ok((peer_id, position, image)) = self.peer_pastes_rx.try_recv() {
+         let peer = self.ensure_peer(peer_id);
+         peer.selection.deselect(renderer, paint_canvas);
+         peer.selection.paste(renderer, position, &image);
+      }
+
       false
    }
 
@@ -296,8 +308,8 @@ impl Tool for SelectionTool {
    /// Processes key shortcuts when the selection is active.
    fn active_key_shortcuts(
       &mut self,
-      ToolArgs { ui, input, net, .. }: ToolArgs,
-      paint_canvas: &mut PaintCanvas,
+      ToolArgs { input, net, .. }: ToolArgs,
+      _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.delete) == (true, true) {
@@ -632,8 +644,11 @@ impl Tool for SelectionTool {
          Packet::Cancel => peer.selection.cancel(),
          Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
          Packet::Paste((x, y), data) => {
-            peer.selection.deselect(renderer, paint_canvas);
-            peer.selection.paste(renderer, point(x, y), &Self::decode_image(&data)?);
+            let tx = self.peer_pastes_tx.clone();
+            self.runtime.spawn_blocking(move || {
+               let image = Self::decode_image(&data).unwrap();
+               let _ = tx.send((sender, point(x, y), image));
+            });
          }
          Packet::Update(data) => peer.selection.upload_rgba(renderer, &Self::decode_image(&data)?),
       }
