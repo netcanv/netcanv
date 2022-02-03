@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Layout, Rect};
+use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, Rect};
 use netcanv_renderer::Font as FontTrait;
 
 use crate::backend::Font;
