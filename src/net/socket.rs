@@ -38,7 +38,7 @@ impl SocketSystem {
    async fn resolve_address_with_default_port(hostname: &str) -> anyhow::Result<url::Url> {
       let mut url = url::Url::parse(&format!("ws://{}", hostname))?;
 
-      if let None = url.port() {
+      if url.port().is_none() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
          let _ = url.set_port(Some(relay::DEFAULT_PORT));
       }
@@ -214,7 +214,7 @@ impl Socket {
                log::info!("receiver: received quit signal");
                break;
             },
-            Some(message) = stream.next() => if let None = Self::read_packet(message, &mut output, &tx).await? {
+            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &tx).await?.is_none() {
                break
             },
             else => (),
