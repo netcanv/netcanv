@@ -232,8 +232,8 @@ impl SelectionTool {
          let _ = image_tx.send(image.clone());
          log::debug!("encoding image for transmission");
          let bytes = catch!(Self::encode_image(&image));
+         log::debug!("paste job done; encoded {} bytes", bytes.len());
          let _ = bytes_tx.send(bytes);
-         log::debug!("paste job done");
       });
    }
 
