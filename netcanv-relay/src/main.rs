@@ -167,6 +167,7 @@ impl Peers {
    fn free_peer_id(&mut self, address: SocketAddr) {
       if let Some(id) = self.peer_ids.remove(&address) {
          self.occupied_peer_ids.remove(&id);
+         self.peer_streams.remove(&id);
       }
    }
 
