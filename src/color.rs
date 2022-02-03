@@ -135,7 +135,7 @@ impl Srgb {
    }
 
    /// Converts an sRGB color to a `Color`. The provided alpha value is used.
-   pub fn as_color(&self, alpha: f32) -> Color {
+   pub fn to_color(self, alpha: f32) -> Color {
       Color {
          r: (self.r * 255.0) as u8,
          g: (self.g * 255.0) as u8,

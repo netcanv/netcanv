@@ -87,7 +87,7 @@ impl ColorPicker {
       if self.eraser {
          Color::TRANSPARENT
       } else {
-         Srgb::from(self.palette[self.index]).as_color(1.0)
+         Srgb::from(self.palette[self.index]).to_color(1.0)
       }
    }
 
@@ -136,7 +136,7 @@ impl ColorPicker {
          }
          ui.draw(|ui| {
             let rect = Rect::new(point(0.0, y_offset), ui.size());
-            let color = Srgb::from(color).as_color(1.0);
+            let color = Srgb::from(color).to_color(1.0);
             ui.render().fill(rect, color, 4.0);
          });
          ui.pop();
@@ -360,7 +360,7 @@ impl PickerWindow {
                s: 1.0,
                v: 1.0,
             })
-            .as_color(1.0);
+            .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
          ColorSpace::Oklab => RgbaImage::from_fn(width, height, |_x, y| {
@@ -370,7 +370,7 @@ impl PickerWindow {
                s: 0.9,
                v: 1.0,
             }))
-            .as_color(1.0);
+            .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
@@ -393,7 +393,7 @@ impl PickerWindow {
                s: saturation,
                v: value,
             })
-            .as_color(1.0);
+            .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
          ColorSpace::Oklab => RgbaImage::from_fn(width, height, |x, y| {
@@ -404,7 +404,7 @@ impl PickerWindow {
                s: saturation,
                v: value,
             }))
-            .as_color(1.0);
+            .to_color(1.0);
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
@@ -530,7 +530,7 @@ impl PickerWindow {
       data: &mut PickerWindowData,
    ) {
       ui.push((ui.remaining_width(), ui.height()), Layout::Vertical);
-      let color = Srgb::from(data.color).as_color(1.0);
+      let color = Srgb::from(data.color).to_color(1.0);
 
       // The hex code text field.
       let text_color = if color.brightness() > 0.5 {
@@ -726,7 +726,7 @@ impl PickerWindow {
 
    /// Updates the widgets to reflect the currently picked color.
    fn update_widgets(&mut self, data: &PickerWindowData) {
-      let color = Srgb::from(data.color).as_color(1.0);
+      let color = Srgb::from(data.color).to_color(1.0);
 
       // Make sure the color canvas shows the correct hue.
       Self::update_canvas(&mut self.canvas_image, data.color, data.color_space);
