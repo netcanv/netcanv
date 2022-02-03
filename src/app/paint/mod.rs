@@ -80,7 +80,7 @@ struct EncodeChannels {
 pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
-   _runtime: Arc<Runtime>,
+   runtime: Arc<Runtime>,
 
    paint_canvas: PaintCanvas,
 
@@ -160,7 +160,7 @@ impl State {
          _socket_system: socket_system,
 
          paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
-         _runtime: runtime,
+         runtime,
 
          actions: Vec::new(),
 
@@ -216,7 +216,8 @@ impl State {
 
    /// Registers all the tools.
    fn register_tools(&mut self, renderer: &mut Backend) {
-      let _selection = self.toolbar.add_tool(SelectionTool::new(renderer));
+      let _selection =
+         self.toolbar.add_tool(SelectionTool::new(renderer, Arc::clone(&self.runtime)));
       let brush = self.toolbar.add_tool(BrushTool::new(renderer));
       let _eyedropper = self.toolbar.add_tool(EyedropperTool::new(renderer));
 

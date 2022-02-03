@@ -1,6 +1,10 @@
+use image::imageops::FilterType;
 use instant::Instant;
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::sync::Arc;
+use tokio::runtime::Runtime;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
@@ -75,6 +79,15 @@ pub struct SelectionTool {
    action: Action,
    selection: Selection,
    peer_selections: HashMap<PeerId, PeerSelection>,
+
+   runtime: Arc<Runtime>,
+   paste: Option<(
+      Point,
+      oneshot::Receiver<RgbaImage>,
+      oneshot::Receiver<Vec<u8>>,
+   )>,
+   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Point, RgbaImage)>,
+   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Point, RgbaImage)>,
 }
 
 impl SelectionTool {
@@ -83,7 +96,8 @@ impl SelectionTool {
    /// The radius of handles for resizing the selection contents.
    const HANDLE_RADIUS: f32 = 4.0;
 
-   pub fn new(renderer: &mut Backend) -> Self {
+   pub fn new(renderer: &mut Backend, runtime: Arc<Runtime>) -> Self {
+      let (peer_pastes_tx, peer_pastes_rx) = mpsc::unbounded_channel();
       Self {
          icons: Icons {
             tool: Assets::load_svg(
@@ -108,6 +122,11 @@ impl SelectionTool {
          action: Action::None,
          selection: Selection::new(),
          peer_selections: HashMap::new(),
+
+         runtime,
+         paste: None,
+         peer_pastes_tx,
+         peer_pastes_rx,
       }
    }
 
@@ -191,28 +210,74 @@ impl SelectionTool {
    }
 
    /// Pastes the clipboard image into a new selection.
-   fn paste_from_clipboard(
+   fn enqueue_paste_from_clipboard(&mut self, position: Point) {
+      let (image_tx, image_rx) = oneshot::channel();
+      let (bytes_tx, bytes_rx) = oneshot::channel();
+      self.paste = Some((position, image_rx, bytes_rx));
+      self.runtime.spawn_blocking(|| {
+         log::debug!("reading image from clipboard");
+         let image = catch!(clipboard::paste_image());
+         let image = if image.width() > Selection::MAX_SIZE || image.height() > Selection::MAX_SIZE
+         {
+            log::debug!("image is too big! scaling down");
+            let scale = Selection::MAX_SIZE as f32 / image.width().max(image.height()) as f32;
+            let new_width = (image.width() as f32 * scale) as u32;
+            let new_height = (image.height() as f32 * scale) as u32;
+            image::imageops::resize(&image, new_width, new_height, FilterType::Triangle)
+         } else {
+            image
+         };
+         // The result here doesn't matter. If the image doesn't arrive, we're out of the
+         // paint state.
+         let _ = image_tx.send(image.clone());
+         log::debug!("encoding image for transmission");
+         let bytes = catch!(Self::encode_image(&image));
+         let _ = bytes_tx.send(bytes);
+         log::debug!("paste job done");
+      });
+   }
+
+   /// Polls whether the paste operation is complete. Returns `true` when the tool should be
+   /// switched to the selection tool.
+   fn poll_paste_from_clipboard(
       &mut self,
       renderer: &mut Backend,
       paint_canvas: &mut PaintCanvas,
       net: &Net,
-      position: Point,
-   ) {
-      let image = catch!(clipboard::paste_image());
-      self.selection.deselect(renderer, paint_canvas);
-      self.selection.paste(renderer, position, &image);
+   ) -> bool {
+      if let Some((position, image, bytes)) = self.paste.as_mut() {
+         if let Ok(image) = image.try_recv() {
+            self.selection.deselect(renderer, paint_canvas);
+            self.selection.paste(renderer, *position, &image);
+            return true;
+         }
+         if let Ok(bytes) = bytes.try_recv() {
+            let Point { x, y } = *position;
+            catch!(
+               net.send(self, PeerId::BROADCAST, Packet::Paste((x, y), bytes)),
+               return false
+            );
+            catch!(self.send_rect_packet(net), return false);
+            // Once the bytes have been encoded and sent to the other clients, there's no use in
+            // keeping this data around anymore.
+            self.paste = None;
+         }
+      }
 
-      let bytes = catch!(Self::encode_image(image));
-      let Point { x, y } = position;
-      catch!(net.send(self, PeerId::BROADCAST, Packet::Paste((x, y), bytes)));
-      catch!(self.send_rect_packet(net));
+      while let Ok((peer_id, position, image)) = self.peer_pastes_rx.try_recv() {
+         let peer = self.ensure_peer(peer_id);
+         peer.selection.deselect(renderer, paint_canvas);
+         peer.selection.paste(renderer, position, &image);
+      }
+
+      false
    }
 
    /// Encodes an image to PNG.
-   fn encode_image(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+   fn encode_image(image: &RgbaImage) -> anyhow::Result<Vec<u8>> {
       let mut bytes = Vec::new();
       PngEncoder::new(Cursor::new(&mut bytes)).encode(
-         &image,
+         image,
          image.width(),
          image.height(),
          ColorType::Rgba8,
@@ -281,7 +346,10 @@ impl Tool for SelectionTool {
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.paste) == (true, true) {
          log::info!("pasting image from clipboard");
-         self.paste_from_clipboard(ui, paint_canvas, &net, viewport.pan());
+         self.enqueue_paste_from_clipboard(viewport.pan());
+      }
+
+      if self.poll_paste_from_clipboard(ui, paint_canvas, &net) {
          return KeyShortcutAction::SwitchToThisTool;
       }
 
@@ -566,8 +634,8 @@ impl Tool for SelectionTool {
             peer.selection.rect = Some(Rect::new(
                point(x, y),
                vector(
-                  width.min(Selection::MAX_SIZE),
-                  height.min(Selection::MAX_SIZE),
+                  width.min(Selection::MAX_SIZE as f32),
+                  height.min(Selection::MAX_SIZE as f32),
                ),
             ));
             peer.last_rect_packet = Instant::now();
@@ -576,8 +644,11 @@ impl Tool for SelectionTool {
          Packet::Cancel => peer.selection.cancel(),
          Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
          Packet::Paste((x, y), data) => {
-            peer.selection.deselect(renderer, paint_canvas);
-            peer.selection.paste(renderer, point(x, y), &Self::decode_image(&data)?);
+            let tx = self.peer_pastes_tx.clone();
+            self.runtime.spawn_blocking(move || {
+               let image = Self::decode_image(&data).unwrap();
+               let _ = tx.send((sender, point(x, y), image));
+            });
          }
          Packet::Update(data) => peer.selection.upload_rgba(renderer, &Self::decode_image(&data)?),
       }
@@ -588,7 +659,7 @@ impl Tool for SelectionTool {
    fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> anyhow::Result<()> {
       if let Some(capture) = self.selection.download_rgba() {
          self.send_rect_packet(&net)?;
-         net.send(self, peer_id, Packet::Update(Self::encode_image(capture)?))?;
+         net.send(self, peer_id, Packet::Update(Self::encode_image(&capture)?))?;
       }
       Ok(())
    }
@@ -621,7 +692,7 @@ struct Selection {
 }
 
 impl Selection {
-   const MAX_SIZE: f32 = 1024.0;
+   const MAX_SIZE: u32 = 1024;
 
    fn new() -> Self {
       Self {
@@ -707,7 +778,7 @@ impl Selection {
       // These calculations are performed in order to make the shorter dimension scaled
       // proportionally to the shorter one.
       let long_side = rect.width().max(rect.height());
-      let scale = long_side.min(Self::MAX_SIZE) / long_side;
+      let scale = long_side.min(Self::MAX_SIZE as f32) / long_side;
       let rect = Rect::new(rect.position, rect.size * scale);
 
       // Center the rectangle on the screen.
@@ -724,8 +795,8 @@ impl Selection {
          let rect = Rect::new(
             rect.position,
             vector(
-               rect.width().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
-               rect.height().clamp(-Self::MAX_SIZE, Self::MAX_SIZE),
+               rect.width().clamp(-(Self::MAX_SIZE as f32), Self::MAX_SIZE as f32),
+               rect.height().clamp(-(Self::MAX_SIZE as f32), Self::MAX_SIZE as f32),
             ),
          );
          let rect = Rect::new(
