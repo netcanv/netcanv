@@ -80,7 +80,7 @@ struct EncodeChannels {
 pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
-   runtime: Arc<Runtime>,
+   _runtime: Arc<Runtime>,
 
    paint_canvas: PaintCanvas,
 
@@ -160,7 +160,7 @@ impl State {
          _socket_system: socket_system,
 
          paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
-         runtime,
+         _runtime: runtime,
 
          actions: Vec::new(),
 
@@ -276,7 +276,7 @@ impl State {
    }
 
    /// Decodes canvas data to the given chunk.
-   fn decode_canvas_data(&mut self, ui: &mut Ui, chunk_position: (i32, i32), image_data: Vec<u8>) {
+   fn decode_canvas_data(&mut self, chunk_position: (i32, i32), image_data: Vec<u8>) {
       catch!(self.paint_canvas.enqueue_network_data_decoding(chunk_position, image_data));
    }
 
@@ -760,7 +760,7 @@ impl State {
          MessageKind::Chunks(chunks) => {
             log::debug!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
-               self.decode_canvas_data(ui, chunk_position, image_data);
+               self.decode_canvas_data(chunk_position, image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
             }
          }
