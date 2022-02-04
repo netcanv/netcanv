@@ -1,6 +1,7 @@
 //! Views and view layouting.
 
 use netcanv_renderer::paws::{point, vector, Layout, Point, Rect, Vector};
+use netcanv_renderer_opengl::winit::window::CursorIcon;
 
 use crate::token::Token;
 
@@ -141,6 +142,9 @@ impl View {
       ui.push(self.size(), layout);
       ui.set_position(self.position);
       input.set_mouse_area(self.id, ui.has_mouse(input));
+      if ui.hover(input) {
+         input.set_cursor(CursorIcon::Default);
+      }
    }
 
    /// Ends rendering inside the view.

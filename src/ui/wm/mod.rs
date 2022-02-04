@@ -15,6 +15,7 @@ use super::{ButtonState, Input, Ui};
 
 use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::Layout;
+use netcanv_renderer_opengl::winit::window::CursorIcon;
 pub use windows::WindowContentWrappers;
 
 /// A window.
@@ -198,6 +199,13 @@ impl WindowManager {
             && input.action(MouseButton::Left) == (true, ButtonState::Released)
          {
             window.pinned = !window.pinned;
+         }
+
+         if hit_test == HitTest::Draggable {
+            input.set_cursor(CursorIcon::Grab);
+         }
+         if window.dragging {
+            input.set_cursor(CursorIcon::Grabbing);
          }
 
          // Perform dragging if the mouse is over the draggable area.
