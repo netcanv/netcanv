@@ -29,12 +29,16 @@ jobs:
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
         cargo install cargo-about || true
+        rustup toolchain add aarch64-unknown-linux-gnu
 
     - name: Compile application
       run: cargo build --release
     - name: Compile relay
-      working-directory: netcanv-relay
-      run: cargo build --release
+      run: |
+        cargo build -p netcanv-relay --release
+        mv target/release/netcanv-relay bin/NetCanv-Relay-linux.$(uname -m)
+        cargo build -p netcanv-relay --release --target=aarch64-unknown-linux-gnu
+        mv target/aarch64-unknown-linux-gnu/release/netcanv-relay bin/NetCanv-Relay-linux.aarch64
 
     - name: Build AppImages
       run: bash build/appimages.sh
@@ -43,7 +47,7 @@ jobs:
       uses: actions/upload-artifact@v2.2.2
       with:
         name: netcanv-nightly-linux
-        path: appimages
+        path: bin
 
   build-exe:
     runs-on: windows-latest
@@ -68,8 +72,12 @@ jobs:
       working-directory: netcanv-relay
       run: cargo build --release
 
-    - name: Apply icons to executables
-      run: ./build/windows-icons.ps1
+    - name: Apply cosmetics to executables
+      run: |
+        ./build/windows-icons.ps1
+        mkdir bin
+        move target/release/netcanv.exe bin/NetCanv-windows-x86_64.exe
+        move target/release/netcanv-relay.exe bin/NetCanv-Relay-windows-x86_64.exe
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
