@@ -83,9 +83,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: netcanv-nightly-windows
-        path: |
-          target/release/netcanv.exe
-          target/release/netcanv-relay.exe
+        path: bin
 
   release:
     runs-on: ubuntu-latest
