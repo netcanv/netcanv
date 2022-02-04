@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-appimage:
+  build-linux:
     runs-on: ubuntu-18.04
 
     steps:
@@ -52,7 +52,7 @@ jobs:
         name: netcanv-nightly-linux
         path: bin
 
-  build-exe:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -91,7 +91,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'Release' && github.event.action == 'Created'
-    needs: [build-appimage, build-exe]
+    needs: [build-linux, build-windows]
 
     steps:
     - name: Download all artifacts
