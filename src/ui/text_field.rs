@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 use netcanv_renderer::Font as FontTrait;
+use netcanv_renderer_opengl::winit::window::CursorIcon;
 use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
 use crate::backend::Font;
@@ -75,7 +76,7 @@ impl TextField {
    pub fn process(
       &mut self,
       ui: &mut Ui,
-      input: &Input,
+      input: &mut Input,
       TextFieldArgs {
          font,
          width,
@@ -96,6 +97,9 @@ impl TextField {
 
       ui.push(ui.size(), Layout::Freeform);
       ui.pad((8.0, 0.0));
+      if ui.hover(input) {
+         input.set_cursor(CursorIcon::Text);
+      }
 
       ui.render().push();
       ui.clip();
@@ -157,11 +161,11 @@ impl TextField {
       );
 
       ui.render().pop();
-      ui.pop();
 
       // Process events
-      let process_result = self.process_events(ui, input);
+      let process_result = self.process_events(ui, input, font);
 
+      ui.pop();
       ui.pop();
 
       process_result
@@ -176,7 +180,7 @@ impl TextField {
    pub fn with_label(
       &mut self,
       ui: &mut Ui,
-      input: &Input,
+      input: &mut Input,
       label_font: &Font,
       label: &str,
       args: TextFieldArgs,
@@ -311,8 +315,34 @@ impl TextField {
       }
    }
 
+   /// Returns the character index clicked based on an X position.
+   fn get_text_position_from_x(&mut self, font: &Font, x: f32) -> TextPosition {
+      let mut x_offset = 0.0;
+      let mut last_index = 0;
+      for (index, character) in self.text.char_indices() {
+         let mut text = [0; 4];
+         let text = character.encode_utf8(&mut text);
+         let character_width = font.text_width(text);
+         if x_offset >= x {
+            return TextPosition(if x_offset - x > character_width / 2.0 {
+               last_index
+            } else {
+               index
+            });
+         }
+         x_offset += character_width;
+         last_index = index;
+      }
+      TextPosition(self.text.len())
+   }
+
+   fn get_text_position_from_mouse(&mut self, ui: &Ui, input: &Input, font: &Font) -> TextPosition {
+      let x = ui.mouse_position(input).x;
+      self.get_text_position_from_x(font, x)
+   }
+
    /// Processes input events.
-   fn process_events(&mut self, ui: &Ui, input: &Input) -> TextFieldProcessResult {
+   fn process_events(&mut self, ui: &Ui, input: &Input, font: &Font) -> TextFieldProcessResult {
       let mut process_result = TextFieldProcessResult {
          unfocused: false,
          done: false,
@@ -323,10 +353,17 @@ impl TextField {
          self.focused = ui.hover(input);
          if self.focused {
             self.reset_blink(input);
+            let position = self.get_text_position_from_mouse(ui, input, font);
+            self.selection.move_to(position);
          }
          if !self.focused && was_focused {
             process_result.unfocused = true;
          }
+      }
+      if input.action(MouseButton::Left) == (true, ButtonState::Down) && self.focused {
+         self.reset_blink(input);
+         let position = self.get_text_position_from_mouse(ui, input, font);
+         self.selection.cursor = position;
       }
 
       if self.focused {
