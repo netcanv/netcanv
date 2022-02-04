@@ -62,7 +62,7 @@ where
             input,
             &ButtonArgs::new(
                ui,
-               ButtonColors::toggle(self.selected == item, &colors.selected, &colors.normal),
+               ButtonColors::toggle(self.selected == item, &colors.normal, &colors.selected),
             )
             .height(height)
             .corner_radius(corner_radius),
