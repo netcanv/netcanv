@@ -25,11 +25,16 @@ A screenshot of my imaginary friend and I painting things together using NetCanv
 ## Compiling
 
 Should be as simple as:
-
 ```sh
 $ cargo build --release
 # or, if you just want to run the app:
 $ cargo run --release
+```
+
+**NOTE:** The "Open source licenses" icon will not show up in the lobby screen unless you have
+cargo-about installed. To install it, use:
+```sh
+$ cargo install cargo-about
 ```
 
 ### Features
