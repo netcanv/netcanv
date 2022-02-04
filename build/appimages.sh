@@ -20,6 +20,5 @@ chmod +x linuxdeploy-x86_64.AppImage
   --desktop-file resources/netcanv.desktop \
   --output appimage
 
-mkdir bin
 mv NetCanv-*.AppImage bin/NetCanv-linux-$(uname -m).AppImage
 rm -r NetCanv*-AppDir

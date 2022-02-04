@@ -31,6 +31,9 @@ jobs:
         cargo install cargo-about || true
         rustup target add aarch64-unknown-linux-gnu
 
+    - name: Set up directories
+      run: mkdir bin
+
     - name: Compile application
       run: cargo build --release
     - name: Compile relay
