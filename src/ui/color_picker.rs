@@ -529,7 +529,7 @@ impl PickerWindow {
    fn process_values(
       &mut self,
       ui: &mut Ui,
-      input: &Input,
+      input: &mut Input,
       assets: &Assets,
       data: &mut PickerWindowData,
    ) {
