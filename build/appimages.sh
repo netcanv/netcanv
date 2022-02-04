@@ -20,17 +20,5 @@ chmod +x linuxdeploy-x86_64.AppImage
   --desktop-file resources/netcanv.desktop \
   --output appimage
 
-./linuxdeploy-x86_64.AppImage \
-  --appdir NetCanv-Relay-AppDir \
-  --executable target/release/netcanv-relay \
-  --icon-file resources/icon/16/netcanv.png \
-  --icon-file resources/icon/32/netcanv.png \
-  --icon-file resources/icon/64/netcanv.png \
-  --icon-file resources/icon/128/netcanv.png \
-  --icon-file resources/icon/256/netcanv.png \
-  --desktop-file resources/netcanv-relay.desktop \
-  --output appimage
-
-mkdir appimages
-mv NetCanv-*.AppImage NetCanv_Relay-*.AppImage appimages
+mv NetCanv-*.AppImage bin/NetCanv-linux-$(uname -m).AppImage
 rm -r NetCanv*-AppDir

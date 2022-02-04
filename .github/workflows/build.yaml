@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-appimage:
+  build-linux:
     runs-on: ubuntu-18.04
 
     steps:
@@ -28,13 +28,21 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+        sudo apt-get install -y gcc-aarch64-linux-gnu
         cargo install cargo-about || true
+        rustup target add aarch64-unknown-linux-gnu
+
+    - name: Set up directories
+      run: mkdir bin
 
     - name: Compile application
       run: cargo build --release
     - name: Compile relay
-      working-directory: netcanv-relay
-      run: cargo build --release
+      run: |
+        cargo build -p netcanv-relay --release
+        mv target/release/netcanv-relay bin/NetCanv-Relay-linux.$(uname -m)
+        cargo build -p netcanv-relay --release --target=aarch64-unknown-linux-gnu
+        mv target/aarch64-unknown-linux-gnu/release/netcanv-relay bin/NetCanv-Relay-linux.aarch64
 
     - name: Build AppImages
       run: bash build/appimages.sh
@@ -43,9 +51,9 @@ jobs:
       uses: actions/upload-artifact@v2.2.2
       with:
         name: netcanv-nightly-linux
-        path: appimages
+        path: bin
 
-  build-exe:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -68,21 +76,23 @@ jobs:
       working-directory: netcanv-relay
       run: cargo build --release
 
-    - name: Apply icons to executables
-      run: ./build/windows-icons.ps1
+    - name: Apply cosmetics to executables
+      run: |
+        ./build/windows-icons.ps1
+        mkdir bin
+        move target/release/netcanv.exe bin/NetCanv-windows-x86_64.exe
+        move target/release/netcanv-relay.exe bin/NetCanv-Relay-windows-x86_64.exe
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: netcanv-nightly-windows
-        path: |
-          target/release/netcanv.exe
-          target/release/netcanv-relay.exe
+        path: bin
 
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'Release' && github.event.action == 'Created'
-    needs: [build-appimage, build-exe]
+    needs: [build-linux, build-windows]
 
     steps:
     - name: Download all artifacts
