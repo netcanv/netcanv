@@ -53,6 +53,7 @@ use crate::ui::view::{self, View};
 use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
+use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 
 use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -136,6 +137,12 @@ fn inner_main() -> anyhow::Result<()> {
    let assets = Assets::new(ui.render(), color_scheme);
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
+
+   let language = Language::load("en-US", include_str!("assets/i18n/en-US.ftl"))?;
+   for count in 0..=5 {
+      let message = Formatted::new("new-messages").format().with("count", count).done(&language);
+      println!("{}", message);
+   }
 
    log::debug!("init done! starting event loop");
 
