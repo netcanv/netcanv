@@ -53,8 +53,6 @@ use crate::ui::view::{self, View};
 use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
-use netcanv_i18n::from_language::FromLanguage;
-use netcanv_i18n::{Formatted, FromLanguage, Language};
 use netcanv_renderer::paws::{vector, Layout};
 
 use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -74,6 +72,7 @@ mod config;
 mod keymap;
 mod net;
 mod paint_canvas;
+mod strings;
 mod token;
 mod ui;
 mod viewport;
@@ -135,23 +134,9 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Load all the assets, and start the first app state.
    log::debug!("loading assets");
-   let assets = Assets::new(ui.render(), color_scheme);
+   let assets = Assets::new(ui.render(), color_scheme)?;
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
-
-   let language = Language::load("en-US", include_str!("assets/i18n/en-US.ftl"))?;
-
-   #[derive(Debug, FromLanguage)]
-   struct Strings {
-      lobby_welcome: String,
-      new_messages: Formatted,
-   }
-   let strings = Strings::from_language(&language);
-   dbg!(&strings);
-   for count in 0..=5 {
-      let message = strings.new_messages.format().with("count", count).done(&language);
-      println!("{}", message);
-   }
 
    log::debug!("init done! starting event loop");
 

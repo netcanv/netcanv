@@ -65,6 +65,9 @@ pub struct WindowConfig {
 /// A user `config.toml` file.
 #[derive(Deserialize, Serialize)]
 pub struct UserConfig {
+   #[serde(default = "default_language")]
+   pub language: String,
+
    pub lobby: LobbyConfig,
    pub ui: UiConfig,
    pub window: Option<WindowConfig>,
@@ -128,6 +131,7 @@ impl UserConfig {
 impl Default for UserConfig {
    fn default() -> Self {
       Self {
+         language: default_language(),
          lobby: LobbyConfig {
             nickname: "Anon".to_owned(),
             relay: "ws://localhost".to_owned(),
@@ -140,6 +144,10 @@ impl Default for UserConfig {
          keymap: Default::default(),
       }
    }
+}
+
+fn default_language() -> String {
+   "en-US".to_owned()
 }
 
 static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
