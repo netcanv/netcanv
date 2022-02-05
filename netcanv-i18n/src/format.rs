@@ -7,6 +7,7 @@ use fluent::{FluentArgs, FluentValue};
 use crate::Language;
 
 /// A formatted message.
+#[derive(Debug)]
 pub struct Formatted {
    key: Cow<'static, str>,
 }

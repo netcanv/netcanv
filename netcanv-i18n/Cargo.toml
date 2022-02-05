@@ -9,3 +9,5 @@ edition = "2021"
 fluent = "0.16.0"
 log = "0.4.14"
 unic-langid = "0.9.0"
+
+netcanv-i18n-macros = { path = "../netcanv-i18n-macros" }

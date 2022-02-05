@@ -53,7 +53,8 @@ use crate::ui::view::{self, View};
 use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
-use netcanv_i18n::{Formatted, Language};
+use netcanv_i18n::from_language::FromLanguage;
+use netcanv_i18n::{Formatted, FromLanguage, Language};
 use netcanv_renderer::paws::{vector, Layout};
 
 use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -139,8 +140,16 @@ fn inner_main() -> anyhow::Result<()> {
    let mut input = Input::new();
 
    let language = Language::load("en-US", include_str!("assets/i18n/en-US.ftl"))?;
+
+   #[derive(Debug, FromLanguage)]
+   struct Strings {
+      lobby_welcome: String,
+      new_messages: Formatted,
+   }
+   let strings = Strings::from_language(&language);
+   dbg!(&strings);
    for count in 0..=5 {
-      let message = Formatted::new("new-messages").format().with("count", count).done(&language);
+      let message = strings.new_messages.format().with("count", count).done(&language);
       println!("{}", message);
    }
 
