@@ -102,14 +102,16 @@ pub trait UiElements {
    );
 
    /// Draws a paragraph of text. Each string in `text` is treated as a new group.
-   fn paragraph(
+   fn paragraph<T, S>(
       &mut self,
       font: &Font,
-      text: &[&str],
+      text: T,
       color: Color,
       alignment: AlignH,
       line_spacing: Option<f32>,
-   );
+   ) where
+      T: IntoIterator<Item = S>,
+      S: AsRef<str>;
 }
 
 impl UiElements for Ui {
@@ -143,23 +145,26 @@ impl UiElements for Ui {
       self.pop();
    }
 
-   fn paragraph(
+   fn paragraph<T, S>(
       &mut self,
       font: &Font,
-      text: &[&str],
+      text: T,
       color: Color,
       alignment: AlignH,
       line_spacing: Option<f32>,
-   ) {
+   ) where
+      T: IntoIterator<Item = S>,
+      S: AsRef<str>,
+   {
       let line_spacing = line_spacing.unwrap_or(1.2);
-      let line_height = font.size() * line_spacing;
-      let height = (line_height * text.len() as f32).round();
-      self.push((self.width(), height), Layout::Vertical);
-      for line in text {
+      let line_height = (font.size() * line_spacing).ceil();
+      self.push((self.width(), 0.0), Layout::Vertical);
+      for line in text.into_iter() {
          self.push((self.width(), line_height), Layout::Freeform);
-         self.text(font, line, color, (alignment, AlignV::Middle));
+         self.text(font, line.as_ref(), color, (alignment, AlignV::Middle));
          self.pop();
       }
+      self.fit();
       self.pop();
    }
 }

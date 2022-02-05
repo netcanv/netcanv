@@ -22,6 +22,7 @@ impl Language {
       let identifier: LanguageIdentifier =
          language_code.parse().map_err(|_| Error::InvalidLanguageCode)?;
       let mut bundle = FluentBundle::new(vec![identifier]);
+      bundle.set_use_isolating(false); // TODO: BiDi?
       let resource = match FluentResource::try_new(ftl_source.to_owned()) {
          Ok(resource) => resource,
          Err((resource, errors)) => {

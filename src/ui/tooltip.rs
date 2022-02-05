@@ -20,13 +20,13 @@ pub enum TooltipPosition {
 
 /// Settings for drawing a tooltip.
 #[derive(Clone)]
-pub struct Tooltip {
-   pub text: Cow<'static, str>,
+pub struct Tooltip<'s> {
+   pub text: Cow<'s, str>,
    pub position: TooltipPosition,
 }
 
-impl Tooltip {
-   pub fn new(text: impl Into<Cow<'static, str>>, position: TooltipPosition) -> Self {
+impl<'s> Tooltip<'s> {
+   pub fn new(text: impl Into<Cow<'s, str>>, position: TooltipPosition) -> Self {
       Self {
          text: text.into(),
          position,
@@ -34,12 +34,12 @@ impl Tooltip {
    }
 
    /// Shorthand for constructing a tooltip positioned above a group.
-   pub fn top(text: impl Into<Cow<'static, str>>) -> Self {
+   pub fn top(text: impl Into<Cow<'s, str>>) -> Self {
       Self::new(text, TooltipPosition::Top)
    }
 
    /// Shorthand for constructing a tooltip positioned to the left of a group.
-   pub fn left(text: impl Into<Cow<'static, str>>) -> Self {
+   pub fn left(text: impl Into<Cow<'s, str>>) -> Self {
       Self::new(text, TooltipPosition::Left)
    }
 

@@ -17,6 +17,7 @@ use crate::common::{Error, Fatal};
 use crate::config::{self, config};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
+use crate::strings::Strings;
 use crate::ui::view::View;
 use crate::ui::*;
 
@@ -166,7 +167,7 @@ impl State {
       ui.push((ui.width(), ui.remaining_height()), Layout::Freeform);
       ui.text(
          &self.assets.sans,
-         "Welcome! Host a room or join an existing one to start painting.",
+         &self.assets.tr.lobby_welcome,
          self.assets.colors.text,
          (AlignH::Left, AlignV::Middle),
       );
@@ -203,9 +204,9 @@ impl State {
          ui,
          input,
          &self.assets.sans,
-         "Nickname",
+         &self.assets.tr.lobby_nickname.label,
          TextFieldArgs {
-            hint: Some("Name shown to others"),
+            hint: Some(&self.assets.tr.lobby_nickname.hint),
             ..textfield
          },
       );
@@ -214,9 +215,9 @@ impl State {
          ui,
          input,
          &self.assets.sans,
-         "Relay server",
+         &self.assets.tr.lobby_relay_server.label,
          TextFieldArgs {
-            hint: Some("IP address"),
+            hint: Some(&self.assets.tr.lobby_relay_server.hint),
             ..textfield
          },
       );
@@ -230,7 +231,7 @@ impl State {
             ui,
             input,
             ExpandArgs {
-               label: "Join an existing room",
+               label: &self.assets.tr.lobby_join_a_room.title,
                ..expand
             },
          )
@@ -242,10 +243,7 @@ impl State {
 
          ui.paragraph(
             &self.assets.sans,
-            &[
-               "Ask your friend for the Room ID",
-               "and enter it into the text field below.",
-            ],
+            self.assets.tr.lobby_join_a_room.description.split('\n'),
             self.assets.colors.text,
             AlignH::Left,
             None,
@@ -259,26 +257,34 @@ impl State {
             ui,
             input,
             &self.assets.sans,
-            "Room ID",
+            &self.assets.tr.lobby_room_id.label,
             TextFieldArgs {
-               hint: Some("6 characters"),
+               hint: Some(&self.assets.tr.lobby_room_id.hint),
                font: &self.assets.monospace,
                ..textfield
             },
          );
          ui.offset(vector(8.0, 16.0));
-         if Button::with_text(ui, input, &button, &self.assets.sans, "Join").clicked()
+         if Button::with_text(
+            ui,
+            input,
+            &button,
+            &self.assets.sans,
+            &self.assets.tr.lobby_join,
+         )
+         .clicked()
             || room_id_field.done()
          {
             match Self::join_room(
                Arc::clone(&self.socket_system),
+               &self.assets.tr,
                self.nickname_field.text(),
                self.relay_field.text(),
                self.room_id_field.text(),
             ) {
                Ok(peer) => {
                   self.peer = Some(peer);
-                  self.status = Status::Info("Connecting…".into());
+                  self.status = Status::Info(self.assets.tr.connecting.clone());
                }
                Err(status) => self.status = status,
             }
@@ -297,7 +303,7 @@ impl State {
             ui,
             input,
             ExpandArgs {
-               label: "Host a new room",
+               label: &self.assets.tr.lobby_host_a_new_room.title,
                ..expand
             },
          )
@@ -309,10 +315,7 @@ impl State {
 
          ui.paragraph(
             &self.assets.sans,
-            &[
-               "Create a blank canvas, or load an existing one from file,",
-               "and share the Room ID with your friends.",
-            ],
+            self.assets.tr.lobby_host_a_new_room.description.split('\n'),
             self.assets.colors.text,
             AlignH::Left,
             None,
@@ -321,9 +324,10 @@ impl State {
 
          macro_rules! host_room {
             () => {
-               self.status = Status::Info("Connecting…".into());
+               self.status = Status::Info(self.assets.tr.connecting.clone());
                match Self::host_room(
                   Arc::clone(&self.socket_system),
+                  &self.assets.tr,
                   self.nickname_field.text(),
                   self.relay_field.text(),
                ) {
@@ -334,15 +338,34 @@ impl State {
          }
 
          ui.push((ui.remaining_width(), 32.0), Layout::Horizontal);
-         if Button::with_text(ui, input, &button, &self.assets.sans, "Host").clicked() {
+         if Button::with_text(
+            ui,
+            input,
+            &button,
+            &self.assets.sans,
+            &self.assets.tr.lobby_host,
+         )
+         .clicked()
+         {
             host_room!();
          }
          ui.space(8.0);
-         if Button::with_text(ui, input, &button, &self.assets.sans, "from File").clicked() {
+         if Button::with_text(
+            ui,
+            input,
+            &button,
+            &self.assets.sans,
+            &self.assets.tr.lobby_host_from_file,
+         )
+         .clicked()
+         {
             match FileDialog::new()
                .set_filename("canvas.png")
-               .add_filter("Supported image files", &["png", "jpg", "jpeg", "jfif"])
-               .add_filter("NetCanv canvas", &["toml"])
+               .add_filter(
+                  &self.assets.tr.fd_supported_image_files,
+                  &["png", "jpg", "jpeg", "jfif"],
+               )
+               .add_filter(&self.assets.tr.fd_netcanv_canvas, &["toml"])
                .show_open_single_file()
             {
                Ok(Some(path)) => {
@@ -423,8 +446,8 @@ impl State {
          &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill().tooltip(
             &self.assets.sans,
             Tooltip::left(match config().ui.color_scheme {
-               config::ColorScheme::Light => "Switch to dark mode",
-               config::ColorScheme::Dark => "Switch to light mode",
+               config::ColorScheme::Light => &self.assets.tr.switch_to_dark_mode,
+               config::ColorScheme::Dark => &self.assets.tr.switch_to_light_mode,
             }),
          ),
          match config().ui.color_scheme {
@@ -450,10 +473,10 @@ impl State {
          && Button::with_icon(
             ui,
             input,
-            &ButtonArgs::new(ui, &self.assets.colors.action_button)
-               .height(32.0)
-               .pill()
-               .tooltip(&self.assets.sans, Tooltip::left("Open source licenses")),
+            &ButtonArgs::new(ui, &self.assets.colors.action_button).height(32.0).pill().tooltip(
+               &self.assets.sans,
+               Tooltip::left(&self.assets.tr.open_source_licenses),
+            ),
             &self.assets.icons.lobby.legal,
          )
          .clicked()
@@ -463,13 +486,14 @@ impl State {
    }
 
    /// Checks whether a nickname is valid.
-   fn validate_nickname(nickname: &str) -> Result<(), Status> {
+   fn validate_nickname(tr: &Strings, nickname: &str) -> Result<(), Status> {
+      const MAX_LEN: usize = 16;
       if nickname.is_empty() {
-         return Err(Status::Error("Nickname must not be empty".into()));
+         return Err(Status::Error(tr.error_nickname_must_not_be_empty.clone()));
       }
       if nickname.len() > 16 {
          return Err(Status::Error(
-            "The maximum length of a nickname is 16 characters".into(),
+            tr.error_nickname_too_long.format().with("max-length", MAX_LEN).done(),
          ));
       }
       Ok(())
@@ -478,26 +502,28 @@ impl State {
    /// Establishes a connection to the relay and hosts a new room.
    fn host_room(
       socket_system: Arc<SocketSystem>,
+      tr: &Strings,
       nickname: &str,
       relay_addr_str: &str,
    ) -> Result<Peer, Status> {
-      Self::validate_nickname(nickname)?;
+      Self::validate_nickname(tr, nickname)?;
       Ok(Peer::host(socket_system, nickname, relay_addr_str))
    }
 
    /// Establishes a connection to the relay and joins an existing room.
    fn join_room(
       socket_system: Arc<SocketSystem>,
+      tr: &Strings,
       nickname: &str,
       relay_addr_str: &str,
       room_id_str: &str,
    ) -> Result<Peer, Status> {
-      if room_id_str.len() != 6 {
+      if room_id_str.len() != RoomId::LEN {
          return Err(Status::Error(
-            "Room ID must be a code with 6 characters".into(),
+            tr.error_invalid_room_id_length.format().with("length", RoomId::LEN).done(),
          ));
       }
-      Self::validate_nickname(nickname)?;
+      Self::validate_nickname(tr, nickname)?;
       let room_id = RoomId::try_from(room_id_str)?;
       Ok(Peer::join(socket_system, nickname, relay_addr_str, room_id))
    }
@@ -582,7 +608,9 @@ impl AppState for State {
       for message in &bus::retrieve_all::<Fatal>() {
          let fatal = message.consume().0;
          log::error!("fatal: {}", fatal);
-         self.status = Status::Error(format!("Fatal: {}", fatal));
+         self.status = Status::Error(
+            self.assets.tr.error_fatal.format().with("error", format!("{}", fatal).as_str()).done(),
+         );
       }
    }
 
