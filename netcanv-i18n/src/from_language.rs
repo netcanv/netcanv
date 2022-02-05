@@ -14,8 +14,8 @@ impl FromLanguageKey for String {
 
 /// Extracts formatted strings from languages.
 impl FromLanguageKey for Formatted {
-   fn from_language_key(_language: &Language, key: &str) -> Self {
-      Self::new(key.to_owned())
+   fn from_language_key(language: &Language, key: &str) -> Self {
+      Self::new(language.clone(), key.to_owned())
    }
 }
 

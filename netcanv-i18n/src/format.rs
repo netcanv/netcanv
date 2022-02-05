@@ -7,29 +7,40 @@ use fluent::{FluentArgs, FluentValue};
 use crate::Language;
 
 /// A formatted message.
-#[derive(Debug)]
 pub struct Formatted {
+   language: Language,
    key: Cow<'static, str>,
 }
 
 impl Formatted {
    /// Creates a new formatted message.
-   pub fn new(key: impl Into<Cow<'static, str>>) -> Self {
-      Self { key: key.into() }
+   pub fn new(language: Language, key: impl Into<Cow<'static, str>>) -> Self {
+      Self {
+         language,
+         key: key.into(),
+      }
    }
 
    /// Begins formatting a formatted message.
    pub fn format(&self) -> Formatter<'_> {
       Formatter {
          key: &self.key,
+         language: &self.language,
          args: FluentArgs::with_capacity(4),
       }
+   }
+}
+
+impl std::fmt::Debug for Formatted {
+   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "Formatted({})", self.key)
    }
 }
 
 /// A message formatter. Contains the set of arguments to format the message with.
 pub struct Formatter<'f> {
    key: &'f str,
+   language: &'f Language,
    args: FluentArgs<'f>,
 }
 
@@ -41,20 +52,23 @@ impl<'f> Formatter<'f> {
    }
 
    /// Finishes formatting the string.
-   pub fn done(self, language: &Language) -> String {
+   pub fn done(self) -> String {
       let mut errors = Vec::new();
-      let message = match language.bundle.get_message(self.key) {
+      let message = match self.language.bundle.get_message(self.key) {
          Some(message) => message,
-         None => return self.key.to_owned(),
+         None => {
+            log::error!("message {:?} is missing", self.key);
+            return self.key.to_owned();
+         }
       };
       let pattern = match message.value() {
          Some(value) => value,
          None => {
-            log::error!("message with no value");
+            log::error!("message {:?} doesn't have a value", self.key);
             return self.key.to_owned();
          }
       };
-      language.bundle.format_pattern(pattern, Some(&self.args), &mut errors).into_owned()
+      self.language.bundle.format_pattern(pattern, Some(&self.args), &mut errors).into_owned()
    }
 }
 

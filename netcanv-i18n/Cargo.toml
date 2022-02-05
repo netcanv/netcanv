@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 fluent = "0.16.0"
+fluent-syntax = "0.11.0"
 log = "0.4.14"
 unic-langid = "0.9.0"
 
