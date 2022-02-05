@@ -10,6 +10,8 @@ edition = "2021"
 
 [workspace]
 members = [
+   "netcanv-i18n",
+   "netcanv-i18n-macros",
    "netcanv-renderer",
    "netcanv-renderer-opengl",
    "netcanv-relay",
@@ -65,6 +67,8 @@ arboard = "2.0.1"
 netcanv-renderer = { path = "netcanv-renderer" }
 netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
 netcanv-protocol = { path = "netcanv-protocol" }
+
+netcanv-i18n = { path = "netcanv-i18n" }
 
 [profile.release]
 lto = "fat"

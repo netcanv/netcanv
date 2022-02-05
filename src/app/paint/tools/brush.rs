@@ -123,7 +123,7 @@ impl BrushTool {
 
 impl Tool for BrushTool {
    fn name(&self) -> &'static str {
-      "Brush"
+      "brush"
    }
 
    fn icon(&self) -> &Image {
@@ -318,7 +318,12 @@ impl Tool for BrushTool {
       ui.space(16.0);
 
       // Draw the thickness: its slider and value display.
-      ui.horizontal_label(&assets.sans, "Thickness", assets.colors.text, None);
+      ui.horizontal_label(
+         &assets.sans,
+         &assets.tr.brush_thickness,
+         assets.colors.text,
+         None,
+      );
       ui.space(16.0);
 
       ui.push((192.0, ui.height()), Layout::Freeform);

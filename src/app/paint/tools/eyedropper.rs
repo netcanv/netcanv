@@ -32,7 +32,7 @@ impl EyedropperTool {
 
 impl Tool for EyedropperTool {
    fn name(&self) -> &'static str {
-      "Eyedropper"
+      "eyedropper"
    }
 
    fn icon(&self) -> &Image {

@@ -72,6 +72,7 @@ mod config;
 mod keymap;
 mod net;
 mod paint_canvas;
+mod strings;
 mod token;
 mod ui;
 mod viewport;
@@ -133,7 +134,7 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Load all the assets, and start the first app state.
    log::debug!("loading assets");
-   let assets = Assets::new(ui.render(), color_scheme);
+   let assets = Assets::new(ui.render(), color_scheme)?;
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
 

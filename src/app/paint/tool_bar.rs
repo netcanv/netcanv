@@ -336,7 +336,10 @@ impl WindowContent for ToolbarWindow {
             )
             .height(Self::TOOL_SIZE)
             .corner_radius(ui.width() / 2.0)
-            .tooltip(&assets.sans, Tooltip::new(tool.name(), tooltip_position)),
+            .tooltip(
+               &assets.sans,
+               Tooltip::new(assets.tr.tool.get(tool.name()), tooltip_position),
+            ),
             tool.icon(),
          )
          .clicked()

@@ -27,17 +27,24 @@ impl SaveToFileAction {
 
 impl Action for SaveToFileAction {
    fn name(&self) -> &str {
-      "Save to file"
+      "save-to-file"
    }
 
    fn icon(&self) -> &Image {
       &self.icon
    }
 
-   fn perform(&mut self, ActionArgs { paint_canvas, .. }: ActionArgs) -> anyhow::Result<()> {
+   fn perform(
+      &mut self,
+      ActionArgs {
+         assets,
+         paint_canvas,
+         ..
+      }: ActionArgs,
+   ) -> anyhow::Result<()> {
       match FileDialog::new()
-         .add_filter("PNG file", &["png"])
-         .add_filter("NetCanv canvas", &["netcanv", "toml"])
+         .add_filter(&assets.tr.fd_png_file, &["png"])
+         .add_filter(&assets.tr.fd_netcanv_canvas, &["netcanv", "toml"])
          .show_save_single_file()
       {
          Ok(Some(path)) => paint_canvas.save(Some(&path))?,

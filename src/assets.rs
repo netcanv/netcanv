@@ -3,6 +3,8 @@
 use std::io::{Cursor, Write};
 
 use anyhow::Context;
+use netcanv_i18n::from_language::FromLanguage;
+use netcanv_i18n::Language;
 use netcanv_renderer::paws::Color;
 use netcanv_renderer::{Image as ImageTrait, RenderBackend};
 use url::Url;
@@ -10,6 +12,8 @@ use url::Url;
 use crate::app::lobby::LobbyColors;
 use crate::app::paint::tool_bar::ToolbarColors;
 use crate::backend::{Backend, Font, Image};
+use crate::config::config;
+use crate::strings::Strings;
 use crate::ui::wm::windows::{WindowButtonColors, WindowButtonsColors};
 use crate::ui::{
    ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, RadioButtonColors,
@@ -146,6 +150,9 @@ pub struct Assets {
    pub colors: ColorScheme,
    pub icons: Icons,
    pub banner: Banner,
+
+   pub language: Language,
+   pub tr: Strings,
 }
 
 impl Assets {
@@ -177,12 +184,30 @@ impl Assets {
       renderer.create_image_from_rgba(image.width(), image.height(), &image)
    }
 
+   /// Loads internationalization data.
+   fn load_i18n() -> anyhow::Result<(Language, Strings)> {
+      let language_code = &config().language;
+      let language_code = language_code.as_str();
+      let language = Language::load(
+         language_code,
+         match language_code {
+            "en-US" => include_str!("assets/i18n/en-US.ftl"),
+            "pl-PL" => include_str!("assets/i18n/pl-PL.ftl"),
+            _ => anyhow::bail!("language {} is not supported", language_code),
+         },
+      )?;
+      let strings = Strings::from_language(&language);
+      Ok((language, strings))
+   }
+
    /// Creates a new instance of Assets with the provided color scheme.
-   pub fn new(renderer: &mut Backend, colors: ColorScheme) -> Self {
-      Self {
+   pub fn new(renderer: &mut Backend, colors: ColorScheme) -> anyhow::Result<Self> {
+      let (language, tr) = Self::load_i18n()?;
+      Ok(Self {
          sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
          sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
          monospace: renderer.create_font_from_memory(MONOSPACE_TTF, 14.0),
+
          colors,
          icons: Icons {
             expand: ExpandIcons {
@@ -220,7 +245,6 @@ impl Assets {
                pinned: Self::load_svg(renderer, WINDOW_PINNED_SVG),
             },
          },
-
          banner: Banner {
             base: Self::load_svg(renderer, BANNER_BASE_SVG).colorized(Color::WHITE),
             shadow: {
@@ -236,7 +260,10 @@ impl Assets {
                }
             },
          },
-      }
+
+         language,
+         tr,
+      })
    }
 }
 

@@ -34,16 +34,16 @@ impl ButtonColors {
 
 /// The layout and color scheme arguments for processing the button.
 #[derive(Clone)]
-pub struct ButtonArgs<'c, 'f> {
+pub struct ButtonArgs<'a> {
    height: f32,
-   colors: &'c ButtonColors,
+   colors: &'a ButtonColors,
    corner_radius: f32,
-   tooltip: Option<(&'f Font, Tooltip)>,
+   tooltip: Option<(&'a Font, Tooltip<'a>)>,
 }
 
-impl<'c, 'f> ButtonArgs<'c, 'f> {
+impl<'a> ButtonArgs<'a> {
    /// Creates a new button style with the given color scheme.
-   pub fn new(ui: &Ui, colors: &'c ButtonColors) -> Self {
+   pub fn new(ui: &Ui, colors: &'a ButtonColors) -> Self {
       Self {
          height: ui.height(),
          colors,
@@ -65,7 +65,7 @@ impl<'c, 'f> ButtonArgs<'c, 'f> {
    }
 
    /// Sets the button's tooltip.
-   pub fn tooltip(mut self, font: &'f Font, tooltip: Tooltip) -> Self {
+   pub fn tooltip(mut self, font: &'a Font, tooltip: Tooltip<'a>) -> Self {
       self.tooltip = Some((font, tooltip));
       self
    }

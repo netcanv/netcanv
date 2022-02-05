@@ -4,6 +4,7 @@ mod save_to_file;
 
 pub use save_to_file::*;
 
+use crate::assets::Assets;
 use crate::backend::Image;
 use crate::paint_canvas::PaintCanvas;
 
@@ -24,8 +25,9 @@ pub trait Action {
 }
 
 #[non_exhaustive]
-pub struct ActionArgs<'p> {
-   pub paint_canvas: &'p mut PaintCanvas,
+pub struct ActionArgs<'a> {
+   pub assets: &'a Assets,
+   pub paint_canvas: &'a mut PaintCanvas,
 }
 
 fn _action_trait_must_be_object_safe(_action: Box<dyn Action>) {}
