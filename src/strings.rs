@@ -1,6 +1,6 @@
 //! Translatable strings.
 
-use netcanv_i18n::{Formatted, FromLanguage};
+use netcanv_i18n::{Formatted, FromLanguage, Map};
 
 #[derive(FromLanguage)]
 pub struct Strings {
@@ -48,6 +48,10 @@ pub struct Strings {
    pub someone_left_the_room: Formatted,
    pub someone_is_now_hosting_the_room: Formatted,
    pub you_are_now_hosting_the_room: String,
+
+   pub tool: Map<String>,
+
+   pub brush_thickness: String,
 
    //
    // Errors

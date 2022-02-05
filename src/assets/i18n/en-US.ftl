@@ -56,6 +56,12 @@ someone-left-the-room = { $nickname } has left
 someone-is-now-hosting-the-room = { $nickname } is now hosting the room
 you-are-now-hosting-the-room = You are now hosting the room
 
+tool-selection = Selection
+tool-brush = Brush
+tool-eyedropper = Eyedropper
+
+brush-thickness = Thickness
+
 ## Errors
 
 error = Error: { $error }

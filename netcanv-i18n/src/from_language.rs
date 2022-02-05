@@ -1,4 +1,4 @@
-use crate::{Formatted, Language};
+use crate::{Formatted, Language, Map};
 
 pub trait FromLanguageKey {
    /// Extracts `Self` from the language, given the key.
@@ -16,6 +16,15 @@ impl FromLanguageKey for String {
 impl FromLanguageKey for Formatted {
    fn from_language_key(language: &Language, key: &str) -> Self {
       Self::new(language.clone(), key.to_owned())
+   }
+}
+
+impl<T> FromLanguageKey for Map<T>
+where
+   T: FromLanguageKey,
+{
+   fn from_language_key(language: &Language, key: &str) -> Self {
+      Self::new(language.clone(), key)
    }
 }
 
