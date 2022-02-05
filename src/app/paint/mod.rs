@@ -679,7 +679,7 @@ impl State {
                   ui.space(4.0);
                   ui.horizontal_label(
                      &self.assets.sans,
-                     action.name(),
+                     &self.assets.tr.action.get(action.name()),
                      self.assets.colors.text,
                      None,
                   );
@@ -688,6 +688,7 @@ impl State {
             );
             if action_button.clicked() {
                if let Err(error) = action.perform(ActionArgs {
+                  assets: &self.assets,
                   paint_canvas: &mut self.paint_canvas,
                }) {
                   log!(
@@ -898,6 +899,7 @@ impl AppState for State {
 
       for action in &mut self.actions {
          match action.process(ActionArgs {
+            assets: &self.assets,
             paint_canvas: &mut self.paint_canvas,
          }) {
             Ok(()) => (),

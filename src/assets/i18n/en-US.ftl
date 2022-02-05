@@ -35,9 +35,6 @@ switch-to-dark-mode = Switch to dark mode
 switch-to-light-mode = Switch to light mode
 open-source-licenses = Open source licenses
 
-fd-supported-image-files = Supported image files
-fd-netcanv-canvas = NetCanv canvas
-
 connecting = Connecting…
 
 ## Paint
@@ -61,6 +58,14 @@ tool-brush = Brush
 tool-eyedropper = Eyedropper
 
 brush-thickness = Thickness
+
+action-save-to-file = Save to file
+
+## File dialogs
+
+fd-supported-image-files = Supported image files
+fd-png-file = PNG file
+fd-netcanv-canvas = NetCanv canvas
 
 ## Errors
 

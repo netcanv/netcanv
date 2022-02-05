@@ -29,9 +29,6 @@ pub struct Strings {
    pub switch_to_light_mode: String,
    pub open_source_licenses: String,
 
-   pub fd_supported_image_files: String,
-   pub fd_netcanv_canvas: String,
-
    pub connecting: String,
 
    //
@@ -50,8 +47,16 @@ pub struct Strings {
    pub you_are_now_hosting_the_room: String,
 
    pub tool: Map<String>,
-
    pub brush_thickness: String,
+
+   pub action: Map<String>,
+
+   //
+   // File dialogs
+   //
+   pub fd_supported_image_files: String,
+   pub fd_png_file: String,
+   pub fd_netcanv_canvas: String,
 
    //
    // Errors
