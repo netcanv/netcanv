@@ -192,7 +192,8 @@ impl Assets {
          language_code,
          match language_code {
             "en-US" => include_str!("assets/i18n/en-US.ftl"),
-            _ => anyhow::bail!("invalid language code: {}", language_code),
+            "pl-PL" => include_str!("assets/i18n/pl-PL.ftl"),
+            _ => anyhow::bail!("language {} is not supported", language_code),
          },
       )?;
       let strings = Strings::from_language(&language);
