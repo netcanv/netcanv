@@ -128,7 +128,7 @@ impl ColorPicker {
             };
          let y_offset = y_offset.round();
          if self.index == index && self.window_id().is_none() {
-            Tooltip::top("Click to edit color").process(ui, input, &assets.sans);
+            Tooltip::top(&assets.tr.click_to_edit_color).process(ui, input, &assets.sans);
          }
          if ui.hover(input) && input.mouse_button_just_pressed(MouseButton::Left) {
             self.eraser = false;
@@ -159,7 +159,7 @@ impl ColorPicker {
                   &assets.colors.selected_toolbar_button,
                ),
             )
-            .tooltip(&assets.sans, Tooltip::top("Eraser")),
+            .tooltip(&assets.sans, Tooltip::top(&assets.tr.eraser)),
             &assets.icons.color_picker.eraser,
          )
          .clicked()
@@ -556,7 +556,7 @@ impl PickerWindow {
                text_hint: text_color.with_alpha(127),
                ..assets.colors.text_field
             },
-            hint: Some("RGB hex code"),
+            hint: Some(&assets.tr.rgb_hex_code),
          },
       );
       if hex_code.done() || hex_code.unfocused() {

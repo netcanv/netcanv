@@ -67,6 +67,12 @@ fd-supported-image-files = Supported image files
 fd-png-file = PNG file
 fd-netcanv-canvas = NetCanv canvas
 
+## Color picker
+
+click-to-edit-color = Click to edit color
+eraser = Eraser
+rgb-hex-code = RGB hex code
+
 ## Errors
 
 error = Error: { $error }

@@ -65,6 +65,12 @@ brush-thickness = Grubość
 
 action-save-to-file = Zapisz do pliku
 
+## Color picker
+
+click-to-edit-color = Kliknij aby edytować kolor
+eraser = Gumka
+rgb-hex-code = Kod koloru RGB
+
 ## Errors
 
 error = Błąd: { $error }

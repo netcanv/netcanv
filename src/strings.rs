@@ -52,6 +52,13 @@ pub struct Strings {
    pub action: Map<String>,
 
    //
+   // Color picker
+   //
+   pub click_to_edit_color: String,
+   pub eraser: String,
+   pub rgb_hex_code: String,
+
+   //
    // File dialogs
    //
    pub fd_supported_image_files: String,
