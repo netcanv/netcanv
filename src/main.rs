@@ -56,7 +56,7 @@ use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
-use netcanv_i18n::Formatted;
+use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
 use nysa::global as bus;
@@ -93,7 +93,11 @@ use ui::{Input, Ui};
 
 pub use errors::*;
 
-fn inner_main() -> errors::Result<()> {
+/// The "inner" main function that does all the work, and can fail.
+///
+/// `language` is populated with the user's language once that's loaded. The language is then used
+/// for displaying crash messages.
+fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
    SimpleLogger::new().with_level(LevelFilter::Debug).env().init().map_err(|e| {
       Error::CouldNotInitializeLogger {
@@ -147,6 +151,7 @@ fn inner_main() -> errors::Result<()> {
    // Load all the assets, and start the first app state.
    log::debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
+   *language = Some(assets.language.clone());
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
 
@@ -233,12 +238,14 @@ fn main() {
       default_panic_hook(panic_info);
    }));
 
-   match inner_main() {
+   let mut language = None;
+   match inner_main(&mut language) {
       Ok(()) => (),
       Err(payload) => {
          let mut message = String::new();
-         let language =
-            Assets::load_language(Some("en-US")).expect("English language must be present");
+         let language = language.unwrap_or_else(|| {
+            Assets::load_language(Some("en-US")).expect("English language must be present")
+         });
          let _ = write!(
             message,
             "{}",
