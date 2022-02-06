@@ -139,6 +139,7 @@ error-received-packet-that-is-too-big = Otrzymano pakiet, który był zbyt duży
 error-tried-to-send-packet-that-is-too-big = Nie można wysłać pakietu większego niż { $max } bajtów (próbowano wysłać { $size })
 error-tried-to-send-packet-that-is-way-too-big = Nie można wysłać pakietu o rozmiarze większym niż limit 32-bitowych liczb całkowitych
 error-relay-has-disconnected = Serwer Relay rozłączył się
+error-web-socket = Błąd komunikacji WebSocket: { $error }
 
 error-not-connected-to-relay = Nie można wysłać pakietu: nie ma połączenia z serwerem
 error-not-connected-to-host = Nie można wysłać pakietu: nie ma połączenia z gospodarzem

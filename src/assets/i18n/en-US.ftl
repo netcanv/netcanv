@@ -147,6 +147,7 @@ error-received-packet-that-is-too-big = Received a packet that exceeds the maxim
 error-tried-to-send-packet-that-is-too-big = Cannot send packet that is bigger than { $max } bytes (got { $size })
 error-tried-to-send-packet-that-is-way-too-big = Cannot send packet that exceeds the 32-bit integer limit
 error-relay-has-disconnected = The relay server has disconnected
+error-web-socket = WebSocket error: { $error }
 
 error-not-connected-to-relay = Cannot send packet: not connected to relay
 error-not-connected-to-host = Cannot send packet: not connected to host
