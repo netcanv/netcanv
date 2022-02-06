@@ -84,7 +84,7 @@ failure =
 error = Error: { $error }
 error-fatal = Fatal: { $error }
 
-error-io = I/O error: { $error }
+error-io = I/O: { $error }
 error-failed-to-persist-temporary-file = Failed to persist temporary file: { $error }
 error-image = Image operation error: { $error }
 error-join = Could not join thread: { $error }
