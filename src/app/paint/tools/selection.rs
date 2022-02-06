@@ -24,7 +24,7 @@ use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
 use crate::backend::{Backend, Font, Framebuffer, Image};
 use crate::clipboard;
-use crate::common::{lerp_point, RectMath, VectorMath};
+use crate::common::{deserialize_bincode, lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{ButtonState, UiElements, UiInput};
 use crate::viewport::Viewport;
@@ -183,7 +183,7 @@ impl SelectionTool {
    /// Sends a `Rect` packet containing the current selection rectangle.
    /// This is sometimes needed before important actions, where the rectangle may not have been
    /// synchronized yet due to the lower network tick rate.
-   fn send_rect_packet(&self, net: &Net) -> anyhow::Result<()> {
+   fn send_rect_packet(&self, net: &Net) -> netcanv::Result<()> {
       if let Some(rect) = self.selection.normalized_rect() {
          net.send(
             self,
@@ -269,7 +269,7 @@ impl SelectionTool {
    }
 
    /// Encodes an image to PNG.
-   fn encode_image(image: &RgbaImage) -> anyhow::Result<Vec<u8>> {
+   fn encode_image(image: &RgbaImage) -> netcanv::Result<Vec<u8>> {
       let mut bytes = Vec::new();
       PngEncoder::new(Cursor::new(&mut bytes)).encode(
          image,
@@ -281,7 +281,7 @@ impl SelectionTool {
    }
 
    /// Decodes a PNG image.
-   fn decode_image(data: &[u8]) -> anyhow::Result<RgbaImage> {
+   fn decode_image(data: &[u8]) -> netcanv::Result<RgbaImage> {
       Ok(Reader::with_format(Cursor::new(data), ImageFormat::Png).decode()?.to_rgba8())
    }
 }
@@ -608,7 +608,7 @@ impl Tool for SelectionTool {
    }
 
    /// Sends out packets containing the selection rectangle.
-   fn network_send(&mut self, net: Net, _: &GlobalControls) -> anyhow::Result<()> {
+   fn network_send(&mut self, net: Net, _: &GlobalControls) -> netcanv::Result<()> {
       self.send_rect_packet(&net)?;
       Ok(())
    }
@@ -621,8 +621,8 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       sender: PeerId,
       payload: Vec<u8>,
-   ) -> anyhow::Result<()> {
-      let packet = bincode::deserialize(&payload)?;
+   ) -> netcanv::Result<()> {
+      let packet = deserialize_bincode(&payload)?;
       let peer = self.ensure_peer(sender);
       match packet {
          Packet::Rect {
@@ -655,7 +655,7 @@ impl Tool for SelectionTool {
    }
 
    /// Sends a capture packet to the peer that joined.
-   fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> anyhow::Result<()> {
+   fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> netcanv::Result<()> {
       if let Some(capture) = self.selection.download_rgba() {
          self.send_rect_packet(&net)?;
          net.send(self, peer_id, Packet::Update(Self::encode_image(&capture)?))?;
@@ -664,7 +664,7 @@ impl Tool for SelectionTool {
    }
 
    /// Ensures the peer's selection is initialized.
-   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> anyhow::Result<()> {
+   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> netcanv::Result<()> {
       self.ensure_peer(peer_id);
       Ok(())
    }
@@ -676,7 +676,7 @@ impl Tool for SelectionTool {
       _net: Net,
       paint_canvas: &mut PaintCanvas,
       peer_id: PeerId,
-   ) -> anyhow::Result<()> {
+   ) -> netcanv::Result<()> {
       log::debug!("selection {:?} deactivated", peer_id);
       if let Some(peer) = self.peer_selections.get_mut(&peer_id) {
          peer.selection.deselect(renderer, paint_canvas);

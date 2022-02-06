@@ -49,7 +49,7 @@ impl Action for SaveToFileAction {
       {
          Ok(Some(path)) => paint_canvas.save(Some(&path))?,
          Ok(None) => (),
-         Err(error) => anyhow::bail!(error),
+         Err(error) => return Err(error.into()),
       }
       Ok(())
    }

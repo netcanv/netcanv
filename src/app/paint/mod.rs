@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
@@ -146,7 +147,7 @@ impl State {
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
-   ) -> Result<Self, (anyhow::Error, Assets)> {
+   ) -> Result<Self, (netcanv::Error, Assets)> {
       let runtime = tokio::runtime::Builder::new_multi_thread()
          .max_blocking_threads(16)
          .enable_all()
@@ -699,7 +700,7 @@ impl State {
                         .tr
                         .error_while_performing_action
                         .format()
-                        .with("error", format!("{}", error).as_str())
+                        .with("error", error.translate(&self.assets.language))
                         .done()
                   );
                }
@@ -711,7 +712,7 @@ impl State {
       }
    }
 
-   fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> anyhow::Result<()> {
+   fn process_peer_message(&mut self, ui: &mut Ui, message: peer::Message) -> netcanv::Result<()> {
       use peer::MessageKind;
 
       match message.kind {
@@ -911,7 +912,7 @@ impl AppState for State {
                   .tr
                   .error_while_processing_action
                   .format()
-                  .with("error", error.to_string().as_ref())
+                  .with("error", error.translate(&self.assets.language))
                   .done()
             ),
          }
@@ -944,7 +945,13 @@ impl AppState for State {
          log!(
             self.log,
             "{}",
-            self.assets.tr.error.format().with("error", error.to_string().as_ref()).done()
+            self
+               .assets
+               .tr
+               .error
+               .format()
+               .with("error", error.translate(&self.assets.language).as_ref())
+               .done()
          );
       }
       for _ in &bus::retrieve_all::<Fatal>() {

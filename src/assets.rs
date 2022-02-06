@@ -2,7 +2,6 @@
 
 use std::io::{Cursor, Write};
 
-use anyhow::Context;
 use netcanv_i18n::from_language::FromLanguage;
 use netcanv_i18n::Language;
 use netcanv_renderer::paws::Color;
@@ -19,6 +18,7 @@ use crate::ui::{
    ButtonColors, ColorPickerIcons, ContextMenuColors, ExpandColors, ExpandIcons, RadioButtonColors,
    TextFieldColors,
 };
+use crate::Error;
 
 const SANS_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Medium.ttf");
 const SANS_BOLD_TTF: &[u8] = include_bytes!("assets/fonts/Barlow-Bold.ttf");
@@ -63,23 +63,20 @@ pub fn has_license_page() -> bool {
 }
 
 /// Opens the licensing information page.
-pub fn open_license_page() -> anyhow::Result<()> {
+pub fn open_license_page() -> netcanv::Result<()> {
    if let Some(about_html) = &ABOUT_HTML {
-      let mut license_file = tempfile::Builder::new()
-         .prefix("netcanv-about")
-         .suffix(".html")
-         .tempfile()
-         .context("could not create temporary file for licensing info")?;
+      let mut license_file =
+         tempfile::Builder::new().prefix("netcanv-about").suffix(".html").tempfile()?;
       license_file.write_all(about_html)?;
-      let (_, path) = license_file.keep()?;
+      let (_, path) = license_file.keep().map_err(|e| Error::FailedToPersistTemporaryFile {
+         error: e.to_string(),
+      })?;
       let url = Url::from_file_path(path)
-         .map_err(|_| anyhow::anyhow!("could not create license page URL"))?;
-      webbrowser::open(url.as_ref()).context("could not open web browser")?;
+         .expect("license page path wasn't absolute and couldn't be turned into a URL");
+      webbrowser::open(url.as_ref()).map_err(|_| Error::CouldNotOpenWebBrowser)?;
       Ok(())
    } else {
-      anyhow::bail!(
-         "NetCanv was built without cargo-about installed. License information is not available"
-      );
+      Err(Error::NoLicensingInformationAvailable)
    }
 }
 
@@ -186,15 +183,20 @@ impl Assets {
 
    /// Loads the language provided in the argument, or if the argument is `None`, the one specified
    /// in the config.
-   pub fn load_language(language_code: Option<&str>) -> Option<Language> {
-      let language_code = language_code.unwrap_or_else(|| &config().language);
+   pub fn load_language(language_code: Option<&str>) -> netcanv::Result<Language> {
+      let language_code =
+         language_code.map(|x| x.to_owned()).unwrap_or_else(|| config().language.clone());
       let language_code = language_code;
       let language = Language::load(
-         language_code,
-         match language_code {
+         &language_code,
+         match language_code.as_str() {
             "en-US" => include_str!("assets/i18n/en-US.ftl"),
             "pl-PL" => include_str!("assets/i18n/pl-PL.ftl"),
-            _ => return None,
+            _ => {
+               return Err(Error::TranslationsDoNotExist {
+                  language: language_code.to_owned(),
+               })
+            }
          },
       );
       let language = match language {
@@ -202,15 +204,18 @@ impl Assets {
          Err(error) => {
             log::error!("error while loading language:");
             log::error!("{}", error);
-            return None;
+            return Err(Error::CouldNotLoadLanguage {
+               language: language_code,
+            });
          }
       };
-      Some(language)
+      Ok(language)
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(renderer: &mut Backend, colors: ColorScheme) -> netcanv::Result<Self> {
       let language = Self::load_language(None)?;
+      let tr = Strings::from_language(&language);
       Ok(Self {
          sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
          sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),

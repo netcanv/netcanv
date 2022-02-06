@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use native_dialog::FileDialog;
+use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::RoomId;
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 use netcanv_renderer::{Font, Image as ImageTrait, RenderBackend};
@@ -602,14 +603,20 @@ impl AppState for State {
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;
-         log::error!("{}", error);
-         self.status = Status::Error(error.to_string());
+         log::error!("error: {:?}", error);
+         self.status = Status::Error(error.translate(&self.assets.language));
       }
       for message in &bus::retrieve_all::<Fatal>() {
          let fatal = message.consume().0;
-         log::error!("fatal: {}", fatal);
+         log::error!("fatal: {:?}", fatal);
          self.status = Status::Error(
-            self.assets.tr.error_fatal.format().with("error", format!("{}", fatal).as_str()).done(),
+            self
+               .assets
+               .tr
+               .error_fatal
+               .format()
+               .with("error", fatal.translate(&self.assets.language))
+               .done(),
          );
       }
    }
