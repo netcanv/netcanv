@@ -77,7 +77,7 @@ pub enum FormatArg<'a> {
    Signed(i64),
    Unsigned(u64),
    Float(f64),
-   String(&'a str),
+   String(Cow<'a, str>),
 }
 
 macro_rules! format_arg_from {
@@ -107,7 +107,13 @@ format_arg_from!(f64, Float);
 
 impl<'a> From<&'a str> for FormatArg<'a> {
    fn from(s: &'a str) -> Self {
-      Self::String(s)
+      Self::String(Cow::Borrowed(s))
+   }
+}
+
+impl From<String> for FormatArg<'_> {
+   fn from(s: String) -> Self {
+      Self::String(Cow::Owned(s))
    }
 }
 

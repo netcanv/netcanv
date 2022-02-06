@@ -13,6 +13,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 use crate::keymap::Keymap;
+use crate::Error;
 
 /// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
@@ -93,7 +94,7 @@ impl UserConfig {
    ///
    /// If the `config.toml` doesn't exist, it's created with values inherited from
    /// `UserConfig::default`.
-   fn load_or_create() -> anyhow::Result<Self> {
+   fn load_or_create() -> netcanv::Result<Self> {
       let config_dir = Self::config_dir();
       let config_file = Self::path();
       log::info!("loading config from {:?}", config_file);
@@ -120,7 +121,7 @@ impl UserConfig {
    }
 
    /// Saves the user configuration to the `config.toml` file.
-   fn save(&self) -> anyhow::Result<()> {
+   fn save(&self) -> netcanv::Result<()> {
       // Assumes that `config_dir` was already created in `load_or_create`.
       let config_file = Self::path();
       std::fs::write(&config_file, toml::to_string(self)?)?;
@@ -153,16 +154,16 @@ fn default_language() -> String {
 static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
 
 /// Loads or creates the user config.
-pub fn load_or_create() -> anyhow::Result<()> {
+pub fn load_or_create() -> netcanv::Result<()> {
    let config = UserConfig::load_or_create()?;
    if CONFIG.set(RwLock::new(config)).is_err() {
-      anyhow::bail!("the user config is already loaded");
+      return Err(Error::ConfigIsAlreadyLoaded);
    }
    Ok(())
 }
 
 /// Saves the user config.
-pub fn save() -> anyhow::Result<()> {
+pub fn save() -> netcanv::Result<()> {
    config().save()
 }
 

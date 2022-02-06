@@ -41,6 +41,8 @@
 // Prevent opening a console on Windows if this is a release build.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub extern crate self as netcanv;
+
 use std::fmt::Write;
 
 use crate::backend::winit::event::{Event, WindowEvent};
@@ -53,9 +55,13 @@ use crate::ui::view::{self, View};
 use backend::Backend;
 use log::LevelFilter;
 use native_dialog::{MessageDialog, MessageType};
+use netcanv_i18n::translate_enum::TranslateEnum;
+use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
-
 use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
+use nysa::global as bus;
+use simple_logger::SimpleLogger;
+
 #[cfg(feature = "renderer-opengl")]
 use netcanv_renderer_opengl::UiRenderFrame;
 #[cfg(feature = "renderer-skia")]
@@ -63,6 +69,9 @@ use netcanv_renderer_skia::UiRenderFrame;
 
 #[macro_use]
 mod common;
+#[macro_use]
+mod errors;
+
 mod app;
 mod assets;
 mod backend;
@@ -80,12 +89,21 @@ mod viewport;
 use app::*;
 use assets::*;
 use config::config;
-use simple_logger::SimpleLogger;
 use ui::{Input, Ui};
 
-fn inner_main() -> anyhow::Result<()> {
+pub use errors::*;
+
+/// The "inner" main function that does all the work, and can fail.
+///
+/// `language` is populated with the user's language once that's loaded. The language is then used
+/// for displaying crash messages.
+fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
-   SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
+   SimpleLogger::new().with_level(LevelFilter::Debug).env().init().map_err(|e| {
+      Error::CouldNotInitializeLogger {
+         error: e.to_string(),
+      }
+   })?;
    log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
@@ -118,15 +136,13 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Build the render backend.
    log::debug!("initializing render backend");
-   let renderer = Backend::new(window_builder, &event_loop)?;
+   let renderer =
+      Backend::new(window_builder, &event_loop).map_err(|e| Error::CouldNotInitializeBackend {
+         error: e.to_string(),
+      })?;
    // Position the window.
    if let Some(window) = &config().window {
       renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
-   }
-   // Also, initialize the clipboard because we now have a window handle.
-   match clipboard::init() {
-      Ok(_) => (),
-      Err(error) => log::error!("failed to initialize clipboard: {}", error),
    }
 
    // Build the UI.
@@ -135,8 +151,18 @@ fn inner_main() -> anyhow::Result<()> {
    // Load all the assets, and start the first app state.
    log::debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
+   *language = Some(assets.language.clone());
    let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
    let mut input = Input::new();
+
+   // Initialize the clipboard because we now have a window handle and translation strings.
+   match clipboard::init() {
+      Ok(_) => (),
+      Err(error) => {
+         log::error!("failed to initialize clipboard: {:?}", error);
+         bus::push(common::Error(error));
+      }
+   }
 
    log::debug!("init done! starting event loop");
 
@@ -212,16 +238,26 @@ fn main() {
       default_panic_hook(panic_info);
    }));
 
-   match inner_main() {
+   let mut language = None;
+   match inner_main(&mut language) {
       Ok(()) => (),
       Err(payload) => {
          let mut message = String::new();
+         let language = language.unwrap_or_else(|| {
+            Assets::load_language(Some("en-US")).expect("English language must be present")
+         });
          let _ = write!(
             message,
-            "An error occured:\n{}\n\nIf you think this is a bug, please file an issue on GitHub. https://github.com/liquidev/netcanv",
-            payload
+            "{}",
+            Formatted::new(language.clone(), "failure")
+               .format()
+               .with("message", payload.translate(&language))
+               .done(),
          );
-         log::error!("inner_main() returned with an Err:\n{}", payload);
+         log::error!(
+            "inner_main() returned with an Err:\n{}",
+            payload.translate(&language)
+         );
          MessageDialog::new()
             .set_title("NetCanv - Error")
             .set_text(&message)

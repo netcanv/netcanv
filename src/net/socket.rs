@@ -3,7 +3,6 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use anyhow::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use instant::Duration;
@@ -17,7 +16,8 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
-use crate::common::Fatal;
+use crate::common::{deserialize_bincode, serialize_bincode, Fatal};
+use crate::Error;
 
 /// Runtime for managing active connections.
 pub struct SocketSystem {
@@ -35,14 +35,14 @@ impl SocketSystem {
    }
 
    /// Resolves the socket addresses the given hostname could refer to.
-   async fn resolve_address_with_default_port(url: &str) -> anyhow::Result<Url> {
+   fn resolve_address_with_default_port(url: &str) -> netcanv::Result<Url> {
       let url = if !url.starts_with("ws://") && !url.starts_with("wss://") {
          format!("wss://{}", url)
       } else {
          url.to_owned()
       };
 
-      let mut url = Url::parse(&url)?;
+      let mut url = Url::parse(&url).map_err(|_| Error::InvalidUrl)?;
 
       if url.port().is_none() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
@@ -52,31 +52,26 @@ impl SocketSystem {
       Ok(url)
    }
 
-   async fn connect_inner(self: Arc<Self>, hostname: String) -> anyhow::Result<Socket> {
-      let address = Self::resolve_address_with_default_port(&hostname)
-         .await
-         .context("Could not resolve address. Are you sure the address is correct?")?;
+   async fn connect_inner(self: Arc<Self>, url: String) -> netcanv::Result<Socket> {
+      let address = Self::resolve_address_with_default_port(&url)?;
       let (stream, _) = connect_async(address).await?;
       let (sink, mut stream) = stream.split();
       log::info!("connection established");
 
-      let version =
-         stream.next().await.ok_or_else(|| anyhow::anyhow!("Didn't receive version packet."))?;
+      let version = stream.next().await.ok_or(Error::NoVersionPacket)?;
 
       let version = match version? {
          Message::Binary(version) => {
-            let array: [u8; 4] = version
-               .try_into()
-               .map_err(|_| anyhow::anyhow!("The relay sent an invalid version packet."))?;
+            let array: [u8; 4] = version.try_into().map_err(|_| Error::InvalidVersionPacket)?;
             u32::from_le_bytes(array)
          }
-         _ => anyhow::bail!("The relay sent an invalid packet."),
+         _ => return Err(Error::InvalidVersionPacket),
       };
 
       match version.cmp(&relay::PROTOCOL_VERSION) {
          Ordering::Equal => (),
-         Ordering::Less => anyhow::bail!("Relay version is too old. Try downgrading your client"),
-         Ordering::Greater => anyhow::bail!("Relay version is too new. Try updating your client"),
+         Ordering::Less => return Err(Error::RelayIsTooOld),
+         Ordering::Greater => return Err(Error::RelayIsTooNew),
       }
 
       log::debug!("version ok");
@@ -118,7 +113,7 @@ impl SocketSystem {
    }
 
    /// Initiates a new connection to the relay at the given hostname (IP address or DNS domain).
-   pub fn connect(self: Arc<Self>, hostname: String) -> oneshot::Receiver<anyhow::Result<Socket>> {
+   pub fn connect(self: Arc<Self>, hostname: String) -> oneshot::Receiver<netcanv::Result<Socket>> {
       log::info!("connecting to {}", hostname);
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
@@ -152,21 +147,22 @@ type Stream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 type Sink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 
 impl Socket {
+   /// Returns whether the connection was closed.
    async fn read_packet(
       message: tungstenite::Result<Message>,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
       quit: &broadcast::Sender<Quit>,
-   ) -> anyhow::Result<Option<()>> {
+   ) -> netcanv::Result<bool> {
       match message {
          Ok(Message::Binary(data)) => {
             if data.len() > relay::MAX_PACKET_SIZE as usize {
-               anyhow::bail!("Packet is too big");
+               return Err(Error::ReceivedPacketThatIsTooBig);
             }
-            let packet = bincode::deserialize(&data).context("Invalid packet")?;
+            let packet = deserialize_bincode(&data)?;
             output.send(packet)?;
          }
          Ok(Message::Close(frame)) => {
-            bus::push(Fatal(anyhow::anyhow!("The relay has been disconnected.")));
+            bus::push(Fatal(Error::RelayHasDisconnected));
 
             if let Some(frame) = frame {
                log::warn!(
@@ -180,27 +176,32 @@ impl Socket {
 
             quit.send(Quit)?;
 
-            return Ok(None);
+            return Ok(true);
          }
          Err(e) => {
             use tokio_tungstenite::tungstenite::error::ProtocolError;
-            use tokio_tungstenite::tungstenite::Error::*;
+            use tokio_tungstenite::tungstenite::Error as WsError;
             match e {
-               ConnectionClosed => return Ok(None),
+               WsError::ConnectionClosed => return Ok(true),
                // Relay can force a closing handshake, and WebSockets requires a closing handshake.
                // If we do not get it, it means that relay has been closed and we have to close the session.
-               AlreadyClosed | Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
+               WsError::AlreadyClosed
+               | WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
                   log::error!("the connection was closed without a closing handshake (relay probably crashed)");
-                  bus::push(Fatal(anyhow::anyhow!("The relay has been disconnected.")));
-                  return Ok(None);
+                  bus::push(Fatal(Error::RelayHasDisconnected));
+                  return Ok(true);
                }
-               _ => anyhow::bail!(e),
+               other => {
+                  return Err(Error::WebSocket {
+                     error: other.to_string(),
+                  })
+               }
             }
          }
          _ => log::info!("got unused message"),
       }
 
-      Ok(Some(()))
+      Ok(false)
    }
 
    async fn receiver_loop(
@@ -208,7 +209,7 @@ impl Socket {
       mut output: mpsc::UnboundedSender<relay::Packet>,
       quit_tx: broadcast::Sender<Quit>,
       mut quit_rx: broadcast::Receiver<Quit>,
-   ) -> anyhow::Result<()> {
+   ) -> netcanv::Result<()> {
       loop {
          tokio::select! {
             biased;
@@ -216,7 +217,7 @@ impl Socket {
                log::info!("receiver: received quit signal");
                break;
             },
-            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &quit_tx).await?.is_none() {
+            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &quit_tx).await? {
                break
             },
             else => (),
@@ -226,16 +227,15 @@ impl Socket {
       Ok(())
    }
 
-   async fn write_packet(sink: &mut Sink, packet: relay::Packet) -> anyhow::Result<()> {
-      let bytes = bincode::serialize(&packet)?;
+   async fn write_packet(sink: &mut Sink, packet: relay::Packet) -> netcanv::Result<()> {
+      let bytes = serialize_bincode(&packet)?;
       if bytes.len() > relay::MAX_PACKET_SIZE as usize {
-         anyhow::bail!(
-            "Cannot send packet that is bigger than {} bytes (got {})",
-            relay::MAX_PACKET_SIZE,
-            bytes.len(),
-         );
+         return Err(Error::TriedToSendPacketThatIsTooBig {
+            max: relay::MAX_PACKET_SIZE as usize,
+            size: bytes.len(),
+         });
       }
-      u32::try_from(bytes.len()).context("Packet is too big (wtf)")?;
+      u32::try_from(bytes.len()).map_err(|_| Error::TriedToSendPacketThatIsWayTooBig)?;
 
       sink.send(Message::Binary(bytes)).await?;
       Ok(())
@@ -245,7 +245,7 @@ impl Socket {
       mut sink: Sink,
       mut input: mpsc::UnboundedReceiver<relay::Packet>,
       mut quit: broadcast::Receiver<Quit>,
-   ) -> anyhow::Result<()> {
+   ) -> netcanv::Result<()> {
       loop {
          tokio::select! {
             biased;
@@ -269,7 +269,7 @@ impl Socket {
 
    /// Sends a packet to the receiving end of the socket.
    pub fn send(&self, packet: relay::Packet) {
-      catch!(self.tx.send(packet).context("The relay has disconnected"), as Fatal)
+      catch!(self.tx.send(packet).map_err(|_| Error::RelayHasDisconnected), as Fatal)
    }
 
    /// Receives packets from the sending end of the socket.

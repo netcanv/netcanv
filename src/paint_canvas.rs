@@ -21,6 +21,7 @@ use tokio::task::JoinHandle;
 
 use crate::backend::{Backend, Framebuffer};
 use crate::viewport::Viewport;
+use crate::Error;
 
 #[derive(Clone)]
 pub struct ChunkImage {
@@ -81,7 +82,7 @@ impl Chunk {
    }
 
    /// Encodes an image to PNG data asynchronously.
-   async fn encode_png_data(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+   async fn encode_png_data(image: RgbaImage) -> netcanv::Result<Vec<u8>> {
       tokio::task::spawn_blocking(move || {
          let mut bytes: Vec<u8> = Vec::new();
          match PngEncoder::new(Cursor::new(&mut bytes)).encode(
@@ -93,7 +94,7 @@ impl Chunk {
             Ok(()) => (),
             Err(error) => {
                log::error!("error while encoding: {}", error);
-               anyhow::bail!(error)
+               return Err(error.into());
             }
          }
          Ok(bytes)
@@ -102,7 +103,7 @@ impl Chunk {
    }
 
    /// Encodes an image to WebP asynchronously.
-   async fn encode_webp_data(image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+   async fn encode_webp_data(image: RgbaImage) -> netcanv::Result<Vec<u8>> {
       Ok(tokio::task::spawn_blocking(move || {
          let image = DynamicImage::ImageRgba8(image);
          let encoder = webp::Encoder::from_image(&image).unwrap();
@@ -113,7 +114,7 @@ impl Chunk {
 
    /// Encodes a network image asynchronously. This encodes PNG, as well as WebP if the PNG is too
    /// large, and returns both images.
-   async fn encode_network_data(image: RgbaImage) -> anyhow::Result<ChunkImage> {
+   async fn encode_network_data(image: RgbaImage) -> netcanv::Result<ChunkImage> {
       let png = Self::encode_png_data(image.clone()).await?;
       let webp = if png.len() > Self::MAX_PNG_SIZE {
          Some(Self::encode_webp_data(image).await?)
@@ -124,11 +125,11 @@ impl Chunk {
    }
 
    /// Decodes a PNG file into the given sub-chunk.
-   fn decode_png_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
+   fn decode_png_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       let decoder = PngDecoder::new(Cursor::new(data))?;
       if decoder.color_type() != ColorType::Rgba8 {
          log::warn!("received non-RGBA image data, ignoring");
-         anyhow::bail!("non-RGBA chunk image");
+         return Err(Error::NonRgbaChunkImage);
       }
       let mut image = RgbaImage::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
       decoder.read_image(&mut image)?;
@@ -136,11 +137,11 @@ impl Chunk {
    }
 
    /// Decodes a WebP file into the given sub-chunk.
-   fn decode_webp_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
+   fn decode_webp_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       let decoder = webp::Decoder::new(data);
       let image = match decoder.decode() {
          Some(image) => image.to_image(),
-         None => anyhow::bail!("got non-webp image"),
+         None => return Err(Error::InvalidChunkImageFormat),
       }
       .into_rgba8();
       Ok(image)
@@ -148,7 +149,7 @@ impl Chunk {
 
    /// Decodes a PNG or WebP file into the given sub-chunk, depending on what's actually stored in
    /// `data`.
-   fn decode_network_data(data: &[u8]) -> anyhow::Result<RgbaImage> {
+   fn decode_network_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       // Try WebP first.
       let image = Self::decode_webp_data(data).or_else(|_| Self::decode_png_data(data))?;
       if image.dimensions() != Self::SIZE {
@@ -157,9 +158,10 @@ impl Chunk {
             image.dimensions(),
             Self::SIZE
          );
-         anyhow::bail!("invalid chunk image size");
+         Err(Error::InvalidChunkImageSize)
+      } else {
+         Ok(image)
       }
-      Ok(image)
    }
 
    /// Marks the chunk as dirty - that is, invalidates any cached PNG and WebP data,
@@ -358,7 +360,7 @@ impl PaintCanvas {
                         // Doesn't matter if the receiving half is closed.
                         let _ = output.send((chunk_position, image));
                      }
-                     Err(error) => log::error!("image decoding failed: {}", error),
+                     Err(error) => log::error!("image decoding failed: {:?}", error),
                   });
                } else {
                   log::info!("decoding supervisor: chunk data sender was dropped, quitting");
@@ -429,7 +431,7 @@ impl PaintCanvas {
                }
                Err(error) => {
                   log::error!(
-                     "error while encoding image for chunk {:?}: {}",
+                     "error while encoding image for chunk {:?}: {:?}",
                      chunk_position,
                      error
                   );
@@ -444,7 +446,7 @@ impl PaintCanvas {
       &mut self,
       to_chunk: (i32, i32),
       data: Vec<u8>,
-   ) -> anyhow::Result<()> {
+   ) -> netcanv::Result<()> {
       self
          .chunks_to_decode_tx
          .send((to_chunk, data))
@@ -454,7 +456,7 @@ impl PaintCanvas {
    }
 
    /// Saves the entire paint to a PNG file.
-   fn save_as_png(&self, path: &Path) -> anyhow::Result<()> {
+   fn save_as_png(&self, path: &Path) -> netcanv::Result<()> {
       log::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
       for chunk_position in self.chunks.keys() {
@@ -471,7 +473,7 @@ impl PaintCanvas {
          bottom
       );
       if left == i32::MAX {
-         anyhow::bail!("There's nothing to save! Draw something on the canvas and try again.");
+         return Err(Error::NothingToSave);
       }
       let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
       let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
@@ -501,7 +503,7 @@ impl PaintCanvas {
 
    /// Validates the `.netcanv` save path. This strips away the `canvas.toml` if present, and makes
    /// sure that the directory name ends with `.netcanv`.
-   fn validate_netcanv_save_path(path: &Path) -> anyhow::Result<PathBuf> {
+   fn validate_netcanv_save_path(path: &Path) -> netcanv::Result<PathBuf> {
       // condition #1: remove canvas.toml
       let mut result = PathBuf::from(path);
       if result.file_name() == Some(OsStr::new("canvas.toml")) {
@@ -509,13 +511,13 @@ impl PaintCanvas {
       }
       // condition #2: make sure that the directory name ends with .netcanv
       if result.extension() != Some(OsStr::new("netcanv")) {
-         anyhow::bail!("Please select a valid canvas folder (one whose name ends with .netcanv)")
+         return Err(Error::InvalidCanvasFolder);
       }
       Ok(result)
    }
 
    /// Clears the existing `.netcanv` save at the given path.
-   fn clear_netcanv_save(path: &Path) -> anyhow::Result<()> {
+   fn clear_netcanv_save(path: &Path) -> netcanv::Result<()> {
       log::info!("clearing older netcanv save {:?}", path);
       for entry in std::fs::read_dir(path)? {
          let path = entry?.path();
@@ -530,7 +532,7 @@ impl PaintCanvas {
    }
 
    /// Saves the paint canvas as a `.netcanv` canvas.
-   async fn save_as_netcanv(&mut self, path: &Path) -> anyhow::Result<()> {
+   async fn save_as_netcanv(&mut self, path: &Path) -> netcanv::Result<()> {
       // create the directory
       log::info!("creating or reusing existing directory ({:?})", path);
       let path = Self::validate_netcanv_save_path(path)?;
@@ -566,7 +568,7 @@ impl PaintCanvas {
    /// Saves the canvas to a PNG file or a `.netcanv` directory.
    ///
    /// If `path` is `None`, this performs an autosave of an already saved `.netcanv` directory.
-   pub fn save(&mut self, path: Option<&Path>) -> anyhow::Result<()> {
+   pub fn save(&mut self, path: Option<&Path>) -> netcanv::Result<()> {
       let path = path
          .map(|p| p.to_path_buf())
          .or_else(|| self.filename.clone())
@@ -578,10 +580,10 @@ impl PaintCanvas {
                let runtime = Arc::clone(&self.runtime);
                runtime.block_on(async { self.save_as_netcanv(&path).await })
             }
-            _ => anyhow::bail!("Unsupported save format. Please choose either .png or .netcanv"),
+            _ => Err(Error::UnsupportedSaveFormat),
          }
       } else {
-         anyhow::bail!("Can't save a canvas without an extension")
+         Err(Error::MissingCanvasSaveExtension)
       }
    }
 
@@ -595,7 +597,7 @@ impl PaintCanvas {
    }
 
    /// Loads chunks from an image file.
-   fn load_from_image_file(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
+   fn load_from_image_file(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
       use ::image::io::Reader as ImageReader;
 
       let image = ImageReader::open(path)?.decode()?.into_rgba8();
@@ -639,17 +641,17 @@ impl PaintCanvas {
    }
 
    /// Parses an `x,y` chunk position.
-   fn parse_chunk_position(coords: &str) -> anyhow::Result<(i32, i32)> {
+   fn parse_chunk_position(coords: &str) -> netcanv::Result<(i32, i32)> {
       let mut iter = coords.split(',');
       let x_str = iter.next();
       let y_str = iter.next();
-      anyhow::ensure!(
+      ensure!(
          x_str.is_some() && y_str.is_some(),
-         "Chunk position must follow the pattern: x,y"
+         Error::InvalidChunkPositionPattern
       );
-      anyhow::ensure!(
+      ensure!(
          iter.next().is_none(),
-         "Trailing coordinates found after x,y"
+         Error::TrailingChunkCoordinatesInFilename
       );
       let (x_str, y_str) = (x_str.unwrap(), y_str.unwrap());
       let x: i32 = x_str.parse()?;
@@ -658,15 +660,15 @@ impl PaintCanvas {
    }
 
    /// Loads chunks from a `.netcanv` directory.
-   fn load_from_netcanv(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
+   fn load_from_netcanv(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
       let path = Self::validate_netcanv_save_path(path)?;
       log::info!("loading canvas from {:?}", path);
       // load canvas.toml
       log::debug!("loading canvas.toml");
       let canvas_toml_path = path.join(Path::new("canvas.toml"));
       let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(&canvas_toml_path)?)?;
-      if canvas_toml.version < CANVAS_TOML_VERSION {
-         anyhow::bail!("Version mismatch in canvas.toml. Try updating your client");
+      if canvas_toml.version > CANVAS_TOML_VERSION {
+         return Err(Error::CanvasTomlVersionMismatch);
       }
       // load chunks
       log::debug!("loading chunks");
@@ -691,7 +693,7 @@ impl PaintCanvas {
    }
 
    /// Loads a paint canvas from the given path.
-   pub fn load(&mut self, renderer: &mut Backend, path: &Path) -> anyhow::Result<()> {
+   pub fn load(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
       if let Some(ext) = path.extension() {
          match ext.to_str() {
             Some("netcanv") | Some("toml") => self.load_from_netcanv(renderer, path),

@@ -16,10 +16,10 @@ pub trait Action {
    fn icon(&self) -> &Image;
 
    /// Performs the action.
-   fn perform(&mut self, args: ActionArgs) -> anyhow::Result<()>;
+   fn perform(&mut self, args: ActionArgs) -> netcanv::Result<()>;
 
    /// Ticks the action. Called every frame to do things like autosaving.
-   fn process(&mut self, ActionArgs { .. }: ActionArgs) -> anyhow::Result<()> {
+   fn process(&mut self, ActionArgs { .. }: ActionArgs) -> netcanv::Result<()> {
       Ok(())
    }
 }

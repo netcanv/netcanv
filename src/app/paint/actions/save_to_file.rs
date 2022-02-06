@@ -41,7 +41,7 @@ impl Action for SaveToFileAction {
          paint_canvas,
          ..
       }: ActionArgs,
-   ) -> anyhow::Result<()> {
+   ) -> netcanv::Result<()> {
       match FileDialog::new()
          .add_filter(&assets.tr.fd_png_file, &["png"])
          .add_filter(&assets.tr.fd_netcanv_canvas, &["netcanv", "toml"])
@@ -49,12 +49,12 @@ impl Action for SaveToFileAction {
       {
          Ok(Some(path)) => paint_canvas.save(Some(&path))?,
          Ok(None) => (),
-         Err(error) => anyhow::bail!(error),
+         Err(error) => return Err(error.into()),
       }
       Ok(())
    }
 
-   fn process(&mut self, ActionArgs { paint_canvas, .. }: ActionArgs) -> anyhow::Result<()> {
+   fn process(&mut self, ActionArgs { paint_canvas, .. }: ActionArgs) -> netcanv::Result<()> {
       if paint_canvas.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
       {
          log::info!("autosaving chunks");
