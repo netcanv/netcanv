@@ -75,8 +75,20 @@ rgb-hex-code = RGB hex code
 
 ## Errors
 
+failure =
+   An error occured: { $message }
+
+   If you think this is a bug, please file an issue on GitHub.
+   https://github.com/liquidev/netcanv
+
 error = Error: { $error }
 error-fatal = Fatal: { $error }
+
+error-could-not-initialize-backend = Could not initialize backend: { $error }
+error-could-not-initialize-logger = Could not initialize logger: { $error }
+error-translations-do-not-exist = Translations for { $language } do not exist yet.
+error-could-not-load-language = Could not load language { $language }. See console log for details
+
 error-nickname-must-not-be-empty = Nickname must not be empty
 error-nickname-too-long = The maximum length of a nickname is { $max-length } characters
 error-invalid-room-id-length = { room-id } must be a code with { $length } characters

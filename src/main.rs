@@ -41,6 +41,8 @@
 // Prevent opening a console on Windows if this is a release build.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub extern crate self as netcanv;
+
 use std::fmt::Write;
 
 use crate::backend::winit::event::{Event, WindowEvent};
@@ -69,6 +71,7 @@ mod backend;
 mod clipboard;
 mod color;
 mod config;
+mod errors;
 mod keymap;
 mod net;
 mod paint_canvas;
@@ -83,9 +86,15 @@ use config::config;
 use simple_logger::SimpleLogger;
 use ui::{Input, Ui};
 
-fn inner_main() -> anyhow::Result<()> {
+pub use errors::*;
+
+fn inner_main() -> errors::Result<()> {
    // Set up logging.
-   SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
+   SimpleLogger::new().with_level(LevelFilter::Debug).env().init().map_err(|e| {
+      Error::CouldNotInitializeLogger {
+         error: e.to_string(),
+      }
+   })?;
    log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
@@ -118,7 +127,10 @@ fn inner_main() -> anyhow::Result<()> {
 
    // Build the render backend.
    log::debug!("initializing render backend");
-   let renderer = Backend::new(window_builder, &event_loop)?;
+   let renderer =
+      Backend::new(window_builder, &event_loop).map_err(|e| Error::CouldNotInitializeBackend {
+         error: e.to_string(),
+      })?;
    // Position the window.
    if let Some(window) = &config().window {
       renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
@@ -216,6 +228,7 @@ fn main() {
       Ok(()) => (),
       Err(payload) => {
          let mut message = String::new();
+         let language = Assets::load_language();
          let _ = write!(
             message,
             "An error occured:\n{}\n\nIf you think this is a bug, please file an issue on GitHub. https://github.com/liquidev/netcanv",

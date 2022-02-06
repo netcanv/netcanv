@@ -184,25 +184,33 @@ impl Assets {
       renderer.create_image_from_rgba(image.width(), image.height(), &image)
    }
 
-   /// Loads internationalization data.
-   fn load_i18n() -> anyhow::Result<(Language, Strings)> {
-      let language_code = &config().language;
-      let language_code = language_code.as_str();
+   /// Loads the language provided in the argument, or if the argument is `None`, the one specified
+   /// in the config.
+   pub fn load_language(language_code: Option<&str>) -> Option<Language> {
+      let language_code = language_code.unwrap_or_else(|| &config().language);
+      let language_code = language_code;
       let language = Language::load(
          language_code,
          match language_code {
             "en-US" => include_str!("assets/i18n/en-US.ftl"),
             "pl-PL" => include_str!("assets/i18n/pl-PL.ftl"),
-            _ => anyhow::bail!("language {} is not supported", language_code),
+            _ => return None,
          },
-      )?;
-      let strings = Strings::from_language(&language);
-      Ok((language, strings))
+      );
+      let language = match language {
+         Ok(language) => language,
+         Err(error) => {
+            log::error!("error while loading language:");
+            log::error!("{}", error);
+            return None;
+         }
+      };
+      Some(language)
    }
 
    /// Creates a new instance of Assets with the provided color scheme.
-   pub fn new(renderer: &mut Backend, colors: ColorScheme) -> anyhow::Result<Self> {
-      let (language, tr) = Self::load_i18n()?;
+   pub fn new(renderer: &mut Backend, colors: ColorScheme) -> netcanv::Result<Self> {
+      let language = Self::load_language(None)?;
       Ok(Self {
          sans: renderer.create_font_from_memory(SANS_TTF, 14.0),
          sans_bold: renderer.create_font_from_memory(SANS_BOLD_TTF, 14.0),
