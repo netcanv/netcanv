@@ -9,9 +9,11 @@ use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard};
 
 use directories::ProjectDirs;
+use netcanv_i18n::unic_langid::LanguageIdentifier;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
+use crate::assets::Assets;
 use crate::keymap::Keymap;
 use crate::Error;
 
@@ -148,7 +150,28 @@ impl Default for UserConfig {
 }
 
 fn default_language() -> String {
-   "en-US".to_owned()
+   fn inner() -> Option<String> {
+      log::info!("language not yet determined, checking locale");
+      let locale = sys_locale::get_locale()?;
+      let mut identifier: LanguageIdentifier = locale.parse().ok()?;
+      log::info!("trying full identifier: {}", identifier);
+      if Assets::load_language(Some(&identifier.to_string())).is_ok() {
+         return Some(identifier.to_string());
+      }
+      identifier.region = None;
+      log::info!("trying without region: {}", identifier);
+      if Assets::load_language(Some(&identifier.to_string())).is_ok() {
+         return Some(identifier.to_string());
+      }
+      identifier.script = None;
+      log::info!("trying without script: {}", identifier);
+      if Assets::load_language(Some(&identifier.to_string())).is_ok() {
+         return Some(identifier.to_string());
+      }
+      log::error!("system language not available, falling back to en-US");
+      None
+   }
+   inner().unwrap_or_else(|| "en-US".to_string())
 }
 
 static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
