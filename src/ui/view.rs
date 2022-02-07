@@ -206,6 +206,13 @@ pub mod layout {
       panic!("the dimensions of the view passed to full_screen must be Constant");
    }
 
+   /// Positions a view using absolute coordinates.
+   pub fn absolute(view: &mut View, rect: Rect) {
+      // I don't like this. This shouldn't be needed.
+      view.position = rect.position;
+      view.size = Some(rect.size);
+   }
+
    /// Lays the view out such that the given view is aligned inside of the parent view.
    ///
    /// The parent view's size must be computed.

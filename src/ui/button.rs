@@ -1,6 +1,6 @@
 //! Pressable buttons.
 
-use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout};
+use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout, Rect};
 use netcanv_renderer::Font as FontTrait;
 
 use crate::backend::{Font, Image};
@@ -80,6 +80,7 @@ impl<'a> ButtonArgs<'a> {
 /// The result of button interaction computed after processing it.
 pub struct ButtonProcessResult {
    clicked: bool,
+   group: Rect,
 }
 
 impl Button {
@@ -121,9 +122,28 @@ impl Button {
       }
       let clicked = ui.clicked(input, MouseButton::Left);
 
+      let group = ui.rect();
+
       ui.pop();
 
-      ButtonProcessResult { clicked }
+      ButtonProcessResult { clicked, group }
+   }
+
+   /// Processes a button with text rendered on top, and an explicit pixel width.
+   pub fn with_text_width(
+      ui: &mut Ui,
+      input: &Input,
+      args: &ButtonArgs,
+      font: &Font,
+      text: &str,
+      width: f32,
+   ) -> ButtonProcessResult {
+      let color = args.colors.text;
+      Self::process(ui, input, args, Some(width), |ui| {
+         ui.push((width, ui.height()), Layout::Freeform);
+         ui.text(font, text, color, (AlignH::Center, AlignV::Middle));
+         ui.pop();
+      })
    }
 
    /// Processes a button with text rendered on top.
@@ -135,12 +155,7 @@ impl Button {
       text: &str,
    ) -> ButtonProcessResult {
       let width = font.text_width(text) + args.height;
-      let color = args.colors.text;
-      Self::process(ui, input, args, Some(width), |ui| {
-         ui.push((width, ui.height()), Layout::Freeform);
-         ui.text(font, text, color, (AlignH::Center, AlignV::Middle));
-         ui.pop();
-      })
+      Self::with_text_width(ui, input, args, font, text, width)
    }
 
    /// Processes a button with a square icon rendered on top.
@@ -159,6 +174,13 @@ impl Button {
 }
 
 impl ButtonProcessResult {
+   /// Returns the group rectangle of the button. Can be used to position things next to the button
+   /// using `TooltipPositions`.
+   pub fn group(&self) -> Rect {
+      self.group
+   }
+
+   /// Returns whether the button was clicked on this frame.
    pub fn clicked(self) -> bool {
       self.clicked
    }

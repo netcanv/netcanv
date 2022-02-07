@@ -1,0 +1,5 @@
+# Mapping of language names to their corresponding codes.
+# This is used in the language selection UI.
+
+"English (US)" = "en-US"
+"Polski" = "pl"

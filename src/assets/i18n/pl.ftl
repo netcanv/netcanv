@@ -33,6 +33,7 @@ lobby-host-from-file = z pliku
 
 switch-to-dark-mode = Przełącz na tryb ciemny
 switch-to-light-mode = Przełącz na tryb jasny
+language = Język
 open-source-licenses = Licencje open source
 
 fd-supported-image-files = Obsługiwane formaty obrazów

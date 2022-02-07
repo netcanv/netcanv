@@ -33,6 +33,7 @@ lobby-host-from-file = from File
 
 switch-to-dark-mode = Switch to dark mode
 switch-to-light-mode = Switch to light mode
+language = Language
 open-source-licenses = Open source licenses
 
 connecting = Connecting…
