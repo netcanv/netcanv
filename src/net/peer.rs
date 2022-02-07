@@ -239,11 +239,7 @@ impl Peer {
                });
             }
          }
-         relay::Packet::Error(error) => {
-            return Err(Error::Relay {
-               error: relay_error_to_string(error).to_owned(),
-            })
-         }
+         relay::Packet::Error(error) => return Err(Error::Relay(error)),
          _ => return Err(Error::UnexpectedRelayPacket),
       }
       Ok(())
@@ -396,18 +392,5 @@ impl Peer {
    /// Returns the list of peers connected to the same room.
    pub fn mates(&self) -> &HashMap<PeerId, Mate> {
       &self.mates
-   }
-}
-
-fn relay_error_to_string(error: relay::Error) -> &'static str {
-   match error {
-      relay::Error::NoFreeRooms => "Could not find any more free rooms. Try again",
-      // Hopefully this one never happens.
-      relay::Error::NoFreePeerIDs => "The relay server is full. Try a different server",
-      relay::Error::RoomDoesNotExist => {
-         "No room with the given ID. Check if you spelled the ID correctly"
-      }
-      // This one also shouldn't happen.
-      relay::Error::NoSuchPeer => "Internal error: No such peer",
    }
 }

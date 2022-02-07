@@ -2,6 +2,7 @@ use std::num::{IntErrorKind, ParseIntError};
 
 use image::ImageError;
 use netcanv_i18n::{Formatted, TranslateEnum};
+use netcanv_protocol::relay;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinError;
 use tokio_tungstenite::tungstenite;
@@ -113,8 +114,7 @@ pub enum Error {
    NotConnectedToHost,
    PacketSerializationFailed { error: String },
    PacketDeserializationFailed { error: String },
-   // Error received from the relay. Not sure how to handle translations for this yet
-   Relay { error: String },
+   Relay(relay::Error),
    UnexpectedRelayPacket,
    ClientIsTooOld,
    ClientIsTooNew,
