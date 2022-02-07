@@ -191,7 +191,7 @@ impl Assets {
          &language_code,
          match language_code.as_str() {
             "en-US" => include_str!("assets/i18n/en-US.ftl"),
-            "pl-PL" => include_str!("assets/i18n/pl-PL.ftl"),
+            "pl" => include_str!("assets/i18n/pl.ftl"),
             _ => {
                return Err(Error::TranslationsDoNotExist {
                   language: language_code.to_owned(),

@@ -14,6 +14,8 @@ pub use map::Map;
 
 pub use netcanv_i18n_macros::{FromLanguage, TranslateEnum};
 
+pub use unic_langid;
+
 fn _test_translate_enum() {
    #[derive(TranslateEnum)]
    #[prefix = "error"]
