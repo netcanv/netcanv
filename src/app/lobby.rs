@@ -59,6 +59,7 @@ pub struct State {
 
    main_view: View,
    panel_view: View,
+   language_menu: ContextMenu,
 
    // net
    status: Status,
@@ -80,8 +81,6 @@ impl State {
       let nickname_field = TextField::new(Some(&config().lobby.nickname));
       let relay_field = TextField::new(Some(&config().lobby.relay));
       Self {
-         assets,
-
          socket_system: SocketSystem::new(),
 
          nickname_field,
@@ -95,7 +94,11 @@ impl State {
             Self::VIEW_BOX_WIDTH,
             Self::BANNER_HEIGHT + Self::VIEW_BOX_HEIGHT + Self::STATUS_HEIGHT,
          )),
-         panel_view: View::new((40.0, 12.0 + 2.0 * 32.0)),
+         panel_view: View::new((40.0, 4.0 + 3.0 * 36.0)),
+         // The size of the language menu is computed later.
+         language_menu: ContextMenu::new((0.0, 0.0)),
+
+         assets,
 
          status: Status::None,
          peer: None,
@@ -470,6 +473,32 @@ impl State {
 
       ui.space(4.0);
 
+      let language_button = Button::with_icon(
+         ui,
+         input,
+         &ButtonArgs::new(ui, &self.assets.colors.action_button)
+            .height(32.0)
+            .pill()
+            .tooltip(&self.assets.sans, Tooltip::left(&self.assets.tr.language)),
+         &self.assets.icons.lobby.translate,
+      );
+      let n_languages = self.assets.languages.len() as f32;
+      let language_menu_rect = TooltipPosition::Left.compute_rect(
+         ui,
+         language_button.group(),
+         vector(128.0, 16.0 + n_languages * 24.0 + (n_languages - 1.0) * 4.0),
+         TooltipLayout {
+            spacing: 24.0,
+            root_padding: 8.0,
+         },
+      );
+      view::layout::absolute(&mut self.language_menu.view, language_menu_rect);
+      if language_button.clicked() {
+         self.language_menu.toggle();
+      }
+
+      ui.space(4.0);
+
       if assets::has_license_page()
          && Button::with_icon(
             ui,
@@ -483,6 +512,49 @@ impl State {
          .clicked()
       {
          catch!(assets::open_license_page());
+      }
+   }
+
+   fn process_language_menu(&mut self, ui: &mut Ui, input: &mut Input) {
+      if self
+         .language_menu
+         .begin(
+            ui,
+            input,
+            ContextMenuArgs {
+               colors: &self.assets.colors.context_menu,
+            },
+         )
+         .is_open()
+      {
+         ui.pad(8.0);
+         let mut changed = false;
+         for (name, code) in self.assets.languages.iter() {
+            if Button::with_text_width(
+               ui,
+               input,
+               &ButtonArgs::new(ui, &self.assets.colors.action_button).height(24.0).pill(),
+               if code == &config().language {
+                  &self.assets.sans_bold
+               } else {
+                  &self.assets.sans
+               },
+               name,
+               ui.width(),
+            )
+            .clicked()
+            {
+               config::write(|config| {
+                  config.language = code.clone();
+               });
+               changed = true;
+            }
+            ui.space(4.0);
+         }
+         if changed {
+            catch!(self.assets.reload_language());
+         }
+         self.language_menu.end(ui);
       }
    }
 
@@ -600,6 +672,10 @@ impl AppState for State {
       ui.pad(4.0);
       self.process_icon_panel(ui, input);
       self.panel_view.end(ui);
+
+      // Language menu
+
+      self.process_language_menu(ui, input);
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;

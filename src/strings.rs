@@ -27,6 +27,7 @@ pub struct Strings {
 
    pub switch_to_dark_mode: String,
    pub switch_to_light_mode: String,
+   pub language: String,
    pub open_source_licenses: String,
 
    pub connecting: String,
