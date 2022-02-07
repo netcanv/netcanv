@@ -42,16 +42,7 @@ impl SocketSystem {
          url.to_owned()
       };
 
-      let mut url = Url::parse(&url).map_err(|_| Error::InvalidUrl)?;
-
-      if url.port().is_none() {
-         // Url::set_port on Error does nothing, so it is fine to ignore it
-         if url.scheme() == "ws" {
-            let _ = url.set_port(Some(80));
-         } else if url.scheme() == "wss" {
-            let _ = url.set_port(Some(443));
-         }
-      }
+      let url = Url::parse(&url).map_err(|_| Error::InvalidUrl)?;
 
       Ok(url)
    }
