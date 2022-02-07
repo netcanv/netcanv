@@ -153,6 +153,7 @@ fn default_language() -> String {
    fn inner() -> Option<String> {
       log::info!("language not yet determined, checking locale");
       let locale = sys_locale::get_locale()?;
+      log::info!("got locale identifier: {}", locale);
       let mut identifier: LanguageIdentifier = locale.parse().ok()?;
       log::info!("trying full identifier: {}", identifier);
       if Assets::load_language(Some(&identifier.to_string())).is_ok() {
