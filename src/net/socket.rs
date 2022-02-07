@@ -46,7 +46,11 @@ impl SocketSystem {
 
       if url.port().is_none() {
          // Url::set_port on Error does nothing, so it is fine to ignore it
-         let _ = url.set_port(Some(relay::DEFAULT_PORT));
+         if url.scheme() == "ws" {
+            let _ = url.set_port(Some(80));
+         } else if url.scheme() == "wss" {
+            let _ = url.set_port(Some(443));
+         }
       }
 
       Ok(url)
