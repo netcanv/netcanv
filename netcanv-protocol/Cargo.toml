@@ -3,5 +3,9 @@ name = "netcanv-protocol"
 version = "0.5.0"
 edition = "2021"
 
+[features]
+i18n = ["netcanv-i18n"]
+
 [dependencies]
 serde = { version = "1.0.123", features = ["derive"] }
+netcanv-i18n = { path = "../netcanv-i18n", optional = true }

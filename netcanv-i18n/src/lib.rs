@@ -16,12 +16,19 @@ pub use netcanv_i18n_macros::{FromLanguage, TranslateEnum};
 
 pub use unic_langid;
 
-fn _test_translate_enum() {
+fn _expand_translate_enum() {
+   #[derive(TranslateEnum)]
+   enum Nested {
+      FirstError,
+      SecondError,
+   }
+
    #[derive(TranslateEnum)]
    #[prefix = "error"]
    enum Error {
       Test,
       MultipleWordsHelloWorld,
       WithFields { a_field: String },
+      WithNested(Nested),
    }
 }
