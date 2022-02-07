@@ -42,12 +42,7 @@ impl SocketSystem {
          url.to_owned()
       };
 
-      let mut url = Url::parse(&url).map_err(|_| Error::InvalidUrl)?;
-
-      if url.port().is_none() {
-         // Url::set_port on Error does nothing, so it is fine to ignore it
-         let _ = url.set_port(Some(relay::DEFAULT_PORT));
-      }
+      let url = Url::parse(&url).map_err(|_| Error::InvalidUrl)?;
 
       Ok(url)
    }
