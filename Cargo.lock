@@ -1287,6 +1287,7 @@ dependencies = [
 name = "netcanv-protocol"
 version = "0.5.0"
 dependencies = [
+ "netcanv-i18n",
  "serde",
 ]
 

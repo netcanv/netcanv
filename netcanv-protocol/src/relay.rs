@@ -151,6 +151,7 @@ impl fmt::Debug for PeerId {
 
 /// An error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "i18n", derive(netcanv_i18n::TranslateEnum))]
 pub enum Error {
    /// No more free room IDs available.
    NoFreeRooms,
