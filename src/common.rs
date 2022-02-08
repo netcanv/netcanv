@@ -36,6 +36,20 @@ pub fn lerp_point(p0: Point, p1: Point, t: f32) -> Point {
    point(lerp(p0.x, p1.x, t), lerp(p0.y, p1.y, t))
 }
 
+pub trait SafeMath {
+   /// Clamps a value, automatically computing which bound is the lower one and which is the
+   /// higher one.
+   fn safe_clamp(self, a: Self, b: Self) -> Self;
+}
+
+impl SafeMath for f32 {
+   fn safe_clamp(self, a: f32, b: f32) -> f32 {
+      let min = a.min(b);
+      let max = a.max(b);
+      self.max(min).min(max)
+   }
+}
+
 pub trait ColorMath {
    /// Returns the brightness (luma) of the color.
    fn brightness(self) -> f32;

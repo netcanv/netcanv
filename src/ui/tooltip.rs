@@ -6,7 +6,7 @@ use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, Rect, Vector
 use netcanv_renderer::Font as FontTrait;
 
 use crate::backend::Font;
-use crate::common::VectorMath;
+use crate::common::{SafeMath, VectorMath};
 
 use super::{Input, Ui, UiInput};
 
@@ -53,9 +53,9 @@ impl TooltipPosition {
       let mut rect = Rect::new((center - size / 2.0).floor(), size);
       let root = ui.root_rect();
       rect.position.x =
-         rect.position.x.clamp(root_padding, root.width() - root_padding - rect.width());
+         rect.position.x.safe_clamp(root_padding, root.width() - root_padding - rect.width());
       rect.position.y =
-         rect.position.y.clamp(root_padding, root.height() - root_padding - rect.height());
+         rect.position.y.safe_clamp(root_padding, root.height() - root_padding - rect.height());
       rect
    }
 }
