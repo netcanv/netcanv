@@ -68,7 +68,9 @@ jobs:
     - name: Install dependencies
       shell: bash
       run: |
-        cargo install cargo-about || true
+        if ! [ -e ~/.cargo/bin/cargo-about.exe ]; then
+          cargo install cargo-about || true
+        fi
 
     - name: Compile application
       run: cargo build --release
