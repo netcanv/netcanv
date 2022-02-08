@@ -29,7 +29,9 @@ jobs:
       run: |
         sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
         sudo apt-get install -y gcc-aarch64-linux-gnu
-        cargo install cargo-about || true
+        if ! [ -e ~/.cargo/bin/cargo-about ]; then
+          cargo install cargo-about || true
+        fi
         rustup target add aarch64-unknown-linux-gnu
 
     - name: Set up directories
@@ -68,7 +70,9 @@ jobs:
     - name: Install dependencies
       shell: bash
       run: |
-        cargo install cargo-about || true
+        if ! [ -e ~/.cargo/bin/cargo-about.exe ]; then
+          cargo install cargo-about || true
+        fi
 
     - name: Compile application
       run: cargo build --release
