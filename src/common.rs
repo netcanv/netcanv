@@ -305,6 +305,37 @@ pub fn truncate_text(font: &Font, max_width: f32, text: &str) -> String {
    text
 }
 
+pub trait StrExt {
+   fn strip_whitespace(&self) -> &str;
+}
+
+impl StrExt for &str {
+   fn strip_whitespace(&self) -> &str {
+      let mut start = 0;
+      for (i, c) in self.char_indices() {
+         if c != ' ' {
+            start = i;
+            break;
+         }
+      }
+      let mut end = self.len();
+      let mut last_i = self.len();
+      for (i, c) in self.char_indices().rev() {
+         if c != ' ' {
+            end = last_i;
+            break;
+         }
+         last_i = i;
+      }
+      if start > end {
+         // There are no non-whitespace characters in this string.
+         &self[0..0]
+      } else {
+         &self[start..end]
+      }
+   }
+}
+
 //
 // (De)serialization
 //

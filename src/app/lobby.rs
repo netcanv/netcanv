@@ -14,7 +14,7 @@ use nysa::global as bus;
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{self, Assets, ColorScheme};
 use crate::backend::Backend;
-use crate::common::{Error, Fatal};
+use crate::common::{Error, Fatal, StrExt};
 use crate::config::{self, config};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
@@ -80,7 +80,7 @@ impl State {
    pub fn new(assets: Assets) -> Self {
       let nickname_field = TextField::new(Some(&config().lobby.nickname));
       let relay_field = TextField::new(Some(&config().lobby.relay));
-      Self {
+      let mut this = Self {
          socket_system: SocketSystem::new(),
 
          nickname_field,
@@ -103,7 +103,9 @@ impl State {
          status: Status::None,
          peer: None,
          image_file: None,
-      }
+      };
+      this.room_id_field.set_focus(true);
+      this
    }
 
    /// Processes the logo banner.
@@ -282,9 +284,9 @@ impl State {
             match Self::join_room(
                Arc::clone(&self.socket_system),
                &self.assets.tr,
-               self.nickname_field.text(),
-               self.relay_field.text(),
-               self.room_id_field.text(),
+               self.nickname_field.text().strip_whitespace(),
+               self.relay_field.text().strip_whitespace(),
+               self.room_id_field.text().strip_whitespace(),
             ) {
                Ok(peer) => {
                   self.peer = Some(peer);
@@ -332,8 +334,8 @@ impl State {
                match Self::host_room(
                   Arc::clone(&self.socket_system),
                   &self.assets.tr,
-                  self.nickname_field.text(),
-                  self.relay_field.text(),
+                  self.nickname_field.text().strip_whitespace(),
+                  self.relay_field.text().strip_whitespace(),
                ) {
                   Ok(peer) => self.peer = Some(peer),
                   Err(status) => self.status = status,
@@ -604,8 +606,8 @@ impl State {
    /// Saves the user configuration.
    fn save_config(&mut self) {
       config::write(|config| {
-         config.lobby.nickname = self.nickname_field.text().to_owned();
-         config.lobby.relay = self.relay_field.text().to_owned();
+         config.lobby.nickname = self.nickname_field.text().strip_whitespace().to_owned();
+         config.lobby.relay = self.relay_field.text().strip_whitespace().to_owned();
       });
    }
 }
