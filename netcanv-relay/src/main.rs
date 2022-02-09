@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use futures_util::stream::{SplitSink, SplitStream};
@@ -352,6 +353,7 @@ async fn read_packets(
                return Ok(());
             }
          }
+         Ok(Message::Pong(_)) => {}
          Ok(_) => log::info!("got ignored message"),
          Err(e) => {
             use tungstenite::Error::*;
@@ -391,6 +393,17 @@ async fn transfer_host(state: &mut State, room_id: RoomId) -> anyhow::Result<()>
    Ok(())
 }
 
+/// Pings the sink periodically.
+async fn ping_loop(write: Arc<Mutex<Sink>>) -> anyhow::Result<()> {
+   // This loop is exited whenever the stream is closed.
+   const PING_MESSAGE: &str = concat!("PING NetCanv Relay ", env!("CARGO_PKG_VERSION"));
+   const PING_PERIOD: Duration = Duration::from_secs(5);
+   loop {
+      tokio::time::sleep(PING_PERIOD).await;
+      write.lock().await.send(Message::Ping(PING_MESSAGE.as_bytes().to_owned())).await?;
+   }
+}
+
 async fn handle_connection(
    stream: TcpStream,
    address: SocketAddr,
@@ -408,10 +421,22 @@ async fn handle_connection(
    write.send(tungstenite::Message::binary(version)).await?;
    let write = Arc::new(Mutex::new(write));
 
+   let pinger = {
+      let write = Arc::clone(&write);
+      tokio::spawn(async move {
+         if let Err(error) = ping_loop(write).await {
+            log::error!("[{}] ping loop: {}", address, error);
+         }
+      })
+   };
+
    match read_packets(read, write, address, &state).await {
       Ok(()) => (),
       Err(error) => log::error!("[{}] connection error: {}", address, error),
    }
+
+   // Abort the pinger if it hasn't already exited.
+   pinger.abort();
 
    log::info!("tearing down {}'s connection", address);
    {
