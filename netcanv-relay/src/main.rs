@@ -400,7 +400,6 @@ async fn ping_loop(write: Arc<Mutex<Sink>>) -> anyhow::Result<()> {
    const PING_PERIOD: Duration = Duration::from_secs(5);
    loop {
       tokio::time::sleep(PING_PERIOD).await;
-      log::debug!("ping jong un");
       write.lock().await.send(Message::Ping(PING_MESSAGE.as_bytes().to_owned())).await?;
    }
 }
