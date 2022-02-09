@@ -268,8 +268,6 @@ impl SelectionTool {
       while let Ok((peer_id, image)) = self.peer_pastes_rx.try_recv() {
          let peer = self.ensure_peer(peer_id);
          let deselected_before_decoding_finished = peer.selection.rect.is_none();
-         dbg!(&peer.selection);
-         dbg!(deselected_before_decoding_finished);
          if !deselected_before_decoding_finished {
             peer.selection.deselect(renderer, paint_canvas);
          }
@@ -281,7 +279,6 @@ impl SelectionTool {
             if deselected_before_decoding_finished {
                log::debug!("the peer deselected before decoding had a chance to finish");
                peer.selection.rect = peer.selection.deselected_at;
-               dbg!(peer.selection.deselected_at);
                peer.selection.deselect(renderer, paint_canvas);
             }
          }
@@ -785,7 +782,6 @@ impl Selection {
       self.deselected_at = self.rect;
       if let Some(capture) = self.capture.as_ref() {
          if let Some(rect) = self.normalized_rect() {
-            dbg!(rect);
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
@@ -837,7 +833,6 @@ impl Selection {
          self.rect = Some(rect);
          self.normalize();
       }
-      dbg!(self.rect);
       self.upload_rgba(renderer, image);
    }
 

@@ -39,7 +39,7 @@ use crate::viewport::Viewport;
 
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
-use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, Tool, ToolArgs};
+use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
