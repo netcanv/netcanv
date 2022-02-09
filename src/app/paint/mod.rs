@@ -39,7 +39,7 @@ use crate::viewport::Viewport;
 
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
-use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
+use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, Tool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///
@@ -382,6 +382,11 @@ impl State {
       }
 
       // Drawing & key shortcuts
+
+      self.toolbar.with_each_tool::<(), _>(|_, tool| {
+         tool.process_background_jobs(tool_args!(ui, input, self), &mut self.paint_canvas);
+         ControlFlow::Continue
+      });
 
       self.process_tool_key_shortcuts(ui, input);
 

@@ -71,6 +71,9 @@ pub trait Tool {
       KeyShortcutAction::None
    }
 
+   /// Processes background jobs like image decoding.
+   fn process_background_jobs(&mut self, _args: ToolArgs, _paint_canvas: &mut PaintCanvas) {}
+
    /// Called before the paint canvas is rendered to the screen. Primarily used for drawing to the
    /// paint canvas, or updating related state.
    ///

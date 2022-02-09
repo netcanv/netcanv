@@ -1,6 +1,6 @@
 use image::imageops::FilterType;
 use instant::Instant;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -87,8 +87,9 @@ pub struct SelectionTool {
       oneshot::Receiver<RgbaImage>,
       oneshot::Receiver<Vec<u8>>,
    )>,
-   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Point, RgbaImage)>,
-   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Point, RgbaImage)>,
+   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Option<RgbaImage>)>,
+   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Option<RgbaImage>)>,
+   ongoing_paste_jobs: HashSet<PeerId>,
 }
 
 impl SelectionTool {
@@ -128,6 +129,7 @@ impl SelectionTool {
          paste: None,
          peer_pastes_tx,
          peer_pastes_rx,
+         ongoing_paste_jobs: HashSet::new(),
       }
    }
 
@@ -243,7 +245,7 @@ impl SelectionTool {
       if let Some((position, image, bytes)) = self.paste.as_mut() {
          if let Ok(image) = image.try_recv() {
             self.selection.deselect(renderer, paint_canvas);
-            self.selection.paste(renderer, *position, &image);
+            self.selection.paste(renderer, Some(*position), &image);
             return true;
          }
          if let Ok(bytes) = bytes.try_recv() {
@@ -259,13 +261,32 @@ impl SelectionTool {
          }
       }
 
-      while let Ok((peer_id, position, image)) = self.peer_pastes_rx.try_recv() {
-         let peer = self.ensure_peer(peer_id);
-         peer.selection.deselect(renderer, paint_canvas);
-         peer.selection.paste(renderer, position, &image);
-      }
-
       false
+   }
+
+   fn poll_peer_pastes(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      while let Ok((peer_id, image)) = self.peer_pastes_rx.try_recv() {
+         let peer = self.ensure_peer(peer_id);
+         let deselected_before_decoding_finished = peer.selection.rect.is_none();
+         dbg!(&peer.selection);
+         dbg!(deselected_before_decoding_finished);
+         if !deselected_before_decoding_finished {
+            peer.selection.deselect(renderer, paint_canvas);
+         }
+         if let Some(image) = image {
+            // We don't update the rectangle here because a data race could happen.
+            // The peer sends a rect packet immediately after the paste packet anyways.
+            log::debug!("finishing peer paste");
+            peer.selection.paste(renderer, None, &image);
+            if deselected_before_decoding_finished {
+               log::debug!("the peer deselected before decoding had a chance to finish");
+               peer.selection.rect = peer.selection.deselected_at;
+               dbg!(peer.selection.deselected_at);
+               peer.selection.deselect(renderer, paint_canvas);
+            }
+         }
+         self.ongoing_paste_jobs.remove(&peer_id);
+      }
    }
 
    /// Encodes an image to PNG.
@@ -353,6 +374,14 @@ impl Tool for SelectionTool {
       }
 
       KeyShortcutAction::None
+   }
+
+   fn process_background_jobs(
+      &mut self,
+      ToolArgs { ui, .. }: ToolArgs,
+      paint_canvas: &mut PaintCanvas,
+   ) {
+      self.poll_peer_pastes(ui.render(), paint_canvas);
    }
 
    /// Processes mouse input.
@@ -642,11 +671,20 @@ impl Tool for SelectionTool {
          Packet::Capture => peer.selection.capture(renderer, paint_canvas),
          Packet::Cancel => peer.selection.cancel(),
          Packet::Deselect => peer.selection.deselect(renderer, paint_canvas),
-         Packet::Paste((x, y), data) => {
+         Packet::Paste((_x, _y), data) => {
+            // ↑ (x, y) is only here for compatibility with 0.7.0 and is no longer used
+            // because it caused a data race
+            log::debug!("{} pasted image ({} bytes of data)", sender, data.len());
             let tx = self.peer_pastes_tx.clone();
-            self.runtime.spawn_blocking(move || {
-               let image = Self::decode_image(&data).unwrap();
-               let _ = tx.send((sender, point(x, y), image));
+            self.ongoing_paste_jobs.insert(sender);
+            self.runtime.spawn_blocking(move || match Self::decode_image(&data) {
+               Ok(image) => {
+                  let _ = tx.send((sender, Some(image)));
+               }
+               Err(error) => {
+                  log::error!("could not decode selection image: {:?}", error);
+                  let _ = tx.send((sender, None));
+               }
             });
          }
          Packet::Update(data) => peer.selection.upload_rgba(renderer, &Self::decode_image(&data)?),
@@ -688,6 +726,16 @@ impl Tool for SelectionTool {
 struct Selection {
    rect: Option<Rect>,
    capture: Option<Framebuffer>,
+   deselected_at: Option<Rect>,
+}
+
+impl std::fmt::Debug for Selection {
+   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      f.debug_struct("Selection")
+         .field("rect", &self.rect)
+         .field("deselected_at", &self.deselected_at)
+         .finish_non_exhaustive()
+   }
 }
 
 impl Selection {
@@ -697,6 +745,7 @@ impl Selection {
       Self {
          rect: None,
          capture: None,
+         deselected_at: None,
       }
    }
 
@@ -733,8 +782,10 @@ impl Selection {
 
    /// Finishes the selection, transferring the old rectangle to the given paint canvas.
    fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      self.deselected_at = self.rect;
       if let Some(capture) = self.capture.as_ref() {
          if let Some(rect) = self.normalized_rect() {
+            dbg!(rect);
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
@@ -767,24 +818,26 @@ impl Selection {
    }
 
    /// Creates a new selection with the given image capture, at the given origin.
-   fn paste(&mut self, renderer: &mut Backend, position: Point, image: &RgbaImage) {
-      let rect = Rect::new(
-         position,
-         vector(image.width() as f32, image.height() as f32),
-      );
+   fn paste(&mut self, renderer: &mut Backend, position: Option<Point>, image: &RgbaImage) {
+      if let Some(position) = position {
+         let rect = Rect::new(
+            position,
+            vector(image.width() as f32, image.height() as f32),
+         );
 
-      // Limit the rectangle to a maximum width (or height) of 1024.
-      // These calculations are performed in order to make the shorter dimension scaled
-      // proportionally to the shorter one.
-      let long_side = rect.width().max(rect.height());
-      let scale = long_side.min(Self::MAX_SIZE as f32) / long_side;
-      let rect = Rect::new(rect.position, rect.size * scale);
+         // Limit the rectangle to a maximum width (or height) of 1024.
+         // These calculations are performed in order to make the shorter dimension scaled
+         // proportionally to the shorter one.
+         let long_side = rect.width().max(rect.height());
+         let scale = long_side.min(Self::MAX_SIZE as f32) / long_side;
+         let rect = Rect::new(rect.position, rect.size * scale);
 
-      // Center the rectangle on the screen.
-      let rect = Rect::new(rect.position - rect.size / 2.0, rect.size);
-      self.rect = Some(rect);
-      self.normalize();
-
+         // Center the rectangle on the screen.
+         let rect = Rect::new(rect.position - rect.size / 2.0, rect.size);
+         self.rect = Some(rect);
+         self.normalize();
+      }
+      dbg!(self.rect);
       self.upload_rgba(renderer, image);
    }
 
