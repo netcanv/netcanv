@@ -146,7 +146,7 @@ impl Socket {
    async fn read_packet(
       message: tungstenite::Result<Message>,
       output: &mut mpsc::UnboundedSender<relay::Packet>,
-      quit: &broadcast::Sender<Quit>,
+      signal: &broadcast::Sender<Signal>,
    ) -> netcanv::Result<bool> {
       match message {
          Ok(Message::Binary(data)) => {
@@ -161,17 +161,20 @@ impl Socket {
 
             if let Some(frame) = frame {
                log::warn!(
-                  "the relay has been disconnected: {:?}, code: {}",
+                  "the relay has disconnected: {:?}, code: {}",
                   frame.reason,
                   frame.code
                );
             } else {
-               log::warn!("the relay has been disconnected (reason unknown)");
+               log::warn!("the relay has disconnected (reason unknown)");
             }
 
-            quit.send(Quit)?;
+            signal.send(Signal::Quit)?;
 
             return Ok(true);
+         }
+         Ok(Message::Ping(ping)) => {
+            signal.send(Signal::SendPong(ping))?;
          }
          Err(e) => {
             use tokio_tungstenite::tungstenite::error::ProtocolError;
@@ -202,18 +205,22 @@ impl Socket {
    async fn receiver_loop(
       mut stream: Stream,
       mut output: mpsc::UnboundedSender<relay::Packet>,
-      quit_tx: broadcast::Sender<Quit>,
-      mut quit_rx: broadcast::Receiver<Quit>,
+      signal_tx: broadcast::Sender<Signal>,
+      mut signal_rx: broadcast::Receiver<Signal>,
    ) -> netcanv::Result<()> {
       loop {
          tokio::select! {
             biased;
-            Ok(_) = quit_rx.recv() => {
-               log::info!("receiver: received quit signal");
-               break;
+            Ok(signal) = signal_rx.recv() => {
+               if let Signal::Quit = signal {
+                  log::info!("receiver: received quit signal");
+                  break;
+               }
             },
-            Some(message) = stream.next() => if Self::read_packet(message, &mut output, &quit_tx).await? {
-               break
+            Some(message) = stream.next() => {
+               if Self::read_packet(message, &mut output, &signal_tx).await? {
+                  break
+               }
             },
             else => (),
          }
@@ -239,14 +246,21 @@ impl Socket {
    async fn sender_loop(
       mut sink: Sink,
       mut input: mpsc::UnboundedReceiver<relay::Packet>,
-      mut quit: broadcast::Receiver<Quit>,
+      mut signal: broadcast::Receiver<Signal>,
    ) -> netcanv::Result<()> {
       loop {
          tokio::select! {
             biased;
-            Ok(_) = quit.recv() => {
-               log::info!("sender: received quit signal");
-               break;
+            Ok(signal) = signal.recv() => {
+               match signal {
+                  Signal::Quit => {
+                     log::info!("sender: received quit signal");
+                     break;
+                  }
+                  Signal::SendPong(ping) => {
+                     sink.send(Message::Pong(ping)).await?;
+                  }
+               }
             },
             packet = input.recv() => {
                if let Some(packet) = packet {
@@ -274,10 +288,13 @@ impl Socket {
 }
 
 #[derive(Clone, Debug)]
-struct Quit;
+enum Signal {
+   SendPong(Vec<u8>),
+   Quit,
+}
 
 struct SocketQuitter {
-   quit: broadcast::Sender<Quit>,
+   quit: broadcast::Sender<Signal>,
    send_join_handle: JoinHandle<()>,
    recv_join_handle: JoinHandle<()>,
 }
@@ -285,7 +302,7 @@ struct SocketQuitter {
 impl SocketQuitter {
    async fn quit(self) {
       const QUIT_TIMEOUT: Duration = Duration::from_millis(250);
-      let _ = self.quit.send(Quit);
+      let _ = self.quit.send(Signal::Quit);
       let _ = timeout(QUIT_TIMEOUT, self.send_join_handle).await;
       let _ = timeout(QUIT_TIMEOUT, self.recv_join_handle).await;
    }
