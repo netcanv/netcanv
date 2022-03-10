@@ -55,10 +55,8 @@ maintenance burden. The last tag to feature this backend is [0.5.0](https://gith
 
 ### Relay
 
-NetCanv assumes that you have your own relay server up: currently the default value
-in the relay textbox is `localhost`, for easy testing.
-
-I might set up an official relay server sometime in March 2022.
+NetCanv will connect to the official relay, hosted at https://netcanv.org, by default. However, if
+you want to host your own relay for whatever reason, it's quite simple to do.
 
 To run the relay server, simply do:
 ```sh
@@ -66,6 +64,26 @@ $ cargo run -p netcanv-relay
 ```
 
 This will allow you to host and join new rooms locally.
+
+NetCanv's CI also provides builds of the relay for x86_64 and aarch64, so that you can set it up
+on a VPS, a Raspberry Pi, or a regular ol' computer. The relay is very lightweight and doesn't
+require much compute power, so your main limit is Internet bandwidth.
+
+#### Nginx
+
+If you have nginx running on your server, you can create a reverse proxy to the relay by adding
+this to your `server {}` block:
+```nginx
+location /relay {
+   proxy_pass http://localhost:62137;
+   proxy_http_version 1.1;
+   proxy_set_header Upgrade $http_upgrade;
+   proxy_set_header Connection "upgrade";
+}
+```
+It's also highly recommended to use a tool like [certbot](https://certbot.eff.org/) to enable
+support for encryption. NetCanv assumes that servers support encryption by default, by prepending
+`wss://` to the URL in the relay server text field if another scheme isn't already present.
 
 ## "Tutorial"
 

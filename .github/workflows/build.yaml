@@ -10,6 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  NETCANV_DEFAULT_RELAY_URL: "netcanv.org"
 
 jobs:
   build-linux:
@@ -56,7 +57,7 @@ jobs:
         path: bin
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
 
     steps:
     - uses: actions/checkout@v2
