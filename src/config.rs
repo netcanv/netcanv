@@ -137,7 +137,7 @@ impl Default for UserConfig {
          language: default_language(),
          lobby: LobbyConfig {
             nickname: "Anon".to_owned(),
-            relay: "ws://localhost".to_owned(),
+            relay: option_env!("NETCANV_DEFAULT_RELAY_URL").unwrap_or("ws://localhost").to_owned(),
          },
          ui: UiConfig {
             color_scheme: ColorScheme::Light,

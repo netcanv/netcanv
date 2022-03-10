@@ -10,6 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  NETCANV_DEFAULT_RELAY_URL: "netcanv.org"
 
 jobs:
   build-linux:
