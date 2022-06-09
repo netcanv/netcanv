@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.40"
-winit = { version = "0.26.0", features = ["serde"] }
+winit = { version = "0.26.1", features = ["serde"] }
 glutin = "0.28.0"
 glow = "0.11.0"
 memoffset = "0.6.4"
