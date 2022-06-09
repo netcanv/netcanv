@@ -63,6 +63,7 @@ pub struct WindowConfig {
    pub y: i32,
    pub width: u32,
    pub height: u32,
+   pub maximized: bool,
 }
 
 /// A user `config.toml` file.

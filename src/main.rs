@@ -145,6 +145,13 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
    }
 
+   // Maximize the window, if it was maximized last time.
+   // NOTE: winit is a bit buggy and WindowBuilder::with_maximized does not
+   // make window maximized, but Window::set_maximized does.
+   if let Some(window) = &config().window {
+      renderer.window().set_maximized(window.maximized);
+   }
+
    // Build the UI.
    let mut ui = Ui::new(renderer);
 
@@ -166,15 +173,28 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    log::debug!("init done! starting event loop");
 
+   let mut last_window_size: PhysicalSize<u32> = PhysicalSize::default();
+   let mut last_window_position: PhysicalPosition<i32> = PhysicalPosition::default();
    event_loop.run(move |event, _, control_flow| {
       *control_flow = ControlFlow::Poll;
 
       match event {
          Event::WindowEvent { event, .. } => {
-            if let WindowEvent::CloseRequested = event {
-               *control_flow = ControlFlow::Exit;
-            } else {
-               input.process_event(&event);
+            match event {
+               // Ignore resize event if window is maximized, and move event if position is lower than 0,
+               // because it isn't what we want, when saving window's size and position to config file.
+               WindowEvent::Resized(new_size) if !ui.window().is_maximized() => {
+                  last_window_size = new_size;
+               }
+               WindowEvent::Moved(new_position) if new_position.x >= 0 && new_position.y >= 0 => {
+                  last_window_position = new_position;
+               }
+               WindowEvent::CloseRequested => {
+                  *control_flow = ControlFlow::Exit;
+               }
+               _ => {
+                  input.process_event(&event);
+               }
             }
          }
 
@@ -203,14 +223,16 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
          Event::LoopDestroyed => {
             let window = ui.window();
-            let position = window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
-            let size = window.inner_size();
+            let position = last_window_position;
+            let size = last_window_size;
+            let maximized = window.is_maximized();
             config::write(|config| {
                config.window = Some(WindowConfig {
                   x: position.x,
                   y: position.y,
                   width: size.width,
                   height: size.height,
+                  maximized,
                });
             });
          }
