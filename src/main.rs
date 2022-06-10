@@ -140,15 +140,11 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       Backend::new(window_builder, &event_loop).map_err(|e| Error::CouldNotInitializeBackend {
          error: e.to_string(),
       })?;
-   // Position the window.
-   if let Some(window) = &config().window {
-      renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
-   }
-
-   // Maximize the window, if it was maximized last time.
+   // Position and maximize the window.
    // NOTE: winit is a bit buggy and WindowBuilder::with_maximized does not
    // make window maximized, but Window::set_maximized does.
    if let Some(window) = &config().window {
+      renderer.window().set_outer_position(PhysicalPosition::new(window.x, window.y));
       renderer.window().set_maximized(window.maximized);
    }
 
