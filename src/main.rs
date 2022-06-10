@@ -173,8 +173,18 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    log::debug!("init done! starting event loop");
 
-   let mut last_window_size: PhysicalSize<u32> = PhysicalSize::default();
-   let mut last_window_position: PhysicalPosition<i32> = PhysicalPosition::default();
+   let (mut last_window_size, mut last_window_position) = {
+      if let Some(window) = &config().window {
+         let size = PhysicalSize::new(window.width, window.height);
+         let pos = PhysicalPosition::new(window.x, window.y);
+         (size, pos)
+      } else {
+         let size = ui.window().inner_size();
+         let pos = ui.window().outer_position().unwrap_or(PhysicalPosition::default());
+         (size, pos)
+      }
+   };
+
    event_loop.run(move |event, _, control_flow| {
       *control_flow = ControlFlow::Poll;
 
