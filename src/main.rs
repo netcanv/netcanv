@@ -125,7 +125,7 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
       // our window apart from others.
       #[cfg(target_os = "linux")]
-      let b = b.with_app_id("netcanv".into());
+      let b = b.with_name("netcanv", "netcanv");
 
       b
    };
