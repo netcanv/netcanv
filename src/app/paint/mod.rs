@@ -25,6 +25,7 @@ use crate::app::paint::tools::KeyShortcutAction;
 use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
+use crate::chunk::*;
 use crate::clipboard;
 use crate::common::*;
 use crate::net::peer::{self, Peer};
