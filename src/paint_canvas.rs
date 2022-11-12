@@ -5,21 +5,18 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use ::image::{
-   GenericImage, GenericImageView, Rgba,
-   RgbaImage,
-};
+use ::image::{GenericImage, GenericImageView, Rgba, RgbaImage};
 use instant::{Duration, Instant};
 use netcanv_renderer::paws::{vector, Color, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
+use tokio::sync::mpsc;
 
 use crate::backend::{Backend, Framebuffer};
 use crate::chunk::{Chunk, ChunkImage};
 use crate::viewport::Viewport;
+use crate::xcoder::Xcoder;
 use crate::Error;
 
 /// A paint canvas built out of [`Chunk`]s.
@@ -29,13 +26,11 @@ pub struct PaintCanvas {
    filename: Option<PathBuf>,
 
    runtime: Arc<Runtime>,
+   xcoder: Xcoder,
 
-   chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
    decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-   decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
-
-   encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
    encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+
    chunk_cache_timers: HashMap<(i32, i32), Instant>,
 }
 
@@ -55,31 +50,22 @@ impl PaintCanvas {
    const CHUNK_CACHE_DURATION: Duration = Duration::from_secs(5 * 60);
 
    /// Creates a new, empty paint canvas.
-   pub fn new(runtime: Arc<Runtime>) -> Self {
-      // Set up decoding supervisor thread.
-      let (to_decode_tx, to_decode_rx) = mpsc::unbounded_channel();
-      let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
-      let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
-      let runtime2 = Arc::clone(&runtime);
-      let decoder_join_handle = runtime.spawn(async move {
-         Self::chunk_decoding_loop(runtime2, to_decode_rx, decoded_chunks_tx, decoder_quit_rx)
-            .await;
-      });
-
-      let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
-
+   pub fn new(
+      runtime: Arc<Runtime>,
+      xcoder: Xcoder,
+      decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
+      encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+   ) -> Self {
       Self {
          chunks: HashMap::new(),
          filename: None,
 
          runtime,
+         xcoder,
 
-         chunks_to_decode_tx: to_decode_tx,
          decoded_chunks_rx,
-         decoder_quitter: Some((decoder_quit_tx, decoder_join_handle)),
-
-         encoded_chunks_tx,
          encoded_chunks_rx,
+
          chunk_cache_timers: HashMap::new(),
       }
    }
@@ -179,38 +165,6 @@ impl PaintCanvas {
       }
    }
 
-   /// The decoding supervisor thread.
-   async fn chunk_decoding_loop(
-      runtime: Arc<Runtime>,
-      mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
-      output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
-      mut quit: oneshot::Receiver<()>,
-   ) {
-      log::info!("starting chunk decoding supervisor thread");
-      loop {
-         tokio::select! {
-            biased;
-            Ok(_) = &mut quit => break,
-            data = input.recv() => {
-               if let Some((chunk_position, image_data)) = data {
-                  let output = output.clone();
-                  runtime.spawn_blocking(move || match Chunk::decode_network_data(&image_data) {
-                     Ok(image) => {
-                        // Doesn't matter if the receiving half is closed.
-                        let _ = output.send((chunk_position, image));
-                     }
-                     Err(error) => log::error!("image decoding failed: {:?}", error),
-                  });
-               } else {
-                  log::info!("decoding supervisor: chunk data sender was dropped, quitting");
-                  break;
-               }
-            },
-         }
-      }
-      log::info!("exiting chunk decoding supervisor thread");
-   }
-
    /// Updates chunks that have been decoded between the last call to `update` and the current one.
    pub fn update(&mut self, renderer: &mut Backend) {
       while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
@@ -244,39 +198,12 @@ impl PaintCanvas {
          chunk_position
       );
       if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
-         // If there is a cached image already, there's no point in encoding it all over again.
-         if let Some(image) = chunk.image_cache.as_ref() {
-            let _ = output_channel.send((chunk_position, image.clone()));
-            // Reset timers for recently accessed chunks.
+         // Reset timers for recently accessed chunks.
+         if chunk.image_cache.is_some() {
             self.chunk_cache_timers.insert(chunk_position, Instant::now());
-            return;
          }
-         // If the chunk's image is empty, there's no point in sending it.
-         let image = chunk.download_image();
-         if Chunk::image_is_empty(&image) {
-            return;
-         }
-         // Otherwise, we can start encoding the chunk image.
-         let own_output_channel = self.encoded_chunks_tx.clone();
-         self.runtime.spawn(async move {
-            log::debug!("encoding image data for chunk {:?}", chunk_position);
-            let image_data = Chunk::encode_network_data(image).await;
-            log::debug!("encoding done for chunk {:?}", chunk_position);
-            match image_data {
-               Ok(data) => {
-                  log::debug!("sending image data back to main thread");
-                  let _ = own_output_channel.send((chunk_position, data.clone()));
-                  let _ = output_channel.send((chunk_position, data));
-               }
-               Err(error) => {
-                  log::error!(
-                     "error while encoding image for chunk {:?}: {:?}",
-                     chunk_position,
-                     error
-                  );
-               }
-            }
-         });
+
+         self.xcoder.enqueue_chunk_encoding(chunk, output_channel, chunk_position);
       }
    }
 
@@ -286,10 +213,7 @@ impl PaintCanvas {
       to_chunk: (i32, i32),
       data: Vec<u8>,
    ) -> netcanv::Result<()> {
-      self
-         .chunks_to_decode_tx
-         .send((to_chunk, data))
-         .expect("Decoding supervisor thread should never quit");
+      self.xcoder.enqueue_chunk_decoding(to_chunk, data);
       // chunk.decode_network_data(Chunk::sub(to_chunk), data)
       Ok(())
    }
@@ -393,7 +317,7 @@ impl PaintCanvas {
       for (chunk_position, chunk) in &mut self.chunks {
          log::debug!("chunk {:?}", chunk_position);
          let image = chunk.download_image();
-         let image_data = Chunk::encode_png_data(image).await?;
+         let image_data = Xcoder::encode_png_data(image).await?;
          let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
          let filepath = path.join(Path::new(&filename));
          log::debug!("saving to {:?}", filepath);
@@ -520,7 +444,7 @@ impl PaintCanvas {
                   let chunk_position = Self::parse_chunk_position(position_str)?;
                   log::debug!("chunk {:?}", chunk_position);
                   let chunk = self.ensure_chunk(renderer, chunk_position);
-                  let image_data = Chunk::decode_png_data(&std::fs::read(path)?)?;
+                  let image_data = Xcoder::decode_png_data(&std::fs::read(path)?)?;
                   chunk.upload_image(&image_data, (0, 0));
                   chunk.mark_saved();
                }
@@ -551,15 +475,5 @@ impl PaintCanvas {
    /// Returns what filename the canvas was saved under.
    pub fn filename(&self) -> Option<&Path> {
       self.filename.as_deref()
-   }
-}
-
-impl Drop for PaintCanvas {
-   fn drop(&mut self) {
-      self.runtime.block_on(async {
-         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
-         let _ = channel.send(());
-         let _ = join_handle.await;
-      });
    }
 }

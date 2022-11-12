@@ -37,6 +37,7 @@ use crate::ui::view::{Dimension, View};
 use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
+use crate::xcoder::Xcoder;
 
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
@@ -156,12 +157,20 @@ impl State {
          .expect("Cannot start async compute runtime");
       let runtime = Arc::new(runtime);
 
+      // Set up decoding supervisor thread.
+      let (xcoder, channels) = Xcoder::new(Arc::clone(&runtime));
+
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
          _socket_system: socket_system,
 
-         paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
+         paint_canvas: PaintCanvas::new(
+            Arc::clone(&runtime),
+            xcoder,
+            channels.decoded_chunks_rx,
+            channels.encoded_chunks_rx,
+         ),
          runtime,
 
          actions: Vec::new(),
