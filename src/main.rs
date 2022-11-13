@@ -79,6 +79,7 @@ mod chunk;
 mod clipboard;
 mod color;
 mod config;
+mod iocomponent;
 mod keymap;
 mod net;
 mod paint_canvas;
