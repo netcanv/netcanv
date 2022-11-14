@@ -37,7 +37,7 @@ impl ProjectFile {
       }
    }
 
-   /// Saves the entire paint to a PNG file.
+   /// Saves the entire paint canvas to a PNG file.
    fn save_as_png(&self, path: &Path, canvas: &mut PaintCanvas) -> netcanv::Result<()> {
       log::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
