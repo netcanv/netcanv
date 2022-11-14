@@ -7,8 +7,8 @@ use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
-use crate::chunk::{Chunk, ChunkImage};
 use crate::Error;
+use crate::paint_canvas::chunk::{ChunkImage, Chunk};
 
 pub struct ImageCoderChannels {
    pub decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,

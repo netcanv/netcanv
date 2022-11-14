@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 
 use crate::backend::Backend;
-use crate::chunk::Chunk;
 use crate::paint_canvas::PaintCanvas;
 use crate::image_coder::ImageCoder;
 use crate::Error;
+use crate::paint_canvas::chunk::Chunk;
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
 pub const CANVAS_TOML_VERSION: u32 = 1;

@@ -75,7 +75,6 @@ mod errors;
 mod app;
 mod assets;
 mod backend;
-mod chunk;
 mod clipboard;
 mod color;
 mod config;

@@ -1,5 +1,7 @@
 //! NetCanv's infinite paint canvas.
 
+pub mod chunk;
+
 use std::collections::HashMap;
 
 use ::image::RgbaImage;
@@ -9,7 +11,7 @@ use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use tokio::sync::mpsc;
 
 use crate::backend::{Backend, Framebuffer};
-use crate::chunk::{Chunk, ChunkImage};
+use chunk::{Chunk, ChunkImage};
 use crate::viewport::Viewport;
 use crate::image_coder::ImageCoder;
 
