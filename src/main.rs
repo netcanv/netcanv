@@ -87,7 +87,7 @@ mod strings;
 mod token;
 mod ui;
 mod viewport;
-mod xcoder;
+mod image_coder;
 
 use app::*;
 use assets::*;

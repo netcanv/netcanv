@@ -9,7 +9,7 @@ use tokio::runtime::Runtime;
 use crate::backend::Backend;
 use crate::chunk::Chunk;
 use crate::paint_canvas::PaintCanvas;
-use crate::xcoder::Xcoder;
+use crate::image_coder::ImageCoder;
 use crate::Error;
 
 /// The format version in a `.netcanv`'s `canvas.toml` file.
@@ -140,7 +140,7 @@ impl ProjectFile {
       for (chunk_position, chunk) in canvas.chunks_mut() {
          log::debug!("chunk {:?}", chunk_position);
          let image = chunk.download_image();
-         let image_data = Xcoder::encode_png_data(image).await?;
+         let image_data = ImageCoder::encode_png_data(image).await?;
          let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
          let filepath = path.join(Path::new(&filename));
          log::debug!("saving to {:?}", filepath);
@@ -277,7 +277,7 @@ impl ProjectFile {
                   let chunk_position = Self::parse_chunk_position(position_str)?;
                   log::debug!("chunk {:?}", chunk_position);
                   let chunk = canvas.ensure_chunk(renderer, chunk_position);
-                  let image_data = Xcoder::decode_png_data(&std::fs::read(path)?)?;
+                  let image_data = ImageCoder::decode_png_data(&std::fs::read(path)?)?;
                   chunk.upload_image(&image_data, (0, 0));
                   chunk.mark_saved();
                }

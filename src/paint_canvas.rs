@@ -11,13 +11,13 @@ use tokio::sync::mpsc;
 use crate::backend::{Backend, Framebuffer};
 use crate::chunk::{Chunk, ChunkImage};
 use crate::viewport::Viewport;
-use crate::xcoder::Xcoder;
+use crate::image_coder::ImageCoder;
 
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
 
-   xcoder: Xcoder,
+   xcoder: ImageCoder,
 
    decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
    encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
@@ -32,7 +32,7 @@ impl PaintCanvas {
 
    /// Creates a new, empty paint canvas.
    pub fn new(
-      xcoder: Xcoder,
+      xcoder: ImageCoder,
       decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
       encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
    ) -> Self {

@@ -10,26 +10,20 @@ use tokio::task::JoinHandle;
 use crate::chunk::{Chunk, ChunkImage};
 use crate::Error;
 
-pub struct XcoderChannels {
-   // Decoder
+pub struct ImageCoderChannels {
    pub decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-
-   // Encoder
    pub encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
 }
 
-pub struct Xcoder {
+pub struct ImageCoder {
    runtime: Arc<Runtime>,
    decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 
-   // Decoder
    chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
-
-   // Encoder
    encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
 }
 
-impl Xcoder {
+impl ImageCoder {
    /// The maximum size threshold for a PNG to get converted to lossy WebP before network
    /// transmission.
    const MAX_PNG_SIZE: usize = 32 * 1024;
@@ -40,7 +34,7 @@ impl Xcoder {
    // good compression ratio.
    const WEBP_QUALITY: f32 = 80.0;
 
-   pub fn new(runtime: Arc<Runtime>) -> (Self, XcoderChannels) {
+   pub fn new(runtime: Arc<Runtime>) -> (Self, ImageCoderChannels) {
       let (chunks_to_decode_tx, chunks_to_decode_rx) = mpsc::unbounded_channel();
       let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
       let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
@@ -48,7 +42,7 @@ impl Xcoder {
       let runtime2 = Arc::clone(&runtime);
 
       let decode_join_handle = runtime.spawn(async move {
-         Xcoder::chunk_decoding_loop(
+         ImageCoder::chunk_decoding_loop(
             runtime2,
             chunks_to_decode_rx,
             decoded_chunks_tx,
@@ -66,7 +60,7 @@ impl Xcoder {
 
             encoded_chunks_tx,
          },
-         XcoderChannels {
+         ImageCoderChannels {
             decoded_chunks_rx,
             encoded_chunks_rx,
          },
@@ -171,7 +165,7 @@ impl Xcoder {
             data = input.recv() => {
                if let Some((chunk_position, image_data)) = data {
                   let output = output.clone();
-                  runtime.spawn_blocking(move || match Xcoder::decode_network_data(&image_data) {
+                  runtime.spawn_blocking(move || match ImageCoder::decode_network_data(&image_data) {
                      Ok(image) => {
                         // Doesn't matter if the receiving half is closed.
                         let _ = output.send((chunk_position, image));
@@ -209,7 +203,7 @@ impl Xcoder {
 
       self.runtime.spawn(async move {
          log::debug!("encoding image data for chunk {:?}", chunk_position);
-         let image_data = Xcoder::encode_network_data(image).await;
+         let image_data = ImageCoder::encode_network_data(image).await;
          log::debug!("encoding done for chunk {:?}", chunk_position);
          match image_data {
             Ok(data) => {
@@ -236,7 +230,7 @@ impl Xcoder {
    }
 }
 
-impl Drop for Xcoder {
+impl Drop for ImageCoder {
    fn drop(&mut self) {
       self.runtime.block_on(async {
          let (channel, join_handle) = self.decoder_quitter.take().unwrap();

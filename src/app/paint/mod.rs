@@ -38,7 +38,7 @@ use crate::ui::view::{Dimension, View};
 use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
-use crate::xcoder::Xcoder;
+use crate::image_coder::ImageCoder;
 
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
@@ -160,7 +160,7 @@ impl State {
       let runtime = Arc::new(runtime);
 
       // Set up decoding supervisor thread.
-      let (xcoder, channels) = Xcoder::new(Arc::clone(&runtime));
+      let (xcoder, channels) = ImageCoder::new(Arc::clone(&runtime));
 
       let mut wm = WindowManager::new();
       let mut this = Self {
