@@ -39,16 +39,18 @@ impl ImageCoder {
       let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
       let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
       let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
-      let runtime2 = Arc::clone(&runtime);
 
-      let decode_join_handle = runtime.spawn(async move {
-         ImageCoder::chunk_decoding_loop(
-            runtime2,
-            chunks_to_decode_rx,
-            decoded_chunks_tx,
-            decoder_quit_rx,
-         )
-         .await;
+      let decode_join_handle = runtime.spawn({
+         let runtime = Arc::clone(&runtime);
+         async move {
+            ImageCoder::chunk_decoding_loop(
+               runtime,
+               chunks_to_decode_rx,
+               decoded_chunks_tx,
+               decoder_quit_rx,
+            )
+           .await;
+         }
       });
 
       (
