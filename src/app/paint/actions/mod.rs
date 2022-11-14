@@ -6,8 +6,8 @@ pub use save_to_file::*;
 
 use crate::assets::Assets;
 use crate::backend::Image;
-use crate::project_file::ProjectFile;
 use crate::paint_canvas::PaintCanvas;
+use crate::project_file::ProjectFile;
 
 pub trait Action {
    /// Returns the name of the action.

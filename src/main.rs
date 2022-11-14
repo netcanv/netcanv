@@ -78,15 +78,15 @@ mod backend;
 mod clipboard;
 mod color;
 mod config;
-mod project_file;
+mod image_coder;
 mod keymap;
 mod net;
 mod paint_canvas;
+mod project_file;
 mod strings;
 mod token;
 mod ui;
 mod viewport;
-mod image_coder;
 
 use app::*;
 use assets::*;

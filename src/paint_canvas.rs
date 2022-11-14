@@ -11,9 +11,9 @@ use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 use tokio::sync::mpsc;
 
 use crate::backend::{Backend, Framebuffer};
-use chunk::{Chunk, ChunkImage};
-use crate::viewport::Viewport;
 use crate::image_coder::ImageCoder;
+use crate::viewport::Viewport;
+use chunk::{Chunk, ChunkImage};
 
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
