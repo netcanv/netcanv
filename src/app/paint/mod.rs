@@ -28,7 +28,7 @@ use crate::backend::Backend;
 use crate::chunk::*;
 use crate::clipboard;
 use crate::common::*;
-use crate::iocomponent::IoComponent;
+use crate::project_file::ProjectFile;
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
 use crate::net::timer::Timer;
@@ -85,7 +85,7 @@ pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
    runtime: Arc<Runtime>,
-   iocomponent: IoComponent,
+   project_file: ProjectFile,
 
    paint_canvas: PaintCanvas,
 
@@ -172,7 +172,7 @@ impl State {
             channels.decoded_chunks_rx,
             channels.encoded_chunks_rx,
          ),
-         iocomponent: IoComponent::new(Arc::clone(&runtime)),
+         project_file: ProjectFile::new(Arc::clone(&runtime)),
          runtime,
 
          actions: Vec::new(),
@@ -211,7 +211,7 @@ impl State {
       this.register_actions(renderer);
 
       if let Some(path) = image_path {
-         if let Err(error) = this.iocomponent.load(renderer, &path, &mut this.paint_canvas) {
+         if let Err(error) = this.project_file.load(renderer, &path, &mut this.paint_canvas) {
             return Err((error, this.assets));
          }
       }
@@ -492,7 +492,7 @@ impl State {
             // downloading all chunks may stall the host for too long, lagging everything to death.
             // If a client wants to download all the chunks, they should probably just explore
             // enough of the canvas such that all the chunks get loaded.
-            catch!(self.iocomponent.save(
+            catch!(self.project_file.save(
                Some(self.save_to_file.as_ref().unwrap()),
                &mut self.paint_canvas
             ));
@@ -711,7 +711,7 @@ impl State {
                if let Err(error) = action.perform(ActionArgs {
                   assets: &self.assets,
                   paint_canvas: &mut self.paint_canvas,
-                  iocomponent: &mut self.iocomponent,
+                  project_file: &mut self.project_file,
                }) {
                   log!(
                      self.log,
@@ -923,7 +923,7 @@ impl AppState for State {
          match action.process(ActionArgs {
             assets: &self.assets,
             paint_canvas: &mut self.paint_canvas,
-            iocomponent: &mut self.iocomponent,
+            project_file: &mut self.project_file,
          }) {
             Ok(()) => (),
             Err(error) => log!(

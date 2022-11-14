@@ -22,16 +22,16 @@ struct CanvasToml {
    version: u32,
 }
 
-pub struct IoComponent {
+pub struct ProjectFile {
    runtime: Arc<Runtime>,
 
    /// The path to the `.netcanv` directory this paint canvas was saved to.
    filename: Option<PathBuf>,
 }
 
-impl IoComponent {
+impl ProjectFile {
    pub fn new(runtime: Arc<Runtime>) -> Self {
-      IoComponent {
+      ProjectFile {
          runtime,
          filename: None,
       }

@@ -6,7 +6,7 @@ pub use save_to_file::*;
 
 use crate::assets::Assets;
 use crate::backend::Image;
-use crate::iocomponent::IoComponent;
+use crate::project_file::ProjectFile;
 use crate::paint_canvas::PaintCanvas;
 
 pub trait Action {
@@ -29,7 +29,7 @@ pub trait Action {
 pub struct ActionArgs<'a> {
    pub assets: &'a Assets,
    pub paint_canvas: &'a mut PaintCanvas,
-   pub iocomponent: &'a mut IoComponent,
+   pub project_file: &'a mut ProjectFile,
 }
 
 fn _action_trait_must_be_object_safe(_action: Box<dyn Action>) {}
