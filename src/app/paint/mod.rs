@@ -90,7 +90,6 @@ pub struct State {
    paint_canvas: PaintCanvas,
 
    actions: Vec<Box<dyn actions::Action>>,
-   save_to_file: Option<PathBuf>,
    last_autosave: Instant,
 
    peer: Peer,
@@ -182,7 +181,6 @@ impl State {
          chunk_downloads: HashMap::new(),
          encoded_chunks: HashMap::new(),
 
-         save_to_file: None,
          last_autosave: Instant::now(),
 
          fatal_error: false,
@@ -483,28 +481,11 @@ impl State {
             ))
          });
 
-         // Chunk downloading
-         if self.save_to_file.is_some() {
-            // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
-            // downloaded.
-            // There's some internal debate I've been having on the topic od downloading all chunks
-            // when the user requests a save. The main issue I see is that on large canvases
-            // downloading all chunks may stall the host for too long, lagging everything to death.
-            // If a client wants to download all the chunks, they should probably just explore
-            // enough of the canvas such that all the chunks get loaded.
-            catch!(self.project_file.save(
-               Some(self.save_to_file.as_ref().unwrap()),
-               &mut self.paint_canvas
-            ));
-            self.last_autosave = Instant::now();
-            self.save_to_file = None;
-         } else {
-            for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-               if let Some(state) = self.chunk_downloads.get_mut(&chunk_position) {
-                  if *state == ChunkDownload::NotDownloaded {
-                     Self::queue_chunk_download(chunk_position);
-                     *state = ChunkDownload::Queued;
-                  }
+         for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
+            if let Some(state) = self.chunk_downloads.get_mut(&chunk_position) {
+               if *state == ChunkDownload::NotDownloaded {
+                  Self::queue_chunk_download(chunk_position);
+                  *state = ChunkDownload::Queued;
                }
             }
          }
