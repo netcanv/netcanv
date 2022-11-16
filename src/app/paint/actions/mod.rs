@@ -7,6 +7,7 @@ pub use save_to_file::*;
 use crate::assets::Assets;
 use crate::backend::Image;
 use crate::paint_canvas::PaintCanvas;
+use crate::project_file::ProjectFile;
 
 pub trait Action {
    /// Returns the name of the action.
@@ -28,6 +29,7 @@ pub trait Action {
 pub struct ActionArgs<'a> {
    pub assets: &'a Assets,
    pub paint_canvas: &'a mut PaintCanvas,
+   pub project_file: &'a mut ProjectFile,
 }
 
 fn _action_trait_must_be_object_safe(_action: Box<dyn Action>) {}

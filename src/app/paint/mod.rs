@@ -27,10 +27,13 @@ use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
+use crate::image_coder::ImageCoder;
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
 use crate::net::timer::Timer;
+use crate::paint_canvas::chunk::{Chunk, ChunkImage};
 use crate::paint_canvas::*;
+use crate::project_file::ProjectFile;
 use crate::ui::view::layout::DirectionV;
 use crate::ui::view::{Dimension, View};
 use crate::ui::wm::WindowManager;
@@ -82,11 +85,11 @@ pub struct State {
    assets: Assets,
    _socket_system: Arc<SocketSystem>,
    runtime: Arc<Runtime>,
+   project_file: ProjectFile,
 
    paint_canvas: PaintCanvas,
 
    actions: Vec<Box<dyn actions::Action>>,
-   save_to_file: Option<PathBuf>,
    last_autosave: Instant,
 
    peer: Peer,
@@ -155,12 +158,20 @@ impl State {
          .expect("Cannot start async compute runtime");
       let runtime = Arc::new(runtime);
 
+      // Set up decoding supervisor thread.
+      let (xcoder, channels) = ImageCoder::new(Arc::clone(&runtime));
+
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
          _socket_system: socket_system,
 
-         paint_canvas: PaintCanvas::new(Arc::clone(&runtime)),
+         paint_canvas: PaintCanvas::new(
+            xcoder,
+            channels.decoded_chunks_rx,
+            channels.encoded_chunks_rx,
+         ),
+         project_file: ProjectFile::new(Arc::clone(&runtime)),
          runtime,
 
          actions: Vec::new(),
@@ -170,7 +181,6 @@ impl State {
          chunk_downloads: HashMap::new(),
          encoded_chunks: HashMap::new(),
 
-         save_to_file: None,
          last_autosave: Instant::now(),
 
          fatal_error: false,
@@ -199,7 +209,7 @@ impl State {
       this.register_actions(renderer);
 
       if let Some(path) = image_path {
-         if let Err(error) = this.paint_canvas.load(renderer, &path) {
+         if let Err(error) = this.project_file.load(renderer, &path, &mut this.paint_canvas) {
             return Err((error, this.assets));
          }
       }
@@ -471,25 +481,11 @@ impl State {
             ))
          });
 
-         // Chunk downloading
-         if self.save_to_file.is_some() {
-            // FIXME: Regression introduced in 0.3.0: saving does not require all chunks to be
-            // downloaded.
-            // There's some internal debate I've been having on the topic od downloading all chunks
-            // when the user requests a save. The main issue I see is that on large canvases
-            // downloading all chunks may stall the host for too long, lagging everything to death.
-            // If a client wants to download all the chunks, they should probably just explore
-            // enough of the canvas such that all the chunks get loaded.
-            catch!(self.paint_canvas.save(Some(self.save_to_file.as_ref().unwrap())));
-            self.last_autosave = Instant::now();
-            self.save_to_file = None;
-         } else {
-            for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
-               if let Some(state) = self.chunk_downloads.get_mut(&chunk_position) {
-                  if *state == ChunkDownload::NotDownloaded {
-                     Self::queue_chunk_download(chunk_position);
-                     *state = ChunkDownload::Queued;
-                  }
+         for chunk_position in self.viewport.visible_tiles(Chunk::SIZE, canvas_size) {
+            if let Some(state) = self.chunk_downloads.get_mut(&chunk_position) {
+               if *state == ChunkDownload::NotDownloaded {
+                  Self::queue_chunk_download(chunk_position);
+                  *state = ChunkDownload::Queued;
                }
             }
          }
@@ -696,6 +692,7 @@ impl State {
                if let Err(error) = action.perform(ActionArgs {
                   assets: &self.assets,
                   paint_canvas: &mut self.paint_canvas,
+                  project_file: &mut self.project_file,
                }) {
                   log!(
                      self.log,
@@ -907,6 +904,7 @@ impl AppState for State {
          match action.process(ActionArgs {
             assets: &self.assets,
             paint_canvas: &mut self.paint_canvas,
+            project_file: &mut self.project_file,
          }) {
             Ok(()) => (),
             Err(error) => log!(

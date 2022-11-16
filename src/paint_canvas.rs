@@ -1,213 +1,30 @@
 //! NetCanv's infinite paint canvas.
 
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+pub mod chunk;
 
-use ::image::codecs::png::{PngDecoder, PngEncoder};
-use ::image::{
-   ColorType, DynamicImage, GenericImage, GenericImageView, ImageBuffer, ImageDecoder, Rgba,
-   RgbaImage,
-};
+use std::collections::HashMap;
+
+use ::image::RgbaImage;
 use instant::{Duration, Instant};
-use netcanv_renderer::paws::{vector, Color, Point, Rect, Renderer, Vector};
+use netcanv_renderer::paws::{vector, Color, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
-use serde::{Deserialize, Serialize};
-use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
+use tokio::sync::mpsc;
 
 use crate::backend::{Backend, Framebuffer};
+use crate::image_coder::ImageCoder;
 use crate::viewport::Viewport;
-use crate::Error;
-
-#[derive(Clone)]
-pub struct ChunkImage {
-   pub png: Vec<u8>,
-   pub webp: Option<Vec<u8>>,
-}
-
-/// A chunk on the infinite canvas.
-pub struct Chunk {
-   framebuffer: Framebuffer,
-   image_cache: Option<ChunkImage>,
-   saved: bool,
-}
-
-impl Chunk {
-   /// The maximum size threshold for a PNG to get converted to lossy WebP before network
-   /// transmission.
-   const MAX_PNG_SIZE: usize = 32 * 1024;
-   /// The size of a sub-chunk.
-   pub const SIZE: (u32, u32) = (256, 256);
-   /// The quality of encoded WebP files.
-   // Note to self in the future: the libwebp quality factor ranges from 0.0 to 100.0, not
-   // from 0.0 to 1.0.
-   // 80% is a fairly sane default that preserves most of the image's quality while still retaining a
-   // good compression ratio.
-   const WEBP_QUALITY: f32 = 80.0;
-
-   /// Creates a new chunk, using the given canvas as a Skia surface allocator.
-   fn new(renderer: &mut Backend) -> Self {
-      Self {
-         framebuffer: renderer.create_framebuffer(Self::SIZE.0, Self::SIZE.1),
-         image_cache: None,
-         saved: true,
-      }
-   }
-
-   /// Returns the on-screen position of the chunk at the given coordinates.
-   fn screen_position(chunk_position: (i32, i32)) -> Point {
-      Point::new(
-         (chunk_position.0 * Self::SIZE.0 as i32) as _,
-         (chunk_position.1 * Self::SIZE.1 as i32) as _,
-      )
-   }
-
-   /// Downloads the image of the chunk from the graphics card.
-   fn download_image(&self) -> RgbaImage {
-      let mut image_buffer =
-         ImageBuffer::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
-      self.framebuffer.download_rgba((0, 0), self.framebuffer.size(), &mut image_buffer);
-      image_buffer
-   }
-
-   /// Uploads the image of the chunk to the graphics card, at the given offset in the master
-   /// chunk.
-   fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
-      self.mark_dirty();
-      self.framebuffer.upload_rgba(offset, Self::SIZE, image);
-   }
-
-   /// Encodes an image to PNG data asynchronously.
-   async fn encode_png_data(image: RgbaImage) -> netcanv::Result<Vec<u8>> {
-      tokio::task::spawn_blocking(move || {
-         let mut bytes: Vec<u8> = Vec::new();
-         match PngEncoder::new(Cursor::new(&mut bytes)).encode(
-            &image,
-            image.width(),
-            image.height(),
-            ColorType::Rgba8,
-         ) {
-            Ok(()) => (),
-            Err(error) => {
-               log::error!("error while encoding: {}", error);
-               return Err(error.into());
-            }
-         }
-         Ok(bytes)
-      })
-      .await?
-   }
-
-   /// Encodes an image to WebP asynchronously.
-   async fn encode_webp_data(image: RgbaImage) -> netcanv::Result<Vec<u8>> {
-      Ok(tokio::task::spawn_blocking(move || {
-         let image = DynamicImage::ImageRgba8(image);
-         let encoder = webp::Encoder::from_image(&image).unwrap();
-         encoder.encode(Self::WEBP_QUALITY).to_owned()
-      })
-      .await?)
-   }
-
-   /// Encodes a network image asynchronously. This encodes PNG, as well as WebP if the PNG is too
-   /// large, and returns both images.
-   async fn encode_network_data(image: RgbaImage) -> netcanv::Result<ChunkImage> {
-      let png = Self::encode_png_data(image.clone()).await?;
-      let webp = if png.len() > Self::MAX_PNG_SIZE {
-         Some(Self::encode_webp_data(image).await?)
-      } else {
-         None
-      };
-      Ok(ChunkImage { png, webp })
-   }
-
-   /// Decodes a PNG file into the given sub-chunk.
-   fn decode_png_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
-      let decoder = PngDecoder::new(Cursor::new(data))?;
-      if decoder.color_type() != ColorType::Rgba8 {
-         log::warn!("received non-RGBA image data, ignoring");
-         return Err(Error::NonRgbaChunkImage);
-      }
-      let mut image = RgbaImage::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
-      decoder.read_image(&mut image)?;
-      Ok(image)
-   }
-
-   /// Decodes a WebP file into the given sub-chunk.
-   fn decode_webp_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
-      let decoder = webp::Decoder::new(data);
-      let image = match decoder.decode() {
-         Some(image) => image.to_image(),
-         None => return Err(Error::InvalidChunkImageFormat),
-      }
-      .into_rgba8();
-      Ok(image)
-   }
-
-   /// Decodes a PNG or WebP file into the given sub-chunk, depending on what's actually stored in
-   /// `data`.
-   fn decode_network_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
-      // Try WebP first.
-      let image = Self::decode_webp_data(data).or_else(|_| Self::decode_png_data(data))?;
-      if image.dimensions() != Self::SIZE {
-         log::error!(
-            "received chunk with invalid size. got: {:?}, expected {:?}",
-            image.dimensions(),
-            Self::SIZE
-         );
-         Err(Error::InvalidChunkImageSize)
-      } else {
-         Ok(image)
-      }
-   }
-
-   /// Marks the chunk as dirty - that is, invalidates any cached PNG and WebP data,
-   /// and marks it as unsaved.
-   fn mark_dirty(&mut self) {
-      self.image_cache = None;
-      self.saved = false;
-   }
-
-   /// Marks the given sub-chunk within this master chunk as saved.
-   fn mark_saved(&mut self) {
-      self.saved = true;
-   }
-
-   /// Iterates through all pixels within the image and checks whether any pixels in the image are
-   /// not transparent.
-   fn image_is_empty(image: &RgbaImage) -> bool {
-      image.iter().all(|x| *x == 0)
-   }
-}
+use chunk::{Chunk, ChunkImage};
 
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
-   /// The path to the `.netcanv` directory this paint canvas was saved to.
-   filename: Option<PathBuf>,
 
-   runtime: Arc<Runtime>,
+   xcoder: ImageCoder,
 
-   chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
    decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-   decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
-
-   encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
    encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+
    chunk_cache_timers: HashMap<(i32, i32), Instant>,
-}
-
-/// The format version in a `.netcanv`'s `canvas.toml` file.
-pub const CANVAS_TOML_VERSION: u32 = 1;
-
-/// A `canvas.toml` file.
-#[derive(Serialize, Deserialize)]
-struct CanvasToml {
-   /// The format version of the canvas.
-   version: u32,
 }
 
 impl PaintCanvas {
@@ -216,38 +33,26 @@ impl PaintCanvas {
    const CHUNK_CACHE_DURATION: Duration = Duration::from_secs(5 * 60);
 
    /// Creates a new, empty paint canvas.
-   pub fn new(runtime: Arc<Runtime>) -> Self {
-      // Set up decoding supervisor thread.
-      let (to_decode_tx, to_decode_rx) = mpsc::unbounded_channel();
-      let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
-      let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
-      let runtime2 = Arc::clone(&runtime);
-      let decoder_join_handle = runtime.spawn(async move {
-         Self::chunk_decoding_loop(runtime2, to_decode_rx, decoded_chunks_tx, decoder_quit_rx)
-            .await;
-      });
-
-      let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
-
+   pub fn new(
+      xcoder: ImageCoder,
+      decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
+      encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+   ) -> Self {
       Self {
          chunks: HashMap::new(),
-         filename: None,
 
-         runtime,
+         xcoder,
 
-         chunks_to_decode_tx: to_decode_tx,
          decoded_chunks_rx,
-         decoder_quitter: Some((decoder_quit_tx, decoder_join_handle)),
-
-         encoded_chunks_tx,
          encoded_chunks_rx,
+
          chunk_cache_timers: HashMap::new(),
       }
    }
 
    /// Creates the chunk at the given position, if it doesn't already exist.
    #[must_use]
-   fn ensure_chunk(&mut self, renderer: &mut Backend, position: (i32, i32)) -> &mut Chunk {
+   pub fn ensure_chunk(&mut self, renderer: &mut Backend, position: (i32, i32)) -> &mut Chunk {
       self.chunks.entry(position).or_insert_with(|| Chunk::new(renderer))
    }
 
@@ -340,38 +145,6 @@ impl PaintCanvas {
       }
    }
 
-   /// The decoding supervisor thread.
-   async fn chunk_decoding_loop(
-      runtime: Arc<Runtime>,
-      mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
-      output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
-      mut quit: oneshot::Receiver<()>,
-   ) {
-      log::info!("starting chunk decoding supervisor thread");
-      loop {
-         tokio::select! {
-            biased;
-            Ok(_) = &mut quit => break,
-            data = input.recv() => {
-               if let Some((chunk_position, image_data)) = data {
-                  let output = output.clone();
-                  runtime.spawn_blocking(move || match Chunk::decode_network_data(&image_data) {
-                     Ok(image) => {
-                        // Doesn't matter if the receiving half is closed.
-                        let _ = output.send((chunk_position, image));
-                     }
-                     Err(error) => log::error!("image decoding failed: {:?}", error),
-                  });
-               } else {
-                  log::info!("decoding supervisor: chunk data sender was dropped, quitting");
-                  break;
-               }
-            },
-         }
-      }
-      log::info!("exiting chunk decoding supervisor thread");
-   }
-
    /// Updates chunks that have been decoded between the last call to `update` and the current one.
    pub fn update(&mut self, renderer: &mut Backend) {
       while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
@@ -405,39 +178,12 @@ impl PaintCanvas {
          chunk_position
       );
       if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
-         // If there is a cached image already, there's no point in encoding it all over again.
-         if let Some(image) = chunk.image_cache.as_ref() {
-            let _ = output_channel.send((chunk_position, image.clone()));
-            // Reset timers for recently accessed chunks.
+         // Reset timers for recently accessed chunks.
+         if chunk.image_cache.is_some() {
             self.chunk_cache_timers.insert(chunk_position, Instant::now());
-            return;
          }
-         // If the chunk's image is empty, there's no point in sending it.
-         let image = chunk.download_image();
-         if Chunk::image_is_empty(&image) {
-            return;
-         }
-         // Otherwise, we can start encoding the chunk image.
-         let own_output_channel = self.encoded_chunks_tx.clone();
-         self.runtime.spawn(async move {
-            log::debug!("encoding image data for chunk {:?}", chunk_position);
-            let image_data = Chunk::encode_network_data(image).await;
-            log::debug!("encoding done for chunk {:?}", chunk_position);
-            match image_data {
-               Ok(data) => {
-                  log::debug!("sending image data back to main thread");
-                  let _ = own_output_channel.send((chunk_position, data.clone()));
-                  let _ = output_channel.send((chunk_position, data));
-               }
-               Err(error) => {
-                  log::error!(
-                     "error while encoding image for chunk {:?}: {:?}",
-                     chunk_position,
-                     error
-                  );
-               }
-            }
-         });
+
+         self.xcoder.enqueue_chunk_encoding(chunk, output_channel, chunk_position);
       }
    }
 
@@ -447,280 +193,21 @@ impl PaintCanvas {
       to_chunk: (i32, i32),
       data: Vec<u8>,
    ) -> netcanv::Result<()> {
-      self
-         .chunks_to_decode_tx
-         .send((to_chunk, data))
-         .expect("Decoding supervisor thread should never quit");
+      self.xcoder.enqueue_chunk_decoding(to_chunk, data);
       // chunk.decode_network_data(Chunk::sub(to_chunk), data)
       Ok(())
    }
 
-   /// Saves the entire paint to a PNG file.
-   fn save_as_png(&self, path: &Path) -> netcanv::Result<()> {
-      log::info!("saving png {:?}", path);
-      let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
-      for chunk_position in self.chunks.keys() {
-         left = left.min(chunk_position.0);
-         top = top.min(chunk_position.1);
-         right = right.max(chunk_position.0);
-         bottom = bottom.max(chunk_position.1);
-      }
-      log::debug!(
-         "left={}, top={}, right={}, bottom={}",
-         left,
-         top,
-         right,
-         bottom
-      );
-      if left == i32::MAX {
-         return Err(Error::NothingToSave);
-      }
-      let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
-      let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
-      log::debug!("size: {:?}", (width, height));
-      let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
-      for (chunk_position, chunk) in &self.chunks {
-         log::debug!("writing chunk {:?}", chunk_position);
-         let pixel_position = (
-            (Chunk::SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
-            (Chunk::SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
-         );
-         log::debug!("   - pixel position: {:?}", pixel_position);
-
-         let chunk_image = chunk.download_image();
-         let mut sub_image = image.sub_image(
-            pixel_position.0,
-            pixel_position.1,
-            Chunk::SIZE.0 as u32,
-            Chunk::SIZE.1 as u32,
-         );
-         sub_image.copy_from(&chunk_image, 0, 0)?;
-      }
-      image.save(path)?;
-      log::debug!("image {:?} saved successfully", path);
-      Ok(())
+   pub fn chunks(&self) -> &HashMap<(i32, i32), Chunk> {
+      &self.chunks
    }
 
-   /// Validates the `.netcanv` save path. This strips away the `canvas.toml` if present, and makes
-   /// sure that the directory name ends with `.netcanv`.
-   fn validate_netcanv_save_path(path: &Path) -> netcanv::Result<PathBuf> {
-      // condition #1: remove canvas.toml
-      let mut result = PathBuf::from(path);
-      if result.file_name() == Some(OsStr::new("canvas.toml")) {
-         result.pop();
-      }
-      // condition #2: make sure that the directory name ends with .netcanv
-      if result.extension() != Some(OsStr::new("netcanv")) {
-         return Err(Error::InvalidCanvasFolder);
-      }
-      Ok(result)
-   }
-
-   /// Clears the existing `.netcanv` save at the given path.
-   fn clear_netcanv_save(path: &Path) -> netcanv::Result<()> {
-      log::info!("clearing older netcanv save {:?}", path);
-      for entry in std::fs::read_dir(path)? {
-         let path = entry?.path();
-         if path.is_file()
-            && (path.extension() == Some(OsStr::new("png"))
-               || path.file_name() == Some(OsStr::new("canvas.toml")))
-         {
-            std::fs::remove_file(path)?;
-         }
-      }
-      Ok(())
-   }
-
-   /// Saves the paint canvas as a `.netcanv` canvas.
-   async fn save_as_netcanv(&mut self, path: &Path) -> netcanv::Result<()> {
-      // create the directory
-      log::info!("creating or reusing existing directory ({:?})", path);
-      let path = Self::validate_netcanv_save_path(path)?;
-      std::fs::create_dir_all(path.clone())?; // use create_dir_all to not fail if the dir already exists
-      if self.filename != Some(path.clone()) {
-         Self::clear_netcanv_save(&path)?;
-      }
-      // save the canvas.toml manifest
-      log::info!("saving canvas.toml");
-      let canvas_toml = CanvasToml {
-         version: CANVAS_TOML_VERSION,
-      };
-      std::fs::write(
-         path.join(Path::new("canvas.toml")),
-         toml::to_string(&canvas_toml)?,
-      )?;
-      // save all the chunks
-      log::info!("saving chunks");
-      for (chunk_position, chunk) in &mut self.chunks {
-         log::debug!("chunk {:?}", chunk_position);
-         let image = chunk.download_image();
-         let image_data = Chunk::encode_png_data(image).await?;
-         let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
-         let filepath = path.join(Path::new(&filename));
-         log::debug!("saving to {:?}", filepath);
-         std::fs::write(filepath, image_data)?;
-         chunk.mark_saved();
-      }
-      self.filename = Some(path);
-      Ok(())
-   }
-
-   /// Saves the canvas to a PNG file or a `.netcanv` directory.
-   ///
-   /// If `path` is `None`, this performs an autosave of an already saved `.netcanv` directory.
-   pub fn save(&mut self, path: Option<&Path>) -> netcanv::Result<()> {
-      let path = path
-         .map(|p| p.to_path_buf())
-         .or_else(|| self.filename.clone())
-         .expect("no save path provided");
-      if let Some(ext) = path.extension() {
-         match ext.to_str() {
-            Some("png") => self.save_as_png(&path),
-            Some("netcanv") | Some("toml") => {
-               let runtime = Arc::clone(&self.runtime);
-               runtime.block_on(async { self.save_as_netcanv(&path).await })
-            }
-            _ => Err(Error::UnsupportedSaveFormat),
-         }
-      } else {
-         Err(Error::MissingCanvasSaveExtension)
-      }
-   }
-
-   /// Extracts the `!org` origin part from an image file's name.
-   fn extract_chunk_origin_from_filename(path: &Path) -> Option<(i32, i32)> {
-      const ORG: &str = "!org";
-      let filename = path.file_stem()?.to_str()?;
-      let org_index = filename.rfind(ORG)?;
-      let chunk_position = &filename[org_index + ORG.len()..];
-      Self::parse_chunk_position(chunk_position).ok()
-   }
-
-   /// Loads chunks from an image file.
-   fn load_from_image_file(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
-      use ::image::io::Reader as ImageReader;
-
-      let image = ImageReader::open(path)?.decode()?.into_rgba8();
-      log::debug!("image size: {:?}", image.dimensions());
-      let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
-      let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
-      log::debug!("n. chunks: x={}, y={}", chunks_x, chunks_y);
-      let (origin_x, origin_y) = Self::extract_chunk_origin_from_filename(path).unwrap_or((0, 0));
-
-      for y in 0..chunks_y {
-         for x in 0..chunks_x {
-            let chunk_position = (x, y);
-            let offset_chunk_position = (x - origin_x, y - origin_y);
-            let chunk = self.ensure_chunk(renderer, offset_chunk_position);
-            let pixel_position = (
-               Chunk::SIZE.0 * chunk_position.0 as u32,
-               Chunk::SIZE.1 * chunk_position.1 as u32,
-            );
-            log::debug!(
-               "plopping chunk at {:?} (pxp {:?})",
-               offset_chunk_position,
-               pixel_position
-            );
-            let right = (pixel_position.0 + Chunk::SIZE.0).min(image.width() - 1);
-            let bottom = (pixel_position.1 + Chunk::SIZE.1).min(image.height() - 1);
-            let width = right - pixel_position.0;
-            let height = bottom - pixel_position.1;
-            let mut chunk_image =
-               RgbaImage::from_pixel(Chunk::SIZE.0, Chunk::SIZE.1, Rgba([0, 0, 0, 0]));
-            let sub_image = image.view(pixel_position.0, pixel_position.1, width, height);
-            chunk_image.copy_from(&sub_image, 0, 0)?;
-            if Chunk::image_is_empty(&chunk_image) {
-               continue;
-            }
-            chunk.mark_dirty();
-            chunk.upload_image(&chunk_image, (0, 0));
-         }
-      }
-
-      Ok(())
-   }
-
-   /// Parses an `x,y` chunk position.
-   fn parse_chunk_position(coords: &str) -> netcanv::Result<(i32, i32)> {
-      let mut iter = coords.split(',');
-      let x_str = iter.next();
-      let y_str = iter.next();
-      ensure!(
-         x_str.is_some() && y_str.is_some(),
-         Error::InvalidChunkPositionPattern
-      );
-      ensure!(
-         iter.next().is_none(),
-         Error::TrailingChunkCoordinatesInFilename
-      );
-      let (x_str, y_str) = (x_str.unwrap(), y_str.unwrap());
-      let x: i32 = x_str.parse()?;
-      let y: i32 = y_str.parse()?;
-      Ok((x, y))
-   }
-
-   /// Loads chunks from a `.netcanv` directory.
-   fn load_from_netcanv(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
-      let path = Self::validate_netcanv_save_path(path)?;
-      log::info!("loading canvas from {:?}", path);
-      // load canvas.toml
-      log::debug!("loading canvas.toml");
-      let canvas_toml_path = path.join(Path::new("canvas.toml"));
-      let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(&canvas_toml_path)?)?;
-      if canvas_toml.version > CANVAS_TOML_VERSION {
-         return Err(Error::CanvasTomlVersionMismatch);
-      }
-      // load chunks
-      log::debug!("loading chunks");
-      for entry in std::fs::read_dir(path.clone())? {
-         let path = entry?.path();
-         // Please let me have if let chains.
-         if path.is_file() && path.extension() == Some(OsStr::new("png")) {
-            if let Some(position_osstr) = path.file_stem() {
-               if let Some(position_str) = position_osstr.to_str() {
-                  let chunk_position = Self::parse_chunk_position(position_str)?;
-                  log::debug!("chunk {:?}", chunk_position);
-                  let chunk = self.ensure_chunk(renderer, chunk_position);
-                  let image_data = Chunk::decode_png_data(&std::fs::read(path)?)?;
-                  chunk.upload_image(&image_data, (0, 0));
-                  chunk.mark_saved();
-               }
-            }
-         }
-      }
-      self.filename = Some(path);
-      Ok(())
-   }
-
-   /// Loads a paint canvas from the given path.
-   pub fn load(&mut self, renderer: &mut Backend, path: &Path) -> netcanv::Result<()> {
-      if let Some(ext) = path.extension() {
-         match ext.to_str() {
-            Some("netcanv") | Some("toml") => self.load_from_netcanv(renderer, path),
-            _ => self.load_from_image_file(renderer, path),
-         }
-      } else {
-         self.load_from_image_file(renderer, path)
-      }
+   pub fn chunks_mut(&mut self) -> &mut HashMap<(i32, i32), Chunk> {
+      &mut self.chunks
    }
 
    /// Returns a vector containing all the chunk positions in the paint canvas.
    pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
       self.chunks.keys().copied().collect()
-   }
-
-   /// Returns what filename the canvas was saved under.
-   pub fn filename(&self) -> Option<&Path> {
-      self.filename.as_deref()
-   }
-}
-
-impl Drop for PaintCanvas {
-   fn drop(&mut self) {
-      self.runtime.block_on(async {
-         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
-         let _ = channel.send(());
-         let _ = join_handle.await;
-      });
    }
 }
