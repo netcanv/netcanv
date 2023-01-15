@@ -7,7 +7,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
-use crate::paint_canvas::cached_chunk::CachedChunk;
+use crate::paint_canvas::cache_layer::CachedChunk;
 use crate::paint_canvas::chunk::Chunk;
 use crate::Error;
 

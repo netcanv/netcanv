@@ -1,7 +1,6 @@
 //! NetCanv's infinite paint canvas.
 
 pub mod cache_layer;
-pub mod cached_chunk;
 pub mod chunk;
 
 use std::collections::HashMap;

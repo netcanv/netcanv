@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use instant::{Duration, Instant};
 
-use super::cached_chunk::CachedChunk;
+#[derive(Clone)]
+pub struct CachedChunk {
+   pub png: Vec<u8>,
+   pub webp: Option<Vec<u8>>,
+}
 
 pub struct CacheLayer {
    chunks: HashMap<(i32, i32), CachedChunk>,
