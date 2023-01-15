@@ -125,7 +125,8 @@ impl PaintCanvas {
    pub fn set_chunk(
       &mut self,
       renderer: &mut Backend,
-      (chunk_position, image): ((i32, i32), RgbaImage),
+      chunk_position: (i32, i32),
+      image: RgbaImage,
    ) {
       let chunk = self.ensure_chunk(renderer, chunk_position);
       chunk.upload_image(&image, (0, 0));

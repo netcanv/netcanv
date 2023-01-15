@@ -416,8 +416,8 @@ impl State {
       // Rendering
       //
 
-      while let Ok(decoded_chunk) = self.xcoder_channels.decoded_chunks_rx.try_recv() {
-         self.paint_canvas.set_chunk(ui, decoded_chunk);
+      while let Ok((chunk_position, image)) = self.xcoder_channels.decoded_chunks_rx.try_recv() {
+         self.paint_canvas.set_chunk(ui, chunk_position, image);
       }
       while let Ok((chunk_position, image)) = self.xcoder_channels.encoded_chunks_rx.try_recv() {
          let _ = self.paint_canvas.ensure_chunk(ui, chunk_position);
