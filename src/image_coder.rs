@@ -7,12 +7,13 @@ use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
-use crate::paint_canvas::chunk::{Chunk, ChunkImage};
+use crate::paint_canvas::cache_layer::CachedChunk;
+use crate::paint_canvas::chunk::Chunk;
 use crate::Error;
 
 pub struct ImageCoderChannels {
    pub decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-   pub encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+   pub encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), CachedChunk)>,
 }
 
 pub struct ImageCoder {
@@ -20,7 +21,7 @@ pub struct ImageCoder {
    decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 
    chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
-   encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
+   encoded_chunks_tx: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
 }
 
 impl ImageCoder {
@@ -102,14 +103,14 @@ impl ImageCoder {
 
    /// Encodes a network image asynchronously. This encodes PNG, as well as WebP if the PNG is too
    /// large, and returns both images.
-   async fn encode_network_data(image: RgbaImage) -> netcanv::Result<ChunkImage> {
+   async fn encode_network_data(image: RgbaImage) -> netcanv::Result<CachedChunk> {
       let png = Self::encode_png_data(image.clone()).await?;
       let webp = if png.len() > Self::MAX_PNG_SIZE {
          Some(Self::encode_webp_data(image).await?)
       } else {
          None
       };
-      Ok(ChunkImage { png, webp })
+      Ok(CachedChunk { png, webp })
    }
 
    /// Decodes a PNG file into the given sub-chunk.
@@ -186,15 +187,10 @@ impl ImageCoder {
 
    pub fn enqueue_chunk_encoding(
       &self,
-      chunk: &mut Chunk,
-      output_channel: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
+      chunk: &Chunk,
+      output_channel: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
       chunk_position: (i32, i32),
    ) {
-      // If there is a cached image already, there's no point in encoding it all over again.
-      if let Some(image) = chunk.image_cache.as_ref() {
-         let _ = self.encoded_chunks_tx.send((chunk_position, image.clone()));
-         return;
-      }
       // If the chunk's image is empty, there's no point in sending it.
       let image = chunk.download_image();
       if Chunk::image_is_empty(&image) {
@@ -229,6 +225,10 @@ impl ImageCoder {
          .chunks_to_decode_tx
          .send((to_chunk, data))
          .expect("Decoding supervisor thread should never quit");
+   }
+
+   pub fn send_encoded_chunk(&self, chunk: &CachedChunk, position: (i32, i32)) {
+      let _ = self.encoded_chunks_tx.send((position, chunk.to_owned()));
    }
 }
 

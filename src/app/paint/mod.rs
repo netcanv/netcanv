@@ -27,11 +27,12 @@ use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
 use crate::common::*;
-use crate::image_coder::ImageCoder;
+use crate::image_coder::{ImageCoder, ImageCoderChannels};
 use crate::net::peer::{self, Peer};
 use crate::net::socket::SocketSystem;
 use crate::net::timer::Timer;
-use crate::paint_canvas::chunk::{Chunk, ChunkImage};
+use crate::paint_canvas::cache_layer::{CacheLayer, CachedChunk};
+use crate::paint_canvas::chunk::Chunk;
 use crate::paint_canvas::*;
 use crate::project_file::ProjectFile;
 use crate::ui::view::layout::DirectionV;
@@ -76,8 +77,8 @@ pub struct GlobalControls {
 }
 
 struct EncodeChannels {
-   tx: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
-   rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
+   tx: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
+   rx: mpsc::UnboundedReceiver<((i32, i32), CachedChunk)>,
 }
 
 /// The paint app state.
@@ -88,6 +89,9 @@ pub struct State {
    project_file: ProjectFile,
 
    paint_canvas: PaintCanvas,
+   xcoder: ImageCoder,
+   xcoder_channels: ImageCoderChannels,
+   cache_layer: CacheLayer,
 
    actions: Vec<Box<dyn actions::Action>>,
    last_autosave: Instant,
@@ -166,11 +170,10 @@ impl State {
          assets,
          _socket_system: socket_system,
 
-         paint_canvas: PaintCanvas::new(
-            xcoder,
-            channels.decoded_chunks_rx,
-            channels.encoded_chunks_rx,
-         ),
+         paint_canvas: PaintCanvas::new(),
+         xcoder,
+         xcoder_channels: channels,
+         cache_layer: CacheLayer::new(),
          project_file: ProjectFile::new(Arc::clone(&runtime)),
          runtime,
 
@@ -288,7 +291,7 @@ impl State {
 
    /// Decodes canvas data to the given chunk.
    fn decode_canvas_data(&mut self, chunk_position: (i32, i32), image_data: Vec<u8>) {
-      catch!(self.paint_canvas.enqueue_network_data_decoding(chunk_position, image_data));
+      self.xcoder.enqueue_chunk_decoding(chunk_position, image_data);
    }
 
    /// Processes the message log.
@@ -412,7 +415,14 @@ impl State {
       // Rendering
       //
 
-      self.paint_canvas.update(ui);
+      while let Ok((chunk_position, image)) = self.xcoder_channels.decoded_chunks_rx.try_recv() {
+         self.paint_canvas.set_chunk(ui, chunk_position, image);
+      }
+      while let Ok((chunk_position, image)) = self.xcoder_channels.encoded_chunks_rx.try_recv() {
+         let _ = self.paint_canvas.ensure_chunk(ui, chunk_position);
+         self.cache_layer.set_chunk(chunk_position, image);
+      }
+      self.cache_layer.update_timers();
 
       ui.draw(|ui| {
          ui.render().push();
@@ -499,11 +509,11 @@ impl State {
             let mut packet = Vec::new();
             while let Ok((chunk_position, images)) = rx.try_recv() {
                let image_data = match images {
-                  ChunkImage {
+                  CachedChunk {
                      png: _,
                      webp: Some(webp),
                   } => webp,
-                  ChunkImage { png, webp: None } => png,
+                  CachedChunk { png, webp: None } => png,
                };
                if bytes_in_packet + image_data.len() > MAX_BYTES_PER_PACKET {
                   catch!(self.peer.send_chunks(peer_id, std::mem::take(&mut packet)));
@@ -865,7 +875,16 @@ impl State {
          })
          .tx;
       for &chunk_position in positions {
-         self.paint_canvas.enqueue_network_data_encoding(tx.clone(), chunk_position);
+         log::info!(
+            "fetching data for networking transmission of chunk {:?}",
+            chunk_position
+         );
+         // If there is a cached image already, there's no point in encoding it all over again.
+         if let Some(chunk) = self.cache_layer.chunk(chunk_position) {
+            self.xcoder.send_encoded_chunk(chunk, chunk_position);
+         } else if let Some(chunk) = self.paint_canvas.chunk(chunk_position) {
+            self.xcoder.enqueue_chunk_encoding(chunk, tx.clone(), chunk_position);
+         }
       }
    }
 

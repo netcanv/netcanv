@@ -4,17 +4,10 @@ use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
 
 use crate::backend::{Backend, Framebuffer};
 
-#[derive(Clone)]
-pub struct ChunkImage {
-   pub png: Vec<u8>,
-   pub webp: Option<Vec<u8>>,
-}
-
 /// A chunk on the infinite canvas.
 pub struct Chunk {
    pub framebuffer: Framebuffer,
-   pub image_cache: Option<ChunkImage>,
-   saved: bool,
+   dirty: bool,
 }
 
 impl Chunk {
@@ -25,8 +18,7 @@ impl Chunk {
    pub fn new(renderer: &mut Backend) -> Self {
       Self {
          framebuffer: renderer.create_framebuffer(Self::SIZE.0, Self::SIZE.1),
-         image_cache: None,
-         saved: true,
+         dirty: false,
       }
    }
 
@@ -56,13 +48,12 @@ impl Chunk {
    /// Marks the chunk as dirty - that is, invalidates any cached PNG and WebP data,
    /// and marks it as unsaved.
    pub fn mark_dirty(&mut self) {
-      self.image_cache = None;
-      self.saved = false;
+      self.dirty = true;
    }
 
    /// Marks the given sub-chunk within this master chunk as saved.
    pub fn mark_saved(&mut self) {
-      self.saved = true;
+      self.dirty = false;
    }
 
    /// Iterates through all pixels within the image and checks whether any pixels in the image are
