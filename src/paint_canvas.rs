@@ -1,52 +1,29 @@
 //! NetCanv's infinite paint canvas.
 
+pub mod cache_layer;
+pub mod cached_chunk;
 pub mod chunk;
 
 use std::collections::HashMap;
 
-use ::image::RgbaImage;
-use instant::{Duration, Instant};
+use image::RgbaImage;
 use netcanv_renderer::paws::{vector, Color, Rect, Renderer, Vector};
 use netcanv_renderer::{Framebuffer as FramebufferTrait, RenderBackend};
-use tokio::sync::mpsc;
 
 use crate::backend::{Backend, Framebuffer};
-use crate::image_coder::ImageCoder;
 use crate::viewport::Viewport;
-use chunk::{Chunk, ChunkImage};
+use chunk::Chunk;
 
 /// A paint canvas built out of [`Chunk`]s.
 pub struct PaintCanvas {
    chunks: HashMap<(i32, i32), Chunk>,
-
-   xcoder: ImageCoder,
-
-   decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-   encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
-
-   chunk_cache_timers: HashMap<(i32, i32), Instant>,
 }
 
 impl PaintCanvas {
-   /// The duration for which encoded chunk images are held in memory.
-   /// Once this duration expires, the cached images are dropped.
-   const CHUNK_CACHE_DURATION: Duration = Duration::from_secs(5 * 60);
-
    /// Creates a new, empty paint canvas.
-   pub fn new(
-      xcoder: ImageCoder,
-      decoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), RgbaImage)>,
-      encoded_chunks_rx: mpsc::UnboundedReceiver<((i32, i32), ChunkImage)>,
-   ) -> Self {
+   pub fn new() -> Self {
       Self {
          chunks: HashMap::new(),
-
-         xcoder,
-
-         decoded_chunks_rx,
-         encoded_chunks_rx,
-
-         chunk_cache_timers: HashMap::new(),
       }
    }
 
@@ -145,57 +122,13 @@ impl PaintCanvas {
       }
    }
 
-   /// Updates chunks that have been decoded between the last call to `update` and the current one.
-   pub fn update(&mut self, renderer: &mut Backend) {
-      while let Ok((chunk_position, image)) = self.decoded_chunks_rx.try_recv() {
-         let chunk = self.ensure_chunk(renderer, chunk_position);
-         chunk.upload_image(&image, (0, 0));
-      }
-      while let Ok((chunk_position, image)) = self.encoded_chunks_rx.try_recv() {
-         let chunk = self.ensure_chunk(renderer, chunk_position);
-         chunk.image_cache = Some(image);
-         self.chunk_cache_timers.insert(chunk_position, Instant::now());
-      }
-      for (chunk_position, instant) in &self.chunk_cache_timers {
-         if instant.elapsed() > Self::CHUNK_CACHE_DURATION {
-            if let Some(chunk) = self.chunks.get_mut(chunk_position) {
-               chunk.image_cache = None;
-            }
-         }
-      }
-   }
-
-   /// Returns a receiver for the image data of the chunk at the given position, if it's not empty.
-   ///
-   /// The chunk data that arrives from the receiver may be `None` if encoding failed.
-   pub fn enqueue_network_data_encoding(
+   pub fn set_chunk(
       &mut self,
-      output_channel: mpsc::UnboundedSender<((i32, i32), ChunkImage)>,
-      chunk_position: (i32, i32),
+      renderer: &mut Backend,
+      (chunk_position, image): ((i32, i32), RgbaImage),
    ) {
-      log::info!(
-         "fetching data for network transmission of chunk {:?}",
-         chunk_position
-      );
-      if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
-         // Reset timers for recently accessed chunks.
-         if chunk.image_cache.is_some() {
-            self.chunk_cache_timers.insert(chunk_position, Instant::now());
-         }
-
-         self.xcoder.enqueue_chunk_encoding(chunk, output_channel, chunk_position);
-      }
-   }
-
-   /// Enqueues image data for decoding to the chunk at the given position.
-   pub fn enqueue_network_data_decoding(
-      &mut self,
-      to_chunk: (i32, i32),
-      data: Vec<u8>,
-   ) -> netcanv::Result<()> {
-      self.xcoder.enqueue_chunk_decoding(to_chunk, data);
-      // chunk.decode_network_data(Chunk::sub(to_chunk), data)
-      Ok(())
+      let chunk = self.ensure_chunk(renderer, chunk_position);
+      chunk.upload_image(&image, (0, 0));
    }
 
    pub fn chunks(&self) -> &HashMap<(i32, i32), Chunk> {
@@ -209,5 +142,9 @@ impl PaintCanvas {
    /// Returns a vector containing all the chunk positions in the paint canvas.
    pub fn chunk_positions(&self) -> Vec<(i32, i32)> {
       self.chunks.keys().copied().collect()
+   }
+
+   pub fn chunk(&self, position: (i32, i32)) -> Option<&Chunk> {
+      self.chunks.get(&position)
    }
 }
