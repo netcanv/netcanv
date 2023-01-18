@@ -219,7 +219,7 @@ impl ProjectFile {
             let mut chunk_image =
                RgbaImage::from_pixel(Chunk::SIZE.0, Chunk::SIZE.1, Rgba([0, 0, 0, 0]));
             let sub_image = image.view(pixel_position.0, pixel_position.1, width, height);
-            chunk_image.copy_from(&sub_image, 0, 0)?;
+            chunk_image.copy_from(&*sub_image, 0, 0)?;
             if Chunk::image_is_empty(&chunk_image) {
                continue;
             }

@@ -10,9 +10,9 @@ use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
 use crate::config::config;
 use crate::keymap::KeyBinding;
+use image::codecs::png::PngEncoder;
 use image::io::Reader;
-use image::png::PngEncoder;
-use image::{ColorType, ImageFormat, RgbaImage};
+use image::{ColorType, ImageFormat, RgbaImage, ImageEncoder};
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
@@ -289,7 +289,7 @@ impl SelectionTool {
    /// Encodes an image to PNG.
    fn encode_image(image: &RgbaImage) -> netcanv::Result<Vec<u8>> {
       let mut bytes = Vec::new();
-      PngEncoder::new(Cursor::new(&mut bytes)).encode(
+      PngEncoder::new(Cursor::new(&mut bytes)).write_image(
          image,
          image.width(),
          image.height(),
