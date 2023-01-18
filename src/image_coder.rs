@@ -95,7 +95,7 @@ impl ImageCoder {
             Cursor::new(&mut bytes),
             WebPQuality::lossy(WebPQuality::DEFAULT),
          )
-         .encode(&image, image.width(), image.height(), ColorType::Rgba8)
+         .write_image(&image, image.width(), image.height(), ColorType::Rgba8)
          {
             Ok(()) => (),
             Err(error) => {
