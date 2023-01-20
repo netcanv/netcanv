@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.40"
 winit = { version = "0.27.4", features = ["serde"] }
 glutin = "0.29.1"
-glow = "0.11.0"
+glow = "0.11.2"
 memoffset = "0.6.4"
 freetype-rs = "0.26.0"
 smallvec = { version = "1.7.0", features = ["const_generics"] }

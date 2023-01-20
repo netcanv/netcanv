@@ -80,7 +80,7 @@ impl FontFace {
          gl.tex_image_2d(
             glow::TEXTURE_2D,
             0,
-            glow::RED as i32,
+            glow::R8 as i32,
             TEXTURE_ATLAS_SIZE as i32,
             TEXTURE_ATLAS_SIZE as i32,
             0,
