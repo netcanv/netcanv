@@ -149,7 +149,7 @@ impl FontFace {
       );
    }
 
-   fn glyph_renderer(&mut self, size: u32) -> GlyphRenderer<'_, '_, '_, '_> {
+   fn glyph_renderer(&mut self, size: u32) -> GlyphRenderer<'_> {
       self.make_size(size);
 
       GlyphRenderer {
@@ -229,15 +229,15 @@ impl netcanv_renderer::Font for Font {
    }
 }
 
-pub(crate) struct GlyphRenderer<'font, 'store, 'gl, 'c> {
-   swash_font: FontRef<'font>,
-   size_store: &'store mut FontSize,
-   gl: &'gl glow::Context,
-   scale_context: &'c mut ScaleContext,
-   shape_context: &'c mut ShapeContext,
+pub(crate) struct GlyphRenderer<'a> {
+   swash_font: FontRef<'a>,
+   size_store: &'a mut FontSize,
+   gl: &'a glow::Context,
+   scale_context: &'a mut ScaleContext,
+   shape_context: &'a mut ShapeContext,
 }
 
-impl<'font, 'store, 'gl, 'c> GlyphRenderer<'font, 'store, 'gl, 'c> {
+impl<'a> GlyphRenderer<'a> {
    fn render_glyph(&mut self, c: char) -> anyhow::Result<Glyph> {
       let size = self.size_store.size as f32;
       let mut scaler = self.scale_context.builder(self.swash_font).size(size).hint(true).build();
