@@ -881,7 +881,7 @@ impl State {
          );
          // If there is a cached image already, there's no point in encoding it all over again.
          if let Some(chunk) = self.cache_layer.chunk(chunk_position) {
-            self.xcoder.send_encoded_chunk(chunk, chunk_position);
+            self.xcoder.send_encoded_chunk(chunk, tx.clone(), chunk_position);
          } else if let Some(chunk) = self.paint_canvas.chunk(chunk_position) {
             self.xcoder.enqueue_chunk_encoding(chunk, tx.clone(), chunk_position);
          }

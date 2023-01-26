@@ -1,10 +1,10 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use image::ImageEncoder;
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::codecs::webp::{WebPDecoder, WebPEncoder, WebPQuality};
 use ::image::{ColorType, ImageDecoder, Rgba, RgbaImage};
+use image::ImageEncoder;
 use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -235,8 +235,14 @@ impl ImageCoder {
          .expect("Decoding supervisor thread should never quit");
    }
 
-   pub fn send_encoded_chunk(&self, chunk: &CachedChunk, position: (i32, i32)) {
+   pub fn send_encoded_chunk(
+      &self,
+      chunk: &CachedChunk,
+      output_channel: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
+      position: (i32, i32),
+   ) {
       let _ = self.encoded_chunks_tx.send((position, chunk.to_owned()));
+      let _ = output_channel.send((position, chunk.to_owned()));
    }
 }
 
