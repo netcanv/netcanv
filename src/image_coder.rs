@@ -4,7 +4,7 @@ use std::sync::Arc;
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::codecs::webp::{WebPDecoder, WebPEncoder, WebPQuality};
 use ::image::{ColorType, ImageDecoder, Rgba, RgbaImage};
-use image::ImageEncoder;
+use image::{DynamicImage, ImageEncoder};
 use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -135,12 +135,7 @@ impl ImageCoder {
    /// Decodes a WebP file into the given sub-chunk.
    fn decode_webp_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       let decoder = WebPDecoder::new(Cursor::new(data))?;
-      if decoder.color_type() != ColorType::Rgba8 {
-         log::warn!("received non-RGBA image data, ignoring");
-         return Err(Error::NonRgbaChunkImage);
-      }
-      let mut image = RgbaImage::from_pixel(Chunk::SIZE.0, Chunk::SIZE.1, Rgba([0, 0, 0, 0]));
-      decoder.read_image(&mut image)?;
+      let image = DynamicImage::from_decoder(decoder)?.into_rgba8();
       Ok(image)
    }
 
