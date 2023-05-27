@@ -1,18 +1,18 @@
-//! A <del>quite shitty</del> text renderer based on FreeType.
+//! A <del>quite shitty</del> text renderer based on swash.
 //!
 //! Does not support advanced features such as shaping, or text wrapping.
-
-// Not the cleanest piece of code again, but oh the things you do for a clean end user API.
 
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::Chars;
 
-use freetype::face::LoadFlag;
-use freetype::Face;
 use glow::{HasContext, PixelUnpackData};
 use netcanv_renderer::paws::{vector, Rect, Vector};
+use swash::scale::{Render, ScaleContext, Source, StrikeWith};
+use swash::shape::ShapeContext;
+use swash::zeno::Format;
+use swash::{CacheKey, FontRef};
 
 use crate::common::{GlUtilities, RectMath};
 use crate::rect_packer::RectPacker;
@@ -23,7 +23,7 @@ struct Glyph {
    uv_rect: Rect,
    size: Vector,
    offset: Vector,
-   advance_x: i64,
+   advance_x: f32,
 }
 
 struct FontSize {
@@ -55,25 +55,59 @@ impl FontSize {
    }
 }
 
+struct SwashFont {
+   data: Vec<u8>,
+   offset: u32,
+   key: CacheKey,
+}
+
+impl SwashFont {
+   fn new(data: Vec<u8>) -> Option<Self> {
+      let font = FontRef::from_index(&data, 0)?;
+      let (offset, key) = (font.offset, font.key);
+
+      Some(Self { data, offset, key })
+   }
+
+   fn as_ref(&self) -> FontRef {
+      FontRef {
+         data: &self.data,
+         offset: self.offset,
+         key: self.key,
+      }
+   }
+}
+
 struct FontFace {
-   // We store a reference to the FT_Library to make sure the FT_Face doesn't
-   // outlive it. Seems like freetype-rs has some lifetime safety issues.
-   // https://freetype.org/freetype2/docs/reference/ft2-base_interface.html#ft_done_freetype
    gl: Rc<glow::Context>,
-   _freetype: Rc<freetype::Library>,
-   face: Face,
+   swash_font: SwashFont,
    sizes: HashMap<u32, FontSize>,
+   shape_context: ShapeContext,
+   scale_context: ScaleContext,
 }
 
 impl FontFace {
+   fn new(gl: Rc<glow::Context>, data: Vec<u8>) -> Option<Self> {
+      let face = SwashFont::new(data)?;
+
+      Some(Self {
+         gl,
+         swash_font: face,
+         sizes: HashMap::new(),
+         shape_context: ShapeContext::new(),
+         scale_context: ScaleContext::new(),
+      })
+   }
+
    fn make_size(&mut self, size: u32) {
       if self.sizes.contains_key(&size) {
          return;
       }
-      let Self { gl, face, .. } = &self;
-      face.set_pixel_sizes(0, size).unwrap();
-      let size_metrics = face.size_metrics().unwrap();
-      let height = (size_metrics.ascender - size_metrics.descender.abs()) as f32 / 64.0;
+      let gl = &self.gl;
+      let swash_font = self.swash_font.as_ref();
+      let shaper = self.shape_context.builder(swash_font).size(size as f32).build();
+      let metrics = shaper.metrics();
+      let height = metrics.ascent - metrics.descent;
       let texture = unsafe {
          let texture = gl.create_texture().unwrap();
          gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -115,12 +149,15 @@ impl FontFace {
       );
    }
 
-   fn glyph_renderer(&mut self, size: u32) -> GlyphRenderer<'_, '_, '_> {
+   fn glyph_renderer(&mut self, size: u32) -> GlyphRenderer<'_> {
       self.make_size(size);
+
       GlyphRenderer {
-         face: &self.face,
+         swash_font: self.swash_font.as_ref(),
          gl: &self.gl,
          size_store: self.sizes.get_mut(&size).unwrap(),
+         scale_context: &mut self.scale_context,
+         shape_context: &mut self.shape_context,
       }
    }
 }
@@ -141,21 +178,9 @@ pub struct Font {
 }
 
 impl Font {
-   pub(crate) fn new(
-      gl: Rc<glow::Context>,
-      freetype: Rc<freetype::Library>,
-      data: &[u8],
-      default_size: f32,
-   ) -> Self {
-      let face = freetype.new_memory_face(Rc::new(data.to_owned()), 0).unwrap();
-      face.set_pixel_sizes(default_size as u32, default_size as u32).unwrap();
+   pub(crate) fn new(gl: Rc<glow::Context>, data: &[u8], default_size: f32) -> Self {
       Self {
-         store: Rc::new(RefCell::new(FontFace {
-            gl,
-            _freetype: freetype,
-            face,
-            sizes: HashMap::new(),
-         })),
+         store: Rc::new(RefCell::new(FontFace::new(gl, data.into()).unwrap())),
          size: default_size as u32,
       }
    }
@@ -172,7 +197,7 @@ impl Font {
          store: self.store.borrow_mut(),
          font: self,
          text: text.chars(),
-         pen_x: 0,
+         pen_x: 0.0,
       }
    }
 }
@@ -204,29 +229,36 @@ impl netcanv_renderer::Font for Font {
    }
 }
 
-pub(crate) struct GlyphRenderer<'face, 'store, 'gl> {
-   face: &'face Face,
-   size_store: &'store mut FontSize,
-   gl: &'gl glow::Context,
+pub(crate) struct GlyphRenderer<'a> {
+   swash_font: FontRef<'a>,
+   size_store: &'a mut FontSize,
+   gl: &'a glow::Context,
+   scale_context: &'a mut ScaleContext,
+   shape_context: &'a mut ShapeContext,
 }
 
-impl<'font, 'store, 'gl> GlyphRenderer<'font, 'store, 'gl> {
-   #[allow(clippy::unnecessary_cast)] // This is a bit annoying but it's a workaround for Windows.
+impl<'a> GlyphRenderer<'a> {
    fn render_glyph(&mut self, c: char) -> anyhow::Result<Glyph> {
-      self.face.set_pixel_sizes(0, self.size_store.size)?;
-      self.face.load_char(c as usize, LoadFlag::RENDER)?;
-      let glyph_size = {
-         let glyph = self.face.glyph();
-         (glyph.bitmap().width(), glyph.bitmap().rows())
-      };
+      let size = self.size_store.size as f32;
+      let mut scaler = self.scale_context.builder(self.swash_font).size(size).hint(true).build();
+
+      let glyph_id = self.swash_font.charmap().map(c);
+      let image = Render::new(&[
+         Source::ColorOutline(0),
+         Source::ColorBitmap(StrikeWith::BestFit),
+         Source::Outline,
+      ])
+      .format(Format::Alpha)
+      .render(&mut scaler, glyph_id)
+      .unwrap(); // TODO: handle None value later
+
       let rect = self
          .size_store
          .packer
-         .pack(glyph_size.0 as _, glyph_size.1 as _)
+         .pack(image.placement.width as _, image.placement.height as _)
          .expect("no space left on font texture atlas");
       let texture = self.size_store.texture;
       unsafe {
-         let bitmap = self.face.glyph().bitmap();
          self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
          self.gl.tex_sub_image_2d(
             glow::TEXTURE_2D,
@@ -237,15 +269,18 @@ impl<'font, 'store, 'gl> GlyphRenderer<'font, 'store, 'gl> {
             rect.height() as i32,
             glow::RED,
             glow::UNSIGNED_BYTE,
-            PixelUnpackData::Slice(bitmap.buffer()),
+            PixelUnpackData::Slice(&image.data),
          );
       }
-      let glyph = self.face.glyph();
+
+      let shaper = self.shape_context.builder(self.swash_font).size(size).build();
+      let glyph_metrics = self.swash_font.glyph_metrics(shaper.normalized_coords()).scale(size);
+
       Ok(Glyph {
          size: rect.size,
          uv_rect: rect.uv(vector(TEXTURE_ATLAS_SIZE as f32, TEXTURE_ATLAS_SIZE as f32)),
-         offset: vector(glyph.bitmap_left() as f32, -(glyph.bitmap_top() as f32)),
-         advance_x: { glyph.advance().x as i64 },
+         offset: vector(image.placement.left as f32, -(image.placement.top as f32)),
+         advance_x: glyph_metrics.advance_width(glyph_id),
       })
    }
 
@@ -262,7 +297,7 @@ pub(crate) struct Typeset<'font, 'text> {
    font: &'font Font,
    store: RefMut<'font, FontFace>,
    text: Chars<'text>,
-   pen_x: i64,
+   pen_x: f32,
 }
 
 impl<'font, 'text> Typeset<'font, 'text> {
@@ -276,7 +311,7 @@ impl<'font, 'text> Typeset<'font, 'text> {
             self.pen_x += glyph.advance_x;
          }
       }
-      self.pen_x as f32 / 64.0
+      self.pen_x
    }
 }
 
@@ -292,7 +327,7 @@ impl<'font, 'text> Iterator for Typeset<'font, 'text> {
             let pen_x = self.pen_x;
             self.pen_x += glyph.advance_x;
             Some((
-               Rect::new(vector(pen_x as f32 / 64.0, 0.0) + glyph.offset, glyph.size),
+               Rect::new(vector(pen_x, 0.0) + glyph.offset, glyph.size),
                glyph.uv_rect,
             ))
          } else {
