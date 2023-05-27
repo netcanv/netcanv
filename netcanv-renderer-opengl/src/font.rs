@@ -211,6 +211,7 @@ pub(crate) struct GlyphRenderer<'face, 'store, 'gl> {
 }
 
 impl<'font, 'store, 'gl> GlyphRenderer<'font, 'store, 'gl> {
+   #[allow(clippy::unnecessary_cast)] // This is a bit annoying but it's a workaround for Windows.
    fn render_glyph(&mut self, c: char) -> anyhow::Result<Glyph> {
       self.face.set_pixel_sizes(0, self.size_store.size)?;
       self.face.load_char(c as usize, LoadFlag::RENDER)?;
@@ -244,7 +245,7 @@ impl<'font, 'store, 'gl> GlyphRenderer<'font, 'store, 'gl> {
          size: rect.size,
          uv_rect: rect.uv(vector(TEXTURE_ATLAS_SIZE as f32, TEXTURE_ATLAS_SIZE as f32)),
          offset: vector(glyph.bitmap_left() as f32, -(glyph.bitmap_top() as f32)),
-         advance_x: glyph.advance().x as i64,
+         advance_x: { glyph.advance().x as i64 },
       })
    }
 

@@ -16,6 +16,7 @@ pub use netcanv_i18n_macros::{FromLanguage, TranslateEnum};
 
 pub use unic_langid;
 
+#[allow(dead_code)]
 fn _expand_translate_enum() {
    #[derive(TranslateEnum)]
    enum Nested {

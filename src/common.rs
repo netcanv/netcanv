@@ -274,7 +274,7 @@ macro_rules! catch {
    };
 
    ($exp:expr, return $or:expr $(,)?) => {
-      catch!($exp, as crate::common::Error, return $or)
+      catch!($exp, as $crate::common::Error, return $or)
    };
 
    ($exp:expr, as $T:expr $(,)?) => {

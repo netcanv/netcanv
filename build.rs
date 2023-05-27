@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
          .stdout;
       std::fs::write(
          Path::new(&std::env::var("OUT_DIR")?).join("about.html"),
-         &about,
+         about,
       )?;
    } else {
       println!(
