@@ -800,12 +800,7 @@ impl RenderBackend for OpenGlBackend {
    }
 
    fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font {
-      Font::new(
-         Rc::clone(&self.gl),
-         Rc::clone(&self.freetype),
-         data,
-         default_size,
-      )
+      Font::new(Rc::clone(&self.gl), data, default_size)
    }
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
