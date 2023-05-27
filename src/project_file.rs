@@ -73,8 +73,8 @@ impl ProjectFile {
          let mut sub_image = image.sub_image(
             pixel_position.0,
             pixel_position.1,
-            Chunk::SIZE.0 as u32,
-            Chunk::SIZE.1 as u32,
+            Chunk::SIZE.0,
+            Chunk::SIZE.1,
          );
          sub_image.copy_from(&chunk_image, 0, 0)?;
       }

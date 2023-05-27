@@ -128,7 +128,7 @@ impl UserConfig {
    fn save(&self) -> netcanv::Result<()> {
       // Assumes that `config_dir` was already created in `load_or_create`.
       let config_file = Self::path();
-      std::fs::write(&config_file, toml::to_string(self)?)?;
+      std::fs::write(config_file, toml::to_string(self)?)?;
       Ok(())
    }
 }

@@ -94,7 +94,6 @@ pub struct State {
    cache_layer: CacheLayer,
 
    actions: Vec<Box<dyn actions::Action>>,
-   last_autosave: Instant,
 
    peer: Peer,
    update_timer: Timer,
@@ -183,8 +182,6 @@ impl State {
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
          encoded_chunks: HashMap::new(),
-
-         last_autosave: Instant::now(),
 
          fatal_error: false,
          log: Log::new(),
