@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
 
     steps:
     - uses: actions/checkout@v2
@@ -28,8 +28,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
-        sudo apt-get install -y gcc-aarch64-linux-gnu
+        sudo apt-get update
+        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev gcc-aarch64-linux-gnu libfuse2
         if ! [ -e ~/.cargo/bin/cargo-about ]; then
           cargo install cargo-about || true
         fi
@@ -57,7 +57,7 @@ jobs:
         path: bin
 
   build-windows:
-    runs-on: windows-2019
+    runs-on: windows-2022
 
     steps:
     - uses: actions/checkout@v2
