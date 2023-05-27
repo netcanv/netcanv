@@ -422,6 +422,10 @@ impl TextField {
                let cursor = self.selection.cursor();
                self.text.replace_range(self.selection.normalize(), &clipboard);
                self.selection.move_to(TextPosition(cursor + clipboard.len()));
+
+               if self.selection.cursor() > self.text.len() {
+                  self.selection.move_to(TextPosition(self.text.len()))
+               }
             }
          }
 
