@@ -29,7 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev gcc-aarch64-linux-gnu
+        sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev gcc-aarch64-linux-gnu libfuse3-3
         if ! [ -e ~/.cargo/bin/cargo-about ]; then
           cargo install cargo-about || true
         fi
