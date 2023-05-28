@@ -14,8 +14,8 @@ use super::view::View;
 use super::{ButtonState, Input, Ui};
 
 use crate::backend::winit::event::MouseButton;
+use crate::backend::winit::window::CursorIcon;
 use netcanv_renderer::paws::Layout;
-use netcanv_renderer_opengl::winit::window::CursorIcon;
 pub use windows::WindowContentWrappers;
 
 /// A window.

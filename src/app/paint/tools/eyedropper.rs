@@ -1,5 +1,5 @@
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout, Point};
-use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};

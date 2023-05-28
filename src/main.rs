@@ -45,10 +45,9 @@ pub extern crate self as netcanv;
 
 use std::fmt::Write;
 
+use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
 use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_family = "unix")]
-use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::config::WindowConfig;
 use crate::ui::view::{self, View};
@@ -58,14 +57,10 @@ use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
-use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
 use nysa::global as bus;
 use simple_logger::SimpleLogger;
 
-#[cfg(feature = "renderer-opengl")]
-use netcanv_renderer_opengl::UiRenderFrame;
-#[cfg(feature = "renderer-skia")]
-use netcanv_renderer_skia::UiRenderFrame;
+use crate::backend::UiRenderFrame;
 
 #[macro_use]
 mod common;
@@ -99,13 +94,16 @@ pub use errors::*;
 ///
 /// `language` is populated with the user's language once that's loaded. The language is then used
 /// for displaying crash messages.
-fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
+async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
-   SimpleLogger::new().with_level(LevelFilter::Debug).env().init().map_err(|e| {
-      Error::CouldNotInitializeLogger {
+   SimpleLogger::new()
+      .with_level(LevelFilter::Warn)
+      .with_module_level("netcanv", LevelFilter::Debug)
+      .env()
+      .init()
+      .map_err(|e| Error::CouldNotInitializeLogger {
          error: e.to_string(),
-      }
-   })?;
+      })?;
    log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
@@ -124,10 +122,6 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       } else {
          b
       };
-      // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
-      // our window apart from others.
-      #[cfg(target_os = "linux")]
-      let b = b.with_name("netcanv", "netcanv");
 
       b
    };
@@ -138,10 +132,11 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    // Build the render backend.
    log::debug!("initializing render backend");
-   let renderer =
-      Backend::new(window_builder, &event_loop).map_err(|e| Error::CouldNotInitializeBackend {
+   let renderer = Backend::new(window_builder, &event_loop).await.map_err(|e| {
+      Error::CouldNotInitializeBackend {
          error: e.to_string(),
-      })?;
+      }
+   })?;
    // Position and maximize the window.
    // NOTE: winit is a bit buggy and WindowBuilder::with_maximized does not
    // make window maximized, but Window::set_maximized does.
@@ -250,7 +245,8 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    });
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
    let default_panic_hook = std::panic::take_hook();
    std::panic::set_hook(Box::new(move |panic_info| {
       // Pretty panic messages are only enabled in release mode, as they hinder debugging.
@@ -269,7 +265,7 @@ fn main() {
    }));
 
    let mut language = None;
-   match inner_main(&mut language) {
+   match inner_main(&mut language).await {
       Ok(()) => (),
       Err(payload) => {
          let mut message = String::new();

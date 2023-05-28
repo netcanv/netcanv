@@ -1,0 +1,12 @@
+[package]
+name = "netcanv-renderer-wgpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.40"
+bytemuck = "1.13.1"
+wgpu = "0.16.1"
+winit = { version = "0.28.6", features = ["serde"] }
+
+netcanv-renderer = { path = "../netcanv-renderer" }
