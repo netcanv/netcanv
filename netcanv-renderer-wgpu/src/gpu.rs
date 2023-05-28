@@ -1,5 +1,8 @@
+use std::cell::Cell;
+
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
+use wgpu::{CommandEncoder, TextureView};
 use winit::dpi::PhysicalSize;
 
 /// Common GPU state.
@@ -9,13 +12,37 @@ pub struct Gpu {
    pub device: wgpu::Device,
    pub queue: wgpu::Queue,
 
-   pub uniform_buffer: wgpu::Buffer,
+   pub scene_uniform_buffer: wgpu::Buffer,
+   pub depth_buffer: wgpu::Texture,
+
+   pub current_render_target: Option<TextureView>,
+
+   pub depth_index_counter: Cell<u32>,
 }
 
 impl Gpu {
-   pub fn handle_resize(&self, window_size: PhysicalSize<u32>) {
+   pub fn create_depth_buffer(device: &wgpu::Device, size: PhysicalSize<u32>) -> wgpu::Texture {
+      device.create_texture(&wgpu::TextureDescriptor {
+         label: Some("Scene Depth Buffer"),
+         size: wgpu::Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 1,
+         },
+         mip_level_count: 1,
+         sample_count: 1,
+         dimension: wgpu::TextureDimension::D2,
+         format: wgpu::TextureFormat::Depth24Plus,
+         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+         view_formats: &[],
+      })
+   }
+
+   pub fn handle_resize(&mut self, window_size: PhysicalSize<u32>) {
       self.configure_surface(window_size);
-      self.upload_uniforms(window_size);
+      self.update_scene_uniforms(window_size);
+      self.depth_buffer.destroy();
+      self.depth_buffer = Self::create_depth_buffer(&self.device, window_size);
    }
 
    fn configure_surface(&self, size: PhysicalSize<u32>) {
@@ -41,14 +68,14 @@ impl Gpu {
       );
    }
 
-   fn upload_uniforms(&self, window_size: PhysicalSize<u32>) {
+   fn update_scene_uniforms(&self, window_size: PhysicalSize<u32>) {
       let width = window_size.width as f32;
       let height = window_size.height as f32;
 
       self.queue.write_buffer(
-         &self.uniform_buffer,
+         &self.scene_uniform_buffer,
          0,
-         bytemuck::bytes_of(&Uniforms {
+         bytemuck::bytes_of(&SceneUniforms {
             transform: Mat3A::from_cols(
                vec3a(2.0 / width, 0.0, 0.0),
                vec3a(0.0, -2.0 / height, 0.0),
@@ -57,13 +84,23 @@ impl Gpu {
          }),
       )
    }
+
+   pub fn next_depth_index(&self) -> u32 {
+      let index = self.depth_index_counter.get();
+      self.depth_index_counter.set(index.saturating_add(1));
+      index
+   }
+
+   pub fn render_target(&self) -> &TextureView {
+      self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
+   }
 }
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct Uniforms {
+pub struct SceneUniforms {
    pub transform: Mat3A,
 }
 
-unsafe impl Zeroable for Uniforms {}
-unsafe impl Pod for Uniforms {}
+unsafe impl Zeroable for SceneUniforms {}
+unsafe impl Pod for SceneUniforms {}

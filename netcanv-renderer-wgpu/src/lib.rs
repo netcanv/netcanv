@@ -1,14 +1,16 @@
-use glam::vec2;
-use gpu::{Gpu, Uniforms};
-use immediate_geometry::{ImmediateGeometry, Vertex};
+use std::cell::Cell;
+
+use gpu::{Gpu, SceneUniforms};
 use netcanv_renderer::paws::Ui;
+use rounded_rects::RoundedRects;
 
 pub use winit;
 
+mod common;
 mod error;
 mod gpu;
-mod immediate_geometry;
 mod rendering;
+mod rounded_rects;
 
 use anyhow::Context;
 use winit::dpi::PhysicalSize;
@@ -24,7 +26,7 @@ pub struct WgpuBackend {
    // TODO: We should have this be event-driven instead of polling every frame.
    context_size: PhysicalSize<u32>,
 
-   immediate_geometry: ImmediateGeometry,
+   rounded_rects: RoundedRects,
 }
 
 impl WgpuBackend {
@@ -57,25 +59,30 @@ impl WgpuBackend {
          None,
       ).await.context("Failed to acquire graphics device. Try updating your graphics drivers. If that doesn't work, your hardware may be too old to run NetCanv.")?;
 
-      let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+      let scene_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
          label: Some("Immediate Geometry Uniform Buffer"),
-         size: std::mem::size_of::<Uniforms>() as wgpu::BufferAddress,
+         size: std::mem::size_of::<SceneUniforms>() as wgpu::BufferAddress,
          usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
          mapped_at_creation: false,
       });
 
-      let gpu = Gpu {
+      let depth_buffer = Gpu::create_depth_buffer(&device, window.inner_size());
+
+      let mut gpu = Gpu {
          surface,
          adapter,
          device,
          queue,
-         uniform_buffer,
+         scene_uniform_buffer,
+         depth_buffer,
+         current_render_target: None,
+         depth_index_counter: Cell::new(0),
       };
       gpu.handle_resize(window.inner_size());
 
       let context_size = window.inner_size();
       Ok(Self {
-         immediate_geometry: ImmediateGeometry::new(&gpu),
+         rounded_rects: RoundedRects::new(&gpu),
 
          window,
          gpu,
@@ -110,29 +117,15 @@ impl UiRenderFrame for Ui<WgpuBackend> {
       let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
          label: Some("Render Pass Encoder"),
       });
-      {
-         self.immediate_geometry.draw(
-            "Hello Triangle",
-            &self.gpu,
-            &mut encoder,
-            &frame_texture,
-            &[
-               Vertex {
-                  position: vec2(0.0, 0.0),
-               },
-               Vertex {
-                  position: vec2(32.0, 0.0),
-               },
-               Vertex {
-                  position: vec2(0.0, 32.0),
-               },
-            ],
-         );
-      }
+      self.gpu.current_render_target = Some(frame_texture);
+      self.gpu.depth_index_counter.set(0);
+
+      f(self);
+      self.flush(&mut encoder);
+
       self.gpu.queue.submit([encoder.finish()]);
       frame.present();
 
-      f(self);
       Ok(())
    }
 }

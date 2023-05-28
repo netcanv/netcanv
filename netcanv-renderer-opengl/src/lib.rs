@@ -90,7 +90,10 @@ impl OpenGlBackend {
    }
 
    /// Creates a new OpenGL renderer.
-   pub fn new(window_builder: WindowBuilder, event_loop: &EventLoop<()>) -> anyhow::Result<Self> {
+   pub async fn new(
+      window_builder: WindowBuilder,
+      event_loop: &EventLoop<()>,
+   ) -> anyhow::Result<Self> {
       let context = Self::build_context(window_builder, event_loop)?;
       let context = unsafe { context.make_current().unwrap() };
       let gl = unsafe {

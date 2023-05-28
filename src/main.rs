@@ -44,6 +44,7 @@
 pub extern crate self as netcanv;
 
 use std::fmt::Write;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -51,17 +52,17 @@ use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::config::WindowConfig;
+use crate::logger::Logger;
 use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use instant::{Duration, Instant};
-use log::{warn, LevelFilter};
+use log::{debug, info, warn, LevelFilter};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
-use simple_logger::SimpleLogger;
 
 use crate::backend::UiRenderFrame;
 
@@ -78,6 +79,7 @@ mod color;
 mod config;
 mod image_coder;
 mod keymap;
+mod logger;
 mod net;
 mod paint_canvas;
 mod project_file;
@@ -99,21 +101,16 @@ pub use errors::*;
 /// for displaying crash messages.
 async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
-   SimpleLogger::new()
-      .with_level(LevelFilter::Warn)
-      .with_module_level("netcanv", LevelFilter::Debug)
-      .env()
-      .init()
-      .map_err(|e| Error::CouldNotInitializeLogger {
-         error: e.to_string(),
-      })?;
-   log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
+   Logger::init(Some(Path::new("netcanv.log"))).map_err(|e| Error::CouldNotInitializeLogger {
+      error: e.to_string(),
+   })?;
+   info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
    config::load_or_create()?;
 
    // Set up the winit event loop and open the window.
-   log::debug!("opening window");
+   debug!("opening window");
    let event_loop = EventLoop::new();
    let window_builder = {
       let b = WindowBuilder::new()
@@ -134,7 +131,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let color_scheme = ColorScheme::from(config().ui.color_scheme);
 
    // Build the render backend.
-   log::debug!("initializing render backend");
+   debug!("initializing render backend");
    let renderer = Backend::new(window_builder, &event_loop).await.map_err(|e| {
       Error::CouldNotInitializeBackend {
          error: e.to_string(),
@@ -152,7 +149,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
-   log::debug!("loading assets");
+   debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
@@ -169,7 +166,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       }
    }
 
-   log::debug!("init done! starting event loop");
+   debug!("init done! starting event loop");
 
    let (mut last_window_size, mut last_window_position) = {
       if let Some(window) = &config().window {

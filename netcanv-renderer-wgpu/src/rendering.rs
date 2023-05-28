@@ -1,25 +1,12 @@
 use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 
+use crate::common::vector_to_vec2;
 use crate::WgpuBackend;
 
-pub struct Font;
-
-impl netcanv_renderer::Font for Font {
-   fn with_size(&self, new_size: f32) -> Self {
-      Font
-   }
-
-   fn size(&self) -> f32 {
-      0.0
-   }
-
-   fn height(&self) -> f32 {
-      0.0
-   }
-
-   fn text_width(&self, text: &str) -> f32 {
-      0.0
+impl WgpuBackend {
+   pub(crate) fn flush(&mut self, encoder: &mut wgpu::CommandEncoder) {
+      self.rounded_rects.flush(&self.gpu, encoder);
    }
 }
 
@@ -34,7 +21,9 @@ impl Renderer for WgpuBackend {
 
    fn clip(&mut self, rect: Rect) {}
 
-   fn fill(&mut self, rect: Rect, color: Color, radius: f32) {}
+   fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
+      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color);
+   }
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {}
 
@@ -50,32 +39,6 @@ impl Renderer for WgpuBackend {
    ) -> f32 {
       0.0
    }
-}
-
-pub struct Image;
-
-impl netcanv_renderer::Image for Image {
-   fn colorized(&self, color: Color) -> Self {
-      Image
-   }
-
-   fn size(&self) -> (u32, u32) {
-      (0, 0)
-   }
-}
-
-pub struct Framebuffer;
-
-impl netcanv_renderer::Framebuffer for Framebuffer {
-   fn size(&self) -> (u32, u32) {
-      (0, 0)
-   }
-
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {}
-
-   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]) {}
-
-   fn set_scaling_filter(&mut self, filter: ScalingFilter) {}
 }
 
 impl RenderBackend for WgpuBackend {
@@ -106,4 +69,50 @@ impl RenderBackend for WgpuBackend {
    fn scale(&mut self, scale: Vector) {}
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
+}
+
+pub struct Image;
+
+impl netcanv_renderer::Image for Image {
+   fn colorized(&self, color: Color) -> Self {
+      Image
+   }
+
+   fn size(&self) -> (u32, u32) {
+      (0, 0)
+   }
+}
+
+pub struct Framebuffer;
+
+impl netcanv_renderer::Framebuffer for Framebuffer {
+   fn size(&self) -> (u32, u32) {
+      (0, 0)
+   }
+
+   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {}
+
+   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]) {}
+
+   fn set_scaling_filter(&mut self, filter: ScalingFilter) {}
+}
+
+pub struct Font;
+
+impl netcanv_renderer::Font for Font {
+   fn with_size(&self, new_size: f32) -> Self {
+      Font
+   }
+
+   fn size(&self) -> f32 {
+      0.0
+   }
+
+   fn height(&self) -> f32 {
+      0.0
+   }
+
+   fn text_width(&self, text: &str) -> f32 {
+      0.0
+   }
 }
