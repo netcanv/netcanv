@@ -1,6 +1,5 @@
 use std::cell::Cell;
 
-use common::paws_color_to_wgpu;
 use gpu::{Gpu, SceneUniforms};
 use netcanv_renderer::paws::{rgba, Color, Ui};
 use rounded_rects::RoundedRects;

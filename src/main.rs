@@ -57,7 +57,7 @@ use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use instant::{Duration, Instant};
-use log::{debug, info, warn, LevelFilter};
+use log::{debug, info, warn};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};

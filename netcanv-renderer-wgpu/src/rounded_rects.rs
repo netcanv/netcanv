@@ -1,12 +1,11 @@
 use std::mem::size_of;
-use std::num::NonZeroU32;
 
 use bytemuck::{offset_of, Pod, Zeroable};
 use glam::{vec4, Vec2, Vec4};
 use netcanv_renderer::paws::{Color, Rect};
 use wgpu::include_wgsl;
 
-use crate::common::{paws_color_to_vec4, paws_color_to_wgpu, vector_to_vec2};
+use crate::common::vector_to_vec2;
 use crate::gpu::Gpu;
 
 /// Pipeline for drawing rounded rectangles.
@@ -33,13 +32,8 @@ impl RoundedRects {
       let vertex_buffer = Self::create_vertex_buffer(gpu, Self::RESERVED_VERTEX_COUNT);
       let rect_data_buffer = Self::create_rect_data_buffer(gpu, Self::RESERVED_RECT_COUNT as usize);
 
-      let (bind_group, render_pipeline) = Self::create_pipeline(
-         gpu,
-         &shader,
-         texture_format,
-         &rect_data_buffer,
-         Self::RESERVED_RECT_COUNT,
-      );
+      let (bind_group, render_pipeline) =
+         Self::create_pipeline(gpu, &shader, texture_format, &rect_data_buffer);
 
       Self {
          shader,
@@ -75,7 +69,6 @@ impl RoundedRects {
       shader: &wgpu::ShaderModule,
       texture_format: wgpu::TextureFormat,
       rect_data_buffer: &wgpu::Buffer,
-      rect_count: u32,
    ) -> (wgpu::BindGroup, wgpu::RenderPipeline) {
       let bind_group_layout =
          gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -170,16 +163,11 @@ impl RoundedRects {
 
    fn update_pipeline(&mut self, gpu: &Gpu) {
       let texture_format = gpu.surface_format();
-      (self.bind_group, self.render_pipeline) = Self::create_pipeline(
-         gpu,
-         &self.shader,
-         texture_format,
-         &self.rect_data_buffer,
-         self.rect_data.len() as u32,
-      );
+      (self.bind_group, self.render_pipeline) =
+         Self::create_pipeline(gpu, &self.shader, texture_format, &self.rect_data_buffer);
    }
 
-   pub fn add(&mut self, depth_index: u32, rect: Rect, color: Color) {
+   pub fn add(&mut self, depth_index: u32, rect: Rect, color: Color, corner_radius: f32) {
       assert!(
          self.rect_data.len() <= self.rect_data.capacity(),
          "too many rectangles without flushing"
@@ -190,7 +178,7 @@ impl RoundedRects {
          color,
          depth_index,
          rect: vec4(rect.left(), rect.top(), rect.right(), rect.bottom()),
-         corner_radius: 0.0,
+         corner_radius,
       });
       self.vertices.extend_from_slice(&[
          vertex(rect_index, vector_to_vec2(rect.top_right())),

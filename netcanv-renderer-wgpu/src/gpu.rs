@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
-use wgpu::{CommandEncoder, TextureFormat, TextureView};
+use wgpu::{TextureFormat, TextureView};
 use winit::dpi::PhysicalSize;
 
 /// Common GPU state.

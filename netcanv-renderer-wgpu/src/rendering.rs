@@ -29,7 +29,7 @@ impl Renderer for WgpuBackend {
    fn clip(&mut self, rect: Rect) {}
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color);
+      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius);
    }
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {}
