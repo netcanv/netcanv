@@ -2,8 +2,6 @@ use image::imageops::FilterType;
 use instant::Instant;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
-use std::sync::Arc;
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
@@ -12,7 +10,7 @@ use crate::config::config;
 use crate::keymap::KeyBinding;
 use image::codecs::png::PngEncoder;
 use image::io::Reader;
-use image::{ColorType, ImageFormat, RgbaImage, ImageEncoder};
+use image::{ColorType, ImageEncoder, ImageFormat, RgbaImage};
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
@@ -81,7 +79,6 @@ pub struct SelectionTool {
    selection: Selection,
    peer_selections: HashMap<PeerId, PeerSelection>,
 
-   runtime: Arc<Runtime>,
    paste: Option<(
       Point,
       oneshot::Receiver<RgbaImage>,
@@ -98,7 +95,7 @@ impl SelectionTool {
    /// The radius of handles for resizing the selection contents.
    const HANDLE_RADIUS: f32 = 4.0;
 
-   pub fn new(renderer: &mut Backend, runtime: Arc<Runtime>) -> Self {
+   pub fn new(renderer: &mut Backend) -> Self {
       let (peer_pastes_tx, peer_pastes_rx) = mpsc::unbounded_channel();
       Self {
          icons: Icons {
@@ -125,7 +122,6 @@ impl SelectionTool {
          selection: Selection::new(),
          peer_selections: HashMap::new(),
 
-         runtime,
          paste: None,
          peer_pastes_tx,
          peer_pastes_rx,
@@ -211,7 +207,7 @@ impl SelectionTool {
       let (image_tx, image_rx) = oneshot::channel();
       let (bytes_tx, bytes_rx) = oneshot::channel();
       self.paste = Some((position, image_rx, bytes_rx));
-      self.runtime.spawn_blocking(|| {
+      tokio::task::spawn_blocking(|| {
          log::debug!("reading image from clipboard");
          let image = catch!(clipboard::paste_image());
          let image = if image.width() > Selection::MAX_SIZE || image.height() > Selection::MAX_SIZE
@@ -674,7 +670,7 @@ impl Tool for SelectionTool {
             log::debug!("{} pasted image ({} bytes of data)", sender, data.len());
             let tx = self.peer_pastes_tx.clone();
             self.ongoing_paste_jobs.insert(sender);
-            self.runtime.spawn_blocking(move || match Self::decode_image(&data) {
+            tokio::task::spawn_blocking(move || match Self::decode_image(&data) {
                Ok(image) => {
                   let _ = tx.send((sender, Some(image)));
                }

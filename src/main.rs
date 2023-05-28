@@ -44,15 +44,18 @@
 pub extern crate self as netcanv;
 
 use std::fmt::Write;
+use std::sync::Arc;
 
 use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
 use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::config::WindowConfig;
+use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
-use log::LevelFilter;
+use instant::{Duration, Instant};
+use log::{warn, LevelFilter};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
@@ -151,8 +154,10 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Load all the assets, and start the first app state.
    log::debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
+   let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
-   let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
+   let mut app: Option<Box<dyn AppState>> =
+      Some(Box::new(lobby::State::new(assets, Arc::clone(&socket_system))) as _);
    let mut input = Input::new();
 
    // Initialize the clipboard because we now have a window handle and translation strings.
@@ -225,6 +230,9 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
          }
 
          Event::LoopDestroyed => {
+            // This is a bit cursed, but works.
+            Arc::clone(&socket_system).shutdown();
+
             let window = ui.window();
             let position = last_window_position;
             let size = last_window_size;
@@ -245,25 +253,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    });
 }
 
-#[tokio::main]
-async fn main() {
-   let default_panic_hook = std::panic::take_hook();
-   std::panic::set_hook(Box::new(move |panic_info| {
-      // Pretty panic messages are only enabled in release mode, as they hinder debugging.
-      #[cfg(not(debug_assertions))]
-      {
-         let mut message = heapless::String::<8192>::new();
-         let _ = write!(message, "Oh no! A fatal error occured.\n{}", panic_info);
-         let _ = write!(message, "\n\nThis is most definitely a bug, so please file an issue on GitHub. https://github.com/liquidev/netcanv");
-         let _ = MessageDialog::new()
-            .set_title("NetCanv - Fatal Error")
-            .set_text(&message)
-            .set_type(MessageType::Error)
-            .show_alert();
-      }
-      default_panic_hook(panic_info);
-   }));
-
+async fn async_main() {
    let mut language = None;
    match inner_main(&mut language).await {
       Ok(()) => (),
@@ -291,5 +281,39 @@ async fn main() {
             .show_alert()
             .unwrap();
       }
+   }
+}
+
+fn main() {
+   let default_panic_hook = std::panic::take_hook();
+   std::panic::set_hook(Box::new(move |panic_info| {
+      // Pretty panic messages are only enabled in release mode, as they hinder debugging.
+      #[cfg(not(debug_assertions))]
+      {
+         let mut message = heapless::String::<8192>::new();
+         let _ = write!(message, "Oh no! A fatal error occured.\n{}", panic_info);
+         let _ = write!(message, "\n\nThis is most definitely a bug, so please file an issue on GitHub. https://github.com/liquidev/netcanv");
+         let _ = MessageDialog::new()
+            .set_title("NetCanv - Fatal Error")
+            .set_text(&message)
+            .set_type(MessageType::Error)
+            .show_alert();
+      }
+      default_panic_hook(panic_info);
+   }));
+
+   let runtime = tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()
+      .expect("cannot start async runtime");
+
+   runtime.block_on(async_main());
+
+   // Don't want the app to hang forever if any background threads don't manage to shut down quickly.
+   let shutdown_start = Instant::now();
+   runtime.shutdown_timeout(Duration::from_secs(2));
+   let shutdown_elapsed = shutdown_start.elapsed();
+   if shutdown_elapsed > Duration::from_millis(100) {
+      warn!("background tasks took a long time to shut down ({shutdown_elapsed:?}) - perhaps a missing or incomplete Drop?");
    }
 }

@@ -16,7 +16,6 @@ use netcanv_renderer::paws::{
 };
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
-use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use crate::app::paint::actions::ActionArgs;
@@ -84,8 +83,7 @@ struct EncodeChannels {
 /// The paint app state.
 pub struct State {
    assets: Assets,
-   _socket_system: Arc<SocketSystem>,
-   runtime: Arc<Runtime>,
+   socket_system: Arc<SocketSystem>,
    project_file: ProjectFile,
 
    paint_canvas: PaintCanvas,
@@ -154,27 +152,19 @@ impl State {
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
    ) -> Result<Self, (netcanv::Error, Assets)> {
-      let runtime = tokio::runtime::Builder::new_multi_thread()
-         .max_blocking_threads(16)
-         .enable_all()
-         .build()
-         .expect("Cannot start async compute runtime");
-      let runtime = Arc::new(runtime);
-
       // Set up decoding supervisor thread.
-      let (xcoder, channels) = ImageCoder::new(Arc::clone(&runtime));
+      let (xcoder, channels) = ImageCoder::new();
 
       let mut wm = WindowManager::new();
       let mut this = Self {
          assets,
-         _socket_system: socket_system,
+         socket_system,
 
          paint_canvas: PaintCanvas::new(),
          xcoder,
          xcoder_channels: channels,
          cache_layer: CacheLayer::new(),
-         project_file: ProjectFile::new(Arc::clone(&runtime)),
-         runtime,
+         project_file: ProjectFile::new(),
 
          actions: Vec::new(),
 
@@ -226,8 +216,7 @@ impl State {
 
    /// Registers all the tools.
    fn register_tools(&mut self, renderer: &mut Backend) {
-      let _selection =
-         self.toolbar.add_tool(SelectionTool::new(renderer, Arc::clone(&self.runtime)));
+      let _selection = self.toolbar.add_tool(SelectionTool::new(renderer));
       let brush = self.toolbar.add_tool(BrushTool::new(renderer));
       let _eyedropper = self.toolbar.add_tool(EyedropperTool::new(renderer));
 
@@ -1004,7 +993,7 @@ impl AppState for State {
 
    fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {
       if self.fatal_error {
-         Box::new(lobby::State::new(self.assets))
+         Box::new(lobby::State::new(self.assets, self.socket_system))
       } else {
          self
       }

@@ -21,7 +21,6 @@ use crate::Error;
 
 /// Runtime for managing active connections.
 pub struct SocketSystem {
-   runtime: tokio::runtime::Runtime,
    quitters: Mutex<Vec<SocketQuitter>>,
 }
 
@@ -29,13 +28,11 @@ impl SocketSystem {
    /// Starts the socket system.
    pub fn new() -> Arc<Self> {
       Arc::new(Self {
-         runtime: tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
          quitters: Mutex::new(Vec::new()),
       })
    }
 
-   /// Resolves the socket addresses the given hostname could refer to.
-   fn resolve_address_with_default_port(url: &str) -> netcanv::Result<Url> {
+   fn parse_url(url: &str) -> netcanv::Result<Url> {
       let url = if !url.starts_with("ws://") && !url.starts_with("wss://") {
          format!("wss://{}", url)
       } else {
@@ -48,7 +45,7 @@ impl SocketSystem {
    }
 
    async fn connect_inner(self: Arc<Self>, url: String) -> netcanv::Result<Socket> {
-      let address = Self::resolve_address_with_default_port(&url)?;
+      let address = Self::parse_url(&url)?;
       let (stream, _) = connect_async(address).await?;
       let (sink, mut stream) = stream.split();
       log::info!("connection established");
@@ -76,7 +73,7 @@ impl SocketSystem {
       log::debug!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = (quit_tx.clone(), quit_tx.subscribe());
-      let recv_join_handle = self.runtime.spawn(async move {
+      let recv_join_handle = tokio::spawn(async move {
          if let Err(error) =
             Socket::receiver_loop(stream, recv_tx, recv_quit_tx, recv_quit_rx).await
          {
@@ -87,7 +84,7 @@ impl SocketSystem {
       log::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
       let send_quit_rx = quit_tx.subscribe();
-      let send_join_handle = self.runtime.spawn(async move {
+      let send_join_handle = tokio::spawn(async move {
          if let Err(error) = Socket::sender_loop(sink, send_rx, send_quit_rx).await {
             log::error!("sender loop error: {:?}", error);
          }
@@ -112,25 +109,29 @@ impl SocketSystem {
       log::info!("connecting to {}", hostname);
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
-      self.runtime.spawn(async move {
+      tokio::spawn(async move {
          if socket_tx.send(self2.connect_inner(hostname).await).is_err() {
             panic!("Could not send ready socket to receiver");
          }
       });
       socket_rx
    }
+
+   pub fn shutdown(self: Arc<Self>) {
+      log::info!("shutting down socket system");
+      tokio::spawn(async move {
+         let mut handles = self.quitters.lock().await;
+         for handle in handles.drain(..) {
+            tokio::spawn(async move {
+               handle.quit().await;
+            });
+         }
+      });
+   }
 }
 
 impl Drop for SocketSystem {
-   fn drop(&mut self) {
-      log::info!("cleaning up remaining sockets");
-      self.runtime.block_on(async {
-         let mut handles = self.quitters.lock().await;
-         for handle in handles.drain(..) {
-            handle.quit().await;
-         }
-      })
-   }
+   fn drop(&mut self) {}
 }
 
 pub struct Socket {

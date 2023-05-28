@@ -1,11 +1,9 @@
 use std::io::Cursor;
-use std::sync::Arc;
 
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::codecs::webp::{WebPDecoder, WebPEncoder, WebPQuality};
 use ::image::{ColorType, ImageDecoder, Rgba, RgbaImage};
 use image::{DynamicImage, ImageEncoder};
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
@@ -19,7 +17,6 @@ pub struct ImageCoderChannels {
 }
 
 pub struct ImageCoder {
-   runtime: Arc<Runtime>,
    decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 
    chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
@@ -31,17 +28,15 @@ impl ImageCoder {
    /// transmission.
    const MAX_PNG_SIZE: usize = 32 * 1024;
 
-   pub fn new(runtime: Arc<Runtime>) -> (Self, ImageCoderChannels) {
+   pub fn new() -> (Self, ImageCoderChannels) {
       let (chunks_to_decode_tx, chunks_to_decode_rx) = mpsc::unbounded_channel();
       let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
       let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
       let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
 
-      let decode_join_handle = runtime.spawn({
-         let runtime = Arc::clone(&runtime);
+      let decode_join_handle = tokio::spawn({
          async move {
             ImageCoder::chunk_decoding_loop(
-               runtime,
                chunks_to_decode_rx,
                decoded_chunks_tx,
                decoder_quit_rx,
@@ -52,7 +47,6 @@ impl ImageCoder {
 
       (
          Self {
-            runtime,
             decoder_quitter: Some((decoder_quit_tx, decode_join_handle)),
 
             chunks_to_decode_tx,
@@ -158,7 +152,6 @@ impl ImageCoder {
 
    /// The decoding supervisor thread.
    async fn chunk_decoding_loop(
-      runtime: Arc<Runtime>,
       mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
       output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
       mut quit: oneshot::Receiver<()>,
@@ -171,7 +164,7 @@ impl ImageCoder {
             data = input.recv() => {
                if let Some((chunk_position, image_data)) = data {
                   let output = output.clone();
-                  runtime.spawn_blocking(move || match ImageCoder::decode_network_data(&image_data) {
+                  tokio::task::spawn_blocking(move || match ImageCoder::decode_network_data(&image_data) {
                      Ok(image) => {
                         // Doesn't matter if the receiving half is closed.
                         let _ = output.send((chunk_position, image));
@@ -202,7 +195,7 @@ impl ImageCoder {
       // Otherwise, we can start encoding the chunk image.
       let encoded_chunks_tx = self.encoded_chunks_tx.clone();
 
-      self.runtime.spawn(async move {
+      tokio::spawn(async move {
          log::debug!("encoding image data for chunk {:?}", chunk_position);
          let image_data = ImageCoder::encode_network_data(image).await;
          log::debug!("encoding done for chunk {:?}", chunk_position);
@@ -243,10 +236,10 @@ impl ImageCoder {
 
 impl Drop for ImageCoder {
    fn drop(&mut self) {
-      self.runtime.block_on(async {
-         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
-         let _ = channel.send(());
+      let (channel, join_handle) = self.decoder_quitter.take().unwrap();
+      let _ = channel.send(());
+      tokio::runtime::Handle::current().block_on(async {
          let _ = join_handle.await;
-      });
+      })
    }
 }
