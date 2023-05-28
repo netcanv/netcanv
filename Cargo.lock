@@ -1009,6 +1009,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b8509e6791516e81c1a630d0bd7fbac36d2fa8712a9da8662e716b52d5051ca"
 
 [[package]]
+name = "glam"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad83ab008a4fa3b31dfa713dd41b5a9bdea1e94e4cf1e2fc274ffbd49b0271d3"
+
+[[package]]
 name = "glow"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,7 +1764,7 @@ name = "netcanv-renderer-opengl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "glam",
+ "glam 0.19.0",
  "glow 0.11.2",
  "glutin",
  "memoffset",
@@ -1774,6 +1780,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
+ "glam 0.24.0",
  "netcanv-renderer",
  "wgpu",
  "winit 0.28.6",

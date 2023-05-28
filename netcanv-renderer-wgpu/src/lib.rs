@@ -1,5 +1,5 @@
-use std::any;
-
+use bytemuck::{Pod, Zeroable};
+use glam::{vec2, vec3a, Mat3, Mat3A, Mat4};
 use netcanv_renderer::paws::Ui;
 use wgpu::util::DeviceExt;
 pub use winit;
@@ -8,10 +8,20 @@ mod error;
 mod rendering;
 
 use anyhow::Context;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
 pub use rendering::*;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+struct Uniforms {
+   transform: Mat3A,
+}
+
+unsafe impl Zeroable for Uniforms {}
+unsafe impl Pod for Uniforms {}
 
 pub struct WgpuBackend {
    window: Window,
@@ -22,7 +32,10 @@ pub struct WgpuBackend {
    device: wgpu::Device,
    queue: wgpu::Queue,
 
+   context_size: PhysicalSize<u32>,
+
    vertex_buffer: wgpu::Buffer,
+   uniform_buffer: wgpu::Buffer,
    bind_group: wgpu::BindGroup,
    render_pipeline: wgpu::RenderPipeline,
 }
@@ -62,13 +75,29 @@ impl WgpuBackend {
 
       let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
          label: Some("Immediate Geometry Vertex Buffer"),
-         contents: bytemuck::cast_slice(&[-0.5_f32, -0.5, 0.5, -0.5, 0.0, 0.5]),
+         contents: bytemuck::cast_slice(&[0.0_f32, 0.0, 32.0, 0.0, 0.0, 32.0]),
          usage: wgpu::BufferUsages::VERTEX,
+      });
+
+      let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+         label: Some("Immediate Geometry Uniform Buffer"),
+         size: std::mem::size_of::<Uniforms>() as wgpu::BufferAddress,
+         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+         mapped_at_creation: false,
       });
 
       let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
          label: Some("Immediate Geometry Bind Group Layout"),
-         entries: &[],
+         entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX,
+            ty: wgpu::BindingType::Buffer {
+               ty: wgpu::BufferBindingType::Uniform,
+               has_dynamic_offset: false,
+               min_binding_size: None,
+            },
+            count: None,
+         }],
       });
       let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
          label: Some("Immediate Geometry Pipeline Layout"),
@@ -78,7 +107,10 @@ impl WgpuBackend {
       let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
          label: Some("Immediate Geometry Bind Group"),
          layout: &bind_group_layout,
-         entries: &[],
+         entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+         }],
       });
 
       let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -113,7 +145,8 @@ impl WgpuBackend {
          multiview: None,
       });
 
-      let mut renderer = Self {
+      let context_size = window.inner_size();
+      let renderer = Self {
          window,
          instance,
          surface,
@@ -121,16 +154,20 @@ impl WgpuBackend {
          device,
          queue,
 
+         context_size,
+
          vertex_buffer,
+         uniform_buffer,
          bind_group,
          render_pipeline,
       };
       renderer.configure_surface();
+      renderer.upload_uniforms();
 
       Ok(renderer)
    }
 
-   fn configure_surface(&mut self) {
+   fn configure_surface(&self) {
       let size = self.window.inner_size();
       let swapchain_capabilities = self.surface.get_capabilities(&self.adapter);
       let swapchain_format = swapchain_capabilities.formats[0];
@@ -148,6 +185,24 @@ impl WgpuBackend {
       );
    }
 
+   fn upload_uniforms(&self) {
+      let window_size = self.window.inner_size();
+      let width = window_size.width as f32;
+      let height = window_size.height as f32;
+
+      self.queue.write_buffer(
+         &self.uniform_buffer,
+         0,
+         bytemuck::bytes_of(&Uniforms {
+            transform: Mat3A::from_cols(
+               vec3a(2.0 / width, 0.0, 0.0),
+               vec3a(0.0, -2.0 / height, 0.0),
+               vec3a(-1.0, 1.0, 0.0),
+            ),
+         }),
+      )
+   }
+
    pub fn window(&self) -> &Window {
       &self.window
    }
@@ -159,6 +214,13 @@ pub trait UiRenderFrame {
 
 impl UiRenderFrame for Ui<WgpuBackend> {
    fn render_frame(&mut self, f: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
+      let window_size = self.window.inner_size();
+      if self.context_size != window_size {
+         self.configure_surface();
+         self.upload_uniforms();
+         self.context_size = window_size;
+      }
+
       let frame =
          self.surface.get_current_texture().context("Failed to acquire next swap chain texture")?;
       let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
