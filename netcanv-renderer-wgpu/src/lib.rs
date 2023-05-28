@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{vec2, vec3a, Mat3, Mat3A, Mat4};
+use glam::{vec3a, Mat3A};
 use netcanv_renderer::paws::Ui;
 use wgpu::util::DeviceExt;
 pub use winit;
@@ -26,12 +26,12 @@ unsafe impl Pod for Uniforms {}
 pub struct WgpuBackend {
    window: Window,
 
-   instance: wgpu::Instance,
    surface: wgpu::Surface,
    adapter: wgpu::Adapter,
    device: wgpu::Device,
    queue: wgpu::Queue,
 
+   // TODO: We should have this be event-driven instead of polling every frame.
    context_size: PhysicalSize<u32>,
 
    vertex_buffer: wgpu::Buffer,
@@ -148,7 +148,6 @@ impl WgpuBackend {
       let context_size = window.inner_size();
       let renderer = Self {
          window,
-         instance,
          surface,
          adapter,
          device,
@@ -169,16 +168,22 @@ impl WgpuBackend {
 
    fn configure_surface(&self) {
       let size = self.window.inner_size();
-      let swapchain_capabilities = self.surface.get_capabilities(&self.adapter);
-      let swapchain_format = swapchain_capabilities.formats[0];
+      let capabilities = self.surface.get_capabilities(&self.adapter);
+      let format = capabilities.formats[0];
       self.surface.configure(
          &self.device,
          &wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: swapchain_format,
+            format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Mailbox,
+            // Choose the mode that has the lowest latency, because noone likes it when their
+            // brush acts all floaty.
+            present_mode: if capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+               wgpu::PresentMode::Mailbox
+            } else {
+               wgpu::PresentMode::AutoVsync
+            },
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
          },
