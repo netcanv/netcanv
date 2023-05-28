@@ -2,13 +2,14 @@ use std::cell::Cell;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
-use wgpu::{CommandEncoder, TextureView};
+use wgpu::{CommandEncoder, TextureFormat, TextureView};
 use winit::dpi::PhysicalSize;
 
 /// Common GPU state.
 pub struct Gpu {
    pub surface: wgpu::Surface,
    pub adapter: wgpu::Adapter,
+   pub capabilities: wgpu::SurfaceCapabilities,
    pub device: wgpu::Device,
    pub queue: wgpu::Queue,
 
@@ -45,9 +46,18 @@ impl Gpu {
       self.depth_buffer = Self::create_depth_buffer(&self.device, window_size);
    }
 
+   pub fn surface_format(&self) -> TextureFormat {
+      self
+         .capabilities
+         .formats
+         .iter()
+         .find(|format| !format.is_srgb())
+         .copied()
+         .unwrap_or(self.capabilities.formats[0])
+   }
+
    fn configure_surface(&self, size: PhysicalSize<u32>) {
-      let capabilities = self.surface.get_capabilities(&self.adapter);
-      let format = capabilities.formats[0];
+      let format = self.surface_format();
       self.surface.configure(
          &self.device,
          &wgpu::SurfaceConfiguration {
@@ -57,7 +67,7 @@ impl Gpu {
             height: size.height,
             // Choose the mode that has the lowest latency, because noone likes it when their
             // brush acts all floaty.
-            present_mode: if capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            present_mode: if self.capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
                wgpu::PresentMode::Mailbox
             } else {
                wgpu::PresentMode::AutoVsync

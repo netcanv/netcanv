@@ -1,7 +1,8 @@
 use std::cell::Cell;
 
+use common::paws_color_to_wgpu;
 use gpu::{Gpu, SceneUniforms};
-use netcanv_renderer::paws::Ui;
+use netcanv_renderer::paws::{rgba, Color, Ui};
 use rounded_rects::RoundedRects;
 
 pub use winit;
@@ -26,6 +27,7 @@ pub struct WgpuBackend {
    // TODO: We should have this be event-driven instead of polling every frame.
    context_size: PhysicalSize<u32>,
 
+   clear_color: Color,
    rounded_rects: RoundedRects,
 }
 
@@ -50,6 +52,8 @@ impl WgpuBackend {
             "Failed to find a graphics adapter. Please make sure your drivers are up to date",
          )?;
 
+      let capabilities = surface.get_capabilities(&adapter);
+
       let (device, queue) = adapter.request_device(
          &wgpu::DeviceDescriptor {
             label: None,
@@ -71,6 +75,7 @@ impl WgpuBackend {
       let mut gpu = Gpu {
          surface,
          adapter,
+         capabilities,
          device,
          queue,
          scene_uniform_buffer,
@@ -87,6 +92,7 @@ impl WgpuBackend {
          window,
          gpu,
 
+         clear_color: rgba(0, 0, 0, 0),
          context_size,
       })
    }

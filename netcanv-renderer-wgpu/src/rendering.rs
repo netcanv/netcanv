@@ -1,12 +1,19 @@
 use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 
-use crate::common::vector_to_vec2;
+use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::WgpuBackend;
 
 impl WgpuBackend {
    pub(crate) fn flush(&mut self, encoder: &mut wgpu::CommandEncoder) {
-      self.rounded_rects.flush(&self.gpu, encoder);
+      self.rounded_rects.flush(
+         &self.gpu,
+         encoder,
+         wgpu::Operations {
+            load: wgpu::LoadOp::Clear(paws_color_to_wgpu(self.clear_color)),
+            store: true,
+         },
+      );
    }
 }
 
@@ -60,7 +67,9 @@ impl RenderBackend for WgpuBackend {
 
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
 
-   fn clear(&mut self, color: Color) {}
+   fn clear(&mut self, color: Color) {
+      self.clear_color = color;
+   }
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {}
 
