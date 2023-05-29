@@ -44,7 +44,6 @@
 pub extern crate self as netcanv;
 
 use std::fmt::Write;
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -101,7 +100,7 @@ pub use errors::*;
 /// for displaying crash messages.
 async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
-   Logger::init(Some(Path::new("netcanv.log"))).map_err(|e| Error::CouldNotInitializeLogger {
+   Logger::init(None).map_err(|e| Error::CouldNotInitializeLogger {
       error: e.to_string(),
    })?;
    info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
