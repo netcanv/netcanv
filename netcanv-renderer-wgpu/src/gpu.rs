@@ -2,6 +2,7 @@ use std::cell::Cell;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
+use log::debug;
 use winit::dpi::PhysicalSize;
 
 /// Common GPU state.
@@ -53,6 +54,8 @@ impl Gpu {
          .capabilities
          .formats
          .iter()
+         // NOTE: Since our render results are in sRGB already, we don't want to perform any
+         // automatic conversion work on that after the fact.
          .find(|format| !format.is_srgb())
          .copied()
          .unwrap_or(self.capabilities.formats[0])
@@ -60,24 +63,23 @@ impl Gpu {
 
    fn configure_surface(&self, size: PhysicalSize<u32>) {
       let format = self.surface_format();
-      self.surface.configure(
-         &self.device,
-         &wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width: size.width,
-            height: size.height,
-            // Choose the mode that has the lowest latency, because noone likes it when their
-            // brush acts all floaty.
-            present_mode: if self.capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
-               wgpu::PresentMode::Mailbox
-            } else {
-               wgpu::PresentMode::AutoVsync
-            },
-            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-            view_formats: vec![],
+      let surface_configuration = wgpu::SurfaceConfiguration {
+         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+         format,
+         width: size.width,
+         height: size.height,
+         // Choose the mode that has the lowest latency, because noone likes it when their
+         // brush acts all floaty.
+         present_mode: if self.capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            wgpu::PresentMode::Mailbox
+         } else {
+            wgpu::PresentMode::AutoVsync
          },
-      );
+         alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+         view_formats: vec![],
+      };
+      debug!("using surface format: {surface_configuration:?}");
+      self.surface.configure(&self.device, &surface_configuration);
    }
 
    fn update_scene_uniforms(&self, window_size: PhysicalSize<u32>) {

@@ -50,11 +50,13 @@ use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
 use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
+use crate::cli::Cli;
 use crate::config::WindowConfig;
 use crate::logger::Logger;
 use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
+use clap::Parser;
 use instant::{Duration, Instant};
 use log::{debug, info, warn};
 use native_dialog::{MessageDialog, MessageType};
@@ -73,6 +75,7 @@ mod errors;
 mod app;
 mod assets;
 mod backend;
+mod cli;
 mod clipboard;
 mod color;
 mod config;
@@ -99,8 +102,10 @@ pub use errors::*;
 /// `language` is populated with the user's language once that's loaded. The language is then used
 /// for displaying crash messages.
 async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
+   let cli = Cli::parse();
+
    // Set up logging.
-   Logger::init(None).map_err(|e| Error::CouldNotInitializeLogger {
+   Logger::init(cli.log.as_deref()).map_err(|e| Error::CouldNotInitializeLogger {
       error: e.to_string(),
    })?;
    info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
@@ -131,7 +136,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    // Build the render backend.
    debug!("initializing render backend");
-   let renderer = Backend::new(window_builder, &event_loop).await.map_err(|e| {
+   let renderer = Backend::new(window_builder, &event_loop, &cli.render).await.map_err(|e| {
       Error::CouldNotInitializeBackend {
          error: e.to_string(),
       }

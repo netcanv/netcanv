@@ -1,11 +1,13 @@
 use std::cell::Cell;
 
+use cli::RendererCli;
 use gpu::{Gpu, SceneUniforms};
 use netcanv_renderer::paws::{Color, Ui};
 use rounded_rects::RoundedRects;
 
 pub use winit;
 
+pub mod cli;
 mod common;
 mod gpu;
 mod rendering;
@@ -33,10 +35,15 @@ impl WgpuBackend {
    pub async fn new(
       window_builder: WindowBuilder,
       event_loop: &EventLoop<()>,
+      cli: &RendererCli,
    ) -> anyhow::Result<Self> {
       let window = window_builder.build(event_loop).context("Failed to create window")?;
       let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-         backends: wgpu::Backends::VULKAN,
+         backends: if let Some(backend) = cli.wgpu_backend {
+            wgpu::Backends::from(backend)
+         } else {
+            wgpu::Backends::all()
+         },
          ..Default::default()
       });
 

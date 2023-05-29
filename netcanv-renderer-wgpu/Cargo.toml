@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.40"
 bytemuck = "1.13.1"
+clap = { workspace = true }
+log = { workspace = true }
 wgpu = "0.16.1"
 winit = { version = "0.28.6", features = ["serde"] }
 

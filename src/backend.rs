@@ -9,7 +9,7 @@ use netcanv_renderer_opengl::{self as the_backend, OpenGlBackend as TheBackend};
 #[cfg(feature = "renderer-wgpu")]
 use netcanv_renderer_wgpu::{self as the_backend, WgpuBackend as TheBackend};
 
-pub use the_backend::{winit, UiRenderFrame};
+pub use the_backend::{cli, winit, UiRenderFrame};
 
 pub type Backend = TheBackend;
 pub type Image = the_backend::Image;

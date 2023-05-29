@@ -33,8 +33,11 @@ phf = { version = "0.10.1", features = ["macros"] }
 strum = { version = "0.23.0", features = ["derive"] }
 
 # Logging
-log = "0.4.14"
+log = { workspace = true }
 simple_logger = { version = "2.1.0", default-features = false, features = ["colors"] }
+
+# CLI
+clap = { workspace = true }
 
 # Windowing and graphics
 native-dialog = "0.5.5"
@@ -74,6 +77,10 @@ netcanv-renderer-wgpu = { path = "netcanv-renderer-wgpu", optional = true }
 netcanv-protocol = { path = "netcanv-protocol", features = ["i18n"] }
 
 netcanv-i18n = { path = "netcanv-i18n" }
+
+[workspace.dependencies]
+clap = { version = "4.3.0", features = ["derive"] }
+log = "0.4.14"
 
 [profile.release]
 lto = "fat"

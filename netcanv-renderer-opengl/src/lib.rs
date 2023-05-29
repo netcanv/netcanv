@@ -1,3 +1,4 @@
+pub mod cli;
 mod common;
 mod font;
 mod framebuffer;
@@ -9,6 +10,7 @@ mod shape_buffer;
 use std::fmt::Write;
 use std::rc::Rc;
 
+use cli::RendererCli;
 use glutin::dpi::PhysicalSize;
 use glutin::{
    ContextBuilder, ContextWrapper, GlProfile, GlRequest, NotCurrent, PossiblyCurrent,
@@ -93,6 +95,7 @@ impl OpenGlBackend {
    pub async fn new(
       window_builder: WindowBuilder,
       event_loop: &EventLoop<()>,
+      _: &RendererCli,
    ) -> anyhow::Result<Self> {
       let context = Self::build_context(window_builder, event_loop)?;
       let context = unsafe { context.make_current().unwrap() };
