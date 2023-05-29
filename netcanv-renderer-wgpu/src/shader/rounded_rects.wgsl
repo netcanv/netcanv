@@ -44,13 +44,17 @@ fn rectangle_sdf(uv: vec2f, half_extents: vec2f) -> f32 {
    return outside_distance + inside_distance;
 }
 
-fn diamond_sdf(uv: vec2f, radius: f32) -> f32 {
-   return abs(uv.x) + abs(uv.y) - radius;
+fn corner_sdf(uv: vec2f, radius: f32) -> f32 {
+   let componentwise_edge_distance = abs(uv) - vec2f(radius);
+   return max(componentwise_edge_distance.x, componentwise_edge_distance.y);
 }
 
 fn corner_alpha(uv: vec2f, radius: f32) -> f32 {
-   return max(0.0, 1.0 - diamond_sdf(uv, radius) / radius) * 0.5;
+   return max(0.0, 1.0 - corner_sdf(uv, radius) / radius) * 0.5;
 }
+
+const pi = 3.141592654;
+const corner_offset = 0.2928932188; // 1.0 - sqrt(2.0) / 2.0;
 
 @fragment
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
@@ -60,17 +64,26 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    let half_extents = ((data.rect.zw - data.rect.xy) * 0.5 - vec2f(data.corner_radius));
    let sdf = rectangle_sdf(vertex.in_position - center, half_extents) / data.corner_radius;
 
-   let corner_radius = data.corner_radius * 1.5;
-   let corners = corner_alpha(vertex.in_position - data.rect.xy, corner_radius)
-      + corner_alpha(vertex.in_position - data.rect.zy, corner_radius)
-      + corner_alpha(vertex.in_position - data.rect.zw, corner_radius)
-      + corner_alpha(vertex.in_position - data.rect.xw, corner_radius);
+   let width = abs(data.rect.x - data.rect.z);
+   let height = abs(data.rect.y - data.rect.w);
+   let corner_radius = clamp(data.corner_radius, 0.0, min(width / 2.0, height / 2.0));
+   let inner_rect = data.rect + vec4f(corner_offset, corner_offset, -corner_offset, -corner_offset);
+   let smoothing = corner_radius * 0.1;
+   let R = 2.0 * pi * corner_radius / 8.0 + smoothing;
+   var corners = clamp(
+      corner_alpha(vertex.in_position - inner_rect.xy, R)
+      + corner_alpha(vertex.in_position - inner_rect.zy, R)
+      + corner_alpha(vertex.in_position - inner_rect.zw, R)
+      + corner_alpha(vertex.in_position - inner_rect.xw, R),
+      0.0,
+      1.0,
+   );
+   corners = smoothstep(0.1, 0.5, corners);
 
-   let delta = clamp(1.0 / data.corner_radius, 0.0, 1.0) * corners;
+   let delta = clamp(1.0 / corner_radius, 0.0, 1.0) * corners;
    let alpha = smoothstep(1.0, 1.0 - delta, clamp(sdf, 0.0, 1.0));
 
    var color = unpack4x8unorm(data.color);
    color *= alpha;
    return color;
-   // return vec4f(vec3f(delta), 1.0);
 }
