@@ -58,7 +58,9 @@ const corner_offset = 0.2928932188; // 1.0 - sqrt(2.0) / 2.0;
 
 @fragment
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
-   let data = rect_data[vertex.rect_index];
+   var data = rect_data[vertex.rect_index];
+   // Prevent wonkiness around the edges by flooring the rect's coordinates.
+   data.rect = floor(data.rect);
 
    let center = (data.rect.xy + data.rect.zw) * 0.5;
    let half_extents = ((data.rect.zw - data.rect.xy) * 0.5 - vec2f(data.corner_radius));
@@ -81,7 +83,12 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    corners = smoothstep(0.1, 0.5, corners);
 
    let delta = clamp(1.0 / corner_radius, 0.0, 1.0) * corners;
-   let alpha = smoothstep(1.0, 1.0 - delta, clamp(sdf, 0.0, 1.0));
+   // Some drivers don't behave very well on smoothstep(1.0, 1.0, x) so we have to account
+   // for that case and force alpha to be 1.
+   var alpha = smoothstep(1.0, 1.0 - delta, clamp(sdf, 0.0, 1.0));
+   if delta <= 0.0 {
+      alpha = 1.0;
+   }
 
    var color = unpack4x8unorm(data.color);
    color *= alpha;
