@@ -2,7 +2,6 @@ use std::cell::Cell;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
-use wgpu::{TextureFormat, TextureView};
 use winit::dpi::PhysicalSize;
 
 /// Common GPU state.
@@ -15,8 +14,9 @@ pub struct Gpu {
 
    pub scene_uniform_buffer: wgpu::Buffer,
    pub depth_buffer: wgpu::Texture,
+   pub depth_buffer_view: wgpu::TextureView,
 
-   pub current_render_target: Option<TextureView>,
+   pub current_render_target: Option<wgpu::TextureView>,
 
    pub depth_index_counter: Cell<u32>,
 }
@@ -44,9 +44,11 @@ impl Gpu {
       self.update_scene_uniforms(window_size);
       self.depth_buffer.destroy();
       self.depth_buffer = Self::create_depth_buffer(&self.device, window_size);
+      self.depth_buffer_view =
+         self.depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
    }
 
-   pub fn surface_format(&self) -> TextureFormat {
+   pub fn surface_format(&self) -> wgpu::TextureFormat {
       self
          .capabilities
          .formats
@@ -101,7 +103,7 @@ impl Gpu {
       index
    }
 
-   pub fn render_target(&self) -> &TextureView {
+   pub fn render_target(&self) -> &wgpu::TextureView {
       self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
    }
 }

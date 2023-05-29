@@ -1,19 +1,41 @@
 use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 
-use crate::common::{paws_color_to_wgpu, vector_to_vec2};
+use crate::common::paws_color_to_wgpu;
 use crate::WgpuBackend;
+
+pub(crate) type ClearOps = (wgpu::Operations<wgpu::Color>, wgpu::Operations<f32>);
 
 impl WgpuBackend {
    pub(crate) fn flush(&mut self, encoder: &mut wgpu::CommandEncoder) {
-      self.rounded_rects.flush(
-         &self.gpu,
-         encoder,
-         wgpu::Operations {
-            load: wgpu::LoadOp::Clear(paws_color_to_wgpu(self.clear_color)),
-            store: true,
-         },
-      );
+      let clear_ops = self.flush_clear();
+      self.rounded_rects.flush(&self.gpu, encoder, clear_ops);
+   }
+
+   fn flush_clear(&mut self) -> ClearOps {
+      if let Some(color) = self.clear.take() {
+         (
+            wgpu::Operations {
+               load: wgpu::LoadOp::Clear(paws_color_to_wgpu(color)),
+               store: true,
+            },
+            wgpu::Operations {
+               load: wgpu::LoadOp::Clear(0.0),
+               store: true,
+            },
+         )
+      } else {
+         (
+            wgpu::Operations {
+               load: wgpu::LoadOp::Load,
+               store: true,
+            },
+            wgpu::Operations {
+               load: wgpu::LoadOp::Load,
+               store: true,
+            },
+         )
+      }
    }
 }
 
@@ -44,7 +66,7 @@ impl Renderer for WgpuBackend {
       color: Color,
       alignment: Alignment,
    ) -> f32 {
-      0.0
+      32.0
    }
 }
 
@@ -68,7 +90,7 @@ impl RenderBackend for WgpuBackend {
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
 
    fn clear(&mut self, color: Color) {
-      self.clear_color = color;
+      self.clear = Some(color);
    }
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {}
@@ -88,7 +110,7 @@ impl netcanv_renderer::Image for Image {
    }
 
    fn size(&self) -> (u32, u32) {
-      (0, 0)
+      (24, 24)
    }
 }
 
@@ -96,7 +118,7 @@ pub struct Framebuffer;
 
 impl netcanv_renderer::Framebuffer for Framebuffer {
    fn size(&self) -> (u32, u32) {
-      (0, 0)
+      (256, 256)
    }
 
    fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {}
@@ -114,14 +136,14 @@ impl netcanv_renderer::Font for Font {
    }
 
    fn size(&self) -> f32 {
-      0.0
+      14.0
    }
 
    fn height(&self) -> f32 {
-      0.0
+      14.0
    }
 
    fn text_width(&self, text: &str) -> f32 {
-      0.0
+      32.0
    }
 }

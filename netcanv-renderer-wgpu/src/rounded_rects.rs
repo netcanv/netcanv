@@ -7,6 +7,7 @@ use wgpu::include_wgsl;
 
 use crate::common::vector_to_vec2;
 use crate::gpu::Gpu;
+use crate::ClearOps;
 
 /// Pipeline for drawing rounded rectangles.
 pub struct RoundedRects {
@@ -154,7 +155,13 @@ impl RoundedRects {
                }
             })],
          }),
-         depth_stencil: None,
+         depth_stencil: Some(wgpu::DepthStencilState {
+            format: gpu.depth_buffer.format(),
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+         }),
          multisample: wgpu::MultisampleState::default(),
          multiview: None,
       });
@@ -190,12 +197,7 @@ impl RoundedRects {
       ]);
    }
 
-   pub fn flush(
-      &mut self,
-      gpu: &Gpu,
-      encoder: &mut wgpu::CommandEncoder,
-      ops: wgpu::Operations<wgpu::Color>,
-   ) {
+   pub fn flush(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder, clear_ops: ClearOps) {
       let vertex_bytes = bytemuck::cast_slice(&self.vertices);
       if vertex_bytes.len() as wgpu::BufferAddress > self.vertex_buffer.size() {
          self.vertex_buffer.destroy();
@@ -212,14 +214,19 @@ impl RoundedRects {
       let rect_data_bytes = bytemuck::cast_slice(&self.rect_data);
       gpu.queue.write_buffer(&self.rect_data_buffer, 0, rect_data_bytes);
 
+      let (color_ops, depth_ops) = clear_ops;
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
          label: Some("RoundedRects"),
          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: gpu.render_target(),
             resolve_target: None,
-            ops,
+            ops: color_ops,
          })],
-         depth_stencil_attachment: None,
+         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &gpu.depth_buffer_view,
+            depth_ops: Some(depth_ops),
+            stencil_ops: None,
+         }),
       });
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, &self.bind_group, &[]);

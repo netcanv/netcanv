@@ -1,13 +1,12 @@
 use std::cell::Cell;
 
 use gpu::{Gpu, SceneUniforms};
-use netcanv_renderer::paws::{rgba, Color, Ui};
+use netcanv_renderer::paws::{Color, Ui};
 use rounded_rects::RoundedRects;
 
 pub use winit;
 
 mod common;
-mod error;
 mod gpu;
 mod rendering;
 mod rounded_rects;
@@ -26,7 +25,7 @@ pub struct WgpuBackend {
    // TODO: We should have this be event-driven instead of polling every frame.
    context_size: PhysicalSize<u32>,
 
-   clear_color: Color,
+   clear: Option<Color>,
    rounded_rects: RoundedRects,
 }
 
@@ -36,7 +35,10 @@ impl WgpuBackend {
       event_loop: &EventLoop<()>,
    ) -> anyhow::Result<Self> {
       let window = window_builder.build(event_loop).context("Failed to create window")?;
-      let instance = wgpu::Instance::default();
+      let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+         backends: wgpu::Backends::VULKAN,
+         ..Default::default()
+      });
 
       let surface = unsafe { instance.create_surface(&window) }
          .context("Failed to create surface from window")?;
@@ -70,6 +72,7 @@ impl WgpuBackend {
       });
 
       let depth_buffer = Gpu::create_depth_buffer(&device, window.inner_size());
+      let depth_buffer_view = depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
 
       let mut gpu = Gpu {
          surface,
@@ -79,6 +82,7 @@ impl WgpuBackend {
          queue,
          scene_uniform_buffer,
          depth_buffer,
+         depth_buffer_view,
          current_render_target: None,
          depth_index_counter: Cell::new(0),
       };
@@ -91,7 +95,7 @@ impl WgpuBackend {
          window,
          gpu,
 
-         clear_color: rgba(0, 0, 0, 0),
+         clear: None,
          context_size,
       })
    }
