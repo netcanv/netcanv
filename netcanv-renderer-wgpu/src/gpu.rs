@@ -61,26 +61,26 @@ impl Gpu {
          .unwrap_or(self.capabilities.formats[0])
    }
 
-fn configure_surface(&self, size: PhysicalSize<u32>) {
-   let format = self.surface_format();
-   let surface_configuration = wgpu::SurfaceConfiguration {
-      usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-      format,
-      width: size.width,
-      height: size.height,
-      // Choose the mode that has the lowest latency, because noone likes it when their
-      // brush acts all floaty.
-      present_mode: if self.capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
-         wgpu::PresentMode::Mailbox
-      } else {
-         wgpu::PresentMode::AutoVsync
-      },
-      alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-      view_formats: vec![],
-   };
-   debug!("using surface format: {surface_configuration:?}");
-   self.surface.configure(&self.device, &surface_configuration);
-}
+   fn configure_surface(&self, size: PhysicalSize<u32>) {
+      let format = self.surface_format();
+      let surface_configuration = wgpu::SurfaceConfiguration {
+         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+         format,
+         width: size.width,
+         height: size.height,
+         // Choose the mode that has the lowest latency, because noone likes it when their
+         // brush acts all floaty.
+         present_mode: if self.capabilities.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            wgpu::PresentMode::Mailbox
+         } else {
+            wgpu::PresentMode::AutoVsync
+         },
+         alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+         view_formats: vec![],
+      };
+      debug!("using surface format: {surface_configuration:?}");
+      self.surface.configure(&self.device, &surface_configuration);
+   }
 
    fn update_scene_uniforms(&self, window_size: PhysicalSize<u32>) {
       let width = window_size.width as f32;
@@ -107,6 +107,49 @@ fn configure_surface(&self, size: PhysicalSize<u32>) {
 
    pub fn render_target(&self) -> &wgpu::TextureView {
       self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
+   }
+
+   pub fn scene_uniforms_binding(
+      &self,
+      binding: u32,
+   ) -> (wgpu::BindGroupLayoutEntry, wgpu::BindGroupEntry) {
+      (
+         wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX,
+            ty: wgpu::BindingType::Buffer {
+               ty: wgpu::BufferBindingType::Uniform,
+               has_dynamic_offset: false,
+               min_binding_size: None,
+            },
+            count: None,
+         },
+         wgpu::BindGroupEntry {
+            binding,
+            resource: self.scene_uniform_buffer.as_entire_binding(),
+         },
+      )
+   }
+
+   pub fn color_target_state(&self) -> wgpu::ColorTargetState {
+      wgpu::ColorTargetState {
+         format: self.surface_format(),
+         blend: Some(wgpu::BlendState {
+            color: wgpu::BlendComponent::OVER,
+            alpha: wgpu::BlendComponent::OVER,
+         }),
+         write_mask: wgpu::ColorWrites::ALL,
+      }
+   }
+
+   pub fn depth_stencil_state(&self) -> wgpu::DepthStencilState {
+      wgpu::DepthStencilState {
+         format: self.depth_buffer.format(),
+         depth_write_enabled: true,
+         depth_compare: wgpu::CompareFunction::GreaterEqual,
+         stencil: wgpu::StencilState::default(),
+         bias: wgpu::DepthBiasState::default(),
+      }
    }
 }
 

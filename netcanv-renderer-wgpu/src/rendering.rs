@@ -10,6 +10,9 @@ impl WgpuBackend {
    pub(crate) fn flush(&mut self, encoder: &mut wgpu::CommandEncoder) {
       let clear_ops = self.flush_clear();
       self.rounded_rects.flush(&self.gpu, encoder, clear_ops);
+
+      let clear_ops = self.flush_clear();
+      self.lines.flush(&self.gpu, encoder, clear_ops);
    }
 
    fn flush_clear(&mut self) -> ClearOps {
@@ -60,7 +63,9 @@ impl Renderer for WgpuBackend {
       }
    }
 
-   fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {}
+   fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
+      self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
+   }
 
    fn text(
       &mut self,

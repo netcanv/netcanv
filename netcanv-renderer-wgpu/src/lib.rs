@@ -1,22 +1,20 @@
 use std::cell::Cell;
 
+use anyhow::Context;
 use cli::RendererCli;
 use gpu::{Gpu, SceneUniforms};
 use netcanv_renderer::paws::{Color, Ui};
-use rounded_rects::RoundedRects;
+use winit::dpi::PhysicalSize;
+use winit::event_loop::EventLoop;
+use winit::window::{Window, WindowBuilder};
 
 pub use winit;
 
 pub mod cli;
 mod common;
 mod gpu;
+mod pass;
 mod rendering;
-mod rounded_rects;
-
-use anyhow::Context;
-use winit::dpi::PhysicalSize;
-use winit::event_loop::EventLoop;
-use winit::window::{Window, WindowBuilder};
 
 pub use rendering::*;
 
@@ -28,7 +26,8 @@ pub struct WgpuBackend {
    context_size: PhysicalSize<u32>,
 
    clear: Option<Color>,
-   rounded_rects: RoundedRects,
+   rounded_rects: pass::RoundedRects,
+   lines: pass::Lines,
 }
 
 impl WgpuBackend {
@@ -97,7 +96,8 @@ impl WgpuBackend {
 
       let context_size = window.inner_size();
       Ok(Self {
-         rounded_rects: RoundedRects::new(&gpu),
+         rounded_rects: pass::RoundedRects::new(&gpu),
+         lines: pass::Lines::new(&gpu),
 
          window,
          gpu,
