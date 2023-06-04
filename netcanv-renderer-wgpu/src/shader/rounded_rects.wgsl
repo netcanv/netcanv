@@ -8,6 +8,7 @@ struct Rect {
    depth_index: u32,
    corner_radius: f32,
    color: u32,
+   outline: f32,
 }
 
 struct Vertex {
@@ -64,7 +65,8 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
 
    let center = (data.rect.xy + data.rect.zw) * 0.5;
    let half_extents = ((data.rect.zw - data.rect.xy) * 0.5 - vec2f(data.corner_radius));
-   let sdf = rectangle_sdf(vertex.in_position - center, half_extents) / data.corner_radius;
+   let sdf = rectangle_sdf(vertex.in_position - center, half_extents) - data.corner_radius + 0.5;
+   let outline = sdf + data.outline;
 
    let width = abs(data.rect.x - data.rect.z);
    let height = abs(data.rect.y - data.rect.w);
@@ -82,12 +84,14 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    );
    corners = smoothstep(0.1, 0.5, corners);
 
-   let delta = clamp(1.0 / corner_radius, 0.0, 1.0) * corners;
-   // Some drivers don't behave very well on smoothstep(1.0, 1.0, x) so we have to account
+   // Some drivers don't behave very well on smoothstep(x, x, y) so we have to account
    // for that case and force alpha to be 1.
-   var alpha = smoothstep(1.0, 1.0 - delta, clamp(sdf, 0.0, 1.0));
-   if delta <= 0.0 {
+   var alpha = smoothstep(corners, 0.0, sdf);
+   if corners <= 0.0 {
       alpha = 1.0;
+   }
+   if data.outline > 0.0 {
+      alpha *= clamp(outline, 0.0, 1.0);
    }
 
    var color = unpack4x8unorm(data.color);

@@ -174,7 +174,14 @@ impl RoundedRects {
          Self::create_pipeline(gpu, &self.shader, texture_format, &self.rect_data_buffer);
    }
 
-   pub fn add(&mut self, depth_index: u32, rect: Rect, color: Color, corner_radius: f32) {
+   pub fn add(
+      &mut self,
+      depth_index: u32,
+      rect: Rect,
+      color: Color,
+      corner_radius: f32,
+      outline: f32,
+   ) {
       assert!(
          self.rect_data.len() <= self.rect_data.capacity(),
          "too many rectangles without flushing"
@@ -186,6 +193,7 @@ impl RoundedRects {
          depth_index,
          rect: vec4(rect.left(), rect.top(), rect.right(), rect.bottom()),
          corner_radius,
+         outline,
       });
       self.vertices.extend_from_slice(&[
          vertex(rect_index, vector_to_vec2(rect.top_right())),
@@ -245,6 +253,8 @@ struct RectData {
    depth_index: u32,
    corner_radius: f32,
    color: Color,
+   /// This being <= 0 means we should fill in the rectangle.
+   outline: f32,
 }
 
 impl Default for RectData {
@@ -254,6 +264,7 @@ impl Default for RectData {
          depth_index: Default::default(),
          corner_radius: Default::default(),
          color: Color::TRANSPARENT,
+         outline: 0.0,
       }
    }
 }

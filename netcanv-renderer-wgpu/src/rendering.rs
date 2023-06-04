@@ -51,10 +51,14 @@ impl Renderer for WgpuBackend {
    fn clip(&mut self, rect: Rect) {}
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius);
+      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
    }
 
-   fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {}
+   fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
+      if thickness > 0.0 {
+         self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, thickness);
+      }
+   }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {}
 
