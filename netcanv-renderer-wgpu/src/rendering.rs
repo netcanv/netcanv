@@ -85,7 +85,7 @@ impl RenderBackend for WgpuBackend {
    type Framebuffer = Framebuffer;
 
    fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image {
-      Image
+      Image { width, height }
    }
 
    fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font {
@@ -111,15 +111,19 @@ impl RenderBackend for WgpuBackend {
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
 }
 
-pub struct Image;
+#[derive(Debug, Clone, Copy)]
+pub struct Image {
+   width: u32,
+   height: u32,
+}
 
 impl netcanv_renderer::Image for Image {
    fn colorized(&self, color: Color) -> Self {
-      Image
+      *self
    }
 
    fn size(&self) -> (u32, u32) {
-      (24, 24)
+      (self.width, self.height)
    }
 }
 

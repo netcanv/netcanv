@@ -129,8 +129,7 @@ impl State {
          Color::rgb(0x0868EB),
       ];
       const STRIP_WIDTH: f32 = 16.0;
-      // TODO when images are implemented: uncomment the following.
-      let strip_width = STRIP_WIDTH; // * scale;
+      let strip_width = STRIP_WIDTH * scale;
 
       const SUBDIVISION_SPACING: f32 = 12.0;
       let main_view_rect = self.main_view.rect();
