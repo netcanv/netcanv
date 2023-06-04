@@ -680,17 +680,17 @@ impl AppState for State {
       self.process_language_menu(ui, input);
 
       ui.render().line(
-         vector(32.5, 32.5 + 64.0),
-         vector(256.5, 32.5 + 64.0),
+         vector(32.0, 32.0 + 64.0),
+         vector(256.0, 32.0 + 64.0),
          Color::WHITE,
          LineCap::Butt,
-         24.0,
+         1.0,
       );
       ui.render().line(
          vector(32.0, 32.0 + 64.0 + 64.0),
          vector(256.0, 128.0 + 64.0 + 64.0),
          Color::WHITE,
-         LineCap::Square,
+         LineCap::Butt,
          24.0,
       );
       ui.render().line(
@@ -698,7 +698,7 @@ impl AppState for State {
          vector(256.0, 128.0 + 128.0 + 64.0),
          Color::WHITE,
          LineCap::Round,
-         24.0,
+         1.0,
       );
 
       for message in &bus::retrieve_all::<Error>() {

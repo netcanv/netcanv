@@ -46,12 +46,14 @@ fn main_vs(
 
    // We need to extend the line by its thickness if we're using a cap that needs more sample
    // coverage.
-   var line = data.line;
+   var line = data.line + vec4f(0.5);
    let direction = normalize(line.zw - line.xy);
    let square_cap = direction * data.thickness * should_extend_cap[data.cap] * 0.5;
    line += vec4f(-square_cap, square_cap);
 
-   let axes = line_axes(line, data.thickness);
+   // For lines that are less than 2px wide using the thickness for fragment coverage is not enough
+   // and we start losing pixels. Thus we need to push that upwards in that case.
+   let axes = line_axes(line, max(data.thickness, 2.0) + 10.0);
    let x_axis = axes.xy;
    let y_axis = axes.zw;
 
@@ -79,20 +81,24 @@ fn circle_sdf_squared(uv: vec2f, origin: vec2f, radius: f32) -> f32 {
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    let data = line_data[vertex.line_index];
 
-   let uv = vertex.local_position;
-   let origin = data.line.xy;
-   let center = (data.line.xy + data.line.zw) * 0.5;
-   let tangent = normalize(data.line.zw - data.line.xy);
-   let normal = vec2f(-tangent.y, tangent.x);
-   let length = length(data.line.zw - data.line.xy) + data.thickness * should_draw_square_cap[data.cap];
+   let line = data.line + vec4f(0.5);
+   let thickness = data.thickness + 1.0;
+   let half_thickness = thickness * 0.5;
 
-   let tangent_sdf = line_sdf(uv, origin, tangent, normal, data.thickness * 0.5);
-   let normal_sdf = line_sdf(uv, center, normal, tangent, length * 0.5);
+   let uv = vertex.local_position;
+   let origin = line.xy;
+   let center = (line.xy + line.zw) * 0.5;
+   let tangent = normalize(line.zw - line.xy);
+   let normal = vec2f(-tangent.y, tangent.x);
+   let half_length = length(center - line.xy) + thickness * should_draw_square_cap[data.cap];
+
+   let tangent_sdf = line_sdf(uv, origin, tangent, normal, half_thickness);
+   let normal_sdf = line_sdf(uv, center, normal, tangent, half_length);
 
    var alpha = clamp(-tangent_sdf, 0.0, 1.0) * clamp(-normal_sdf, 0.0, 1.0);
    if data.cap == cap_round {
-      let start = circle_sdf_squared(uv, data.line.xy, data.thickness * 0.5);
-      let end = circle_sdf_squared(uv, data.line.zw, data.thickness * 0.5);
+      let start = circle_sdf_squared(uv, line.xy, half_thickness);
+      let end = circle_sdf_squared(uv, line.zw, half_thickness);
       alpha = clamp(alpha + clamp(-start, 0.0, 1.0) + clamp(-end, 0.0, 1.0), 0.0, 1.0);
    }
 
