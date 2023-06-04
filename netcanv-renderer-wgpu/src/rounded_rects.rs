@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
 use bytemuck::{offset_of, Pod, Zeroable};
-use glam::{vec4, Vec2, Vec4};
+use glam::{vec4, Vec2, Vec4, vec2};
 use netcanv_renderer::paws::{Color, Rect};
 use wgpu::include_wgsl;
+use wgpu::util::DeviceExt;
 
-use crate::common::vector_to_vec2;
 use crate::gpu::Gpu;
 use crate::ClearOps;
 
@@ -17,20 +17,30 @@ pub struct RoundedRects {
    bind_group: wgpu::BindGroup,
    render_pipeline: wgpu::RenderPipeline,
 
-   vertices: Vec<Vertex>,
    rect_data: Vec<RectData>,
 }
 
 impl RoundedRects {
    const RESERVED_RECT_COUNT: u32 = 256;
-   const RESERVED_VERTEX_COUNT: usize = Self::RESERVED_RECT_COUNT as usize * 6;
 
    pub fn new(gpu: &Gpu) -> Self {
       let texture_format = gpu.surface_format();
 
       let shader = gpu.device.create_shader_module(include_wgsl!("shader/rounded_rects.wgsl"));
 
-      let vertex_buffer = Self::create_vertex_buffer(gpu, Self::RESERVED_VERTEX_COUNT);
+      let vertex_buffer =
+         gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("RoundedRects: Vertex Buffer"),
+            contents: bytemuck::cast_slice(&[
+               vertex(1.0, 1.0),
+               vertex(0.0, 1.0),
+               vertex(0.0, 0.0),
+               vertex(1.0, 1.0),
+               vertex(1.0, 0.0),
+               vertex(0.0, 0.0),
+            ]),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+         });
       let rect_data_buffer = Self::create_rect_data_buffer(gpu, Self::RESERVED_RECT_COUNT as usize);
 
       let (bind_group, render_pipeline) =
@@ -42,18 +52,8 @@ impl RoundedRects {
          rect_data_buffer,
          bind_group,
          render_pipeline,
-         vertices: Vec::with_capacity(Self::RESERVED_VERTEX_COUNT),
          rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT as usize),
       }
-   }
-
-   fn create_vertex_buffer(gpu: &Gpu, vertex_count: usize) -> wgpu::Buffer {
-      gpu.device.create_buffer(&wgpu::BufferDescriptor {
-         label: Some("RoundedRects: Vertex Buffer"),
-         size: (size_of::<Vertex>() * vertex_count) as wgpu::BufferAddress,
-         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-         mapped_at_creation: false,
-      })
    }
 
    fn create_rect_data_buffer(gpu: &Gpu, rect_count: usize) -> wgpu::Buffer {
@@ -132,11 +132,6 @@ impl RoundedRects {
                      offset: offset_of!(Vertex, position) as wgpu::BufferAddress,
                      shader_location: 0,
                   },
-                  wgpu::VertexAttribute {
-                     format: wgpu::VertexFormat::Uint32,
-                     offset: offset_of!(Vertex, rect_index) as wgpu::BufferAddress,
-                     shader_location: 1,
-                  },
                ],
             }],
          },
@@ -187,32 +182,16 @@ impl RoundedRects {
          "too many rectangles without flushing"
       );
 
-      let rect_index = self.rect_data.len() as u32;
       self.rect_data.push(RectData {
          color,
          depth_index,
-         rect: vec4(rect.left(), rect.top(), rect.right(), rect.bottom()),
+         rect: vec4(rect.left(), rect.top(), rect.width(), rect.height()),
          corner_radius,
          outline,
       });
-      self.vertices.extend_from_slice(&[
-         vertex(rect_index, vector_to_vec2(rect.top_right())),
-         vertex(rect_index, vector_to_vec2(rect.top_left())),
-         vertex(rect_index, vector_to_vec2(rect.bottom_left())),
-         vertex(rect_index, vector_to_vec2(rect.bottom_left())),
-         vertex(rect_index, vector_to_vec2(rect.bottom_right())),
-         vertex(rect_index, vector_to_vec2(rect.top_right())),
-      ]);
    }
 
    pub fn flush(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder, clear_ops: ClearOps) {
-      let vertex_bytes = bytemuck::cast_slice(&self.vertices);
-      if vertex_bytes.len() as wgpu::BufferAddress > self.vertex_buffer.size() {
-         self.vertex_buffer.destroy();
-         self.vertex_buffer = Self::create_vertex_buffer(gpu, self.vertices.len());
-      }
-      gpu.queue.write_buffer(&self.vertex_buffer, 0, vertex_bytes);
-
       let rect_data_bytes: &[u8] = bytemuck::cast_slice(&self.rect_data);
       if rect_data_bytes.len() as wgpu::BufferAddress > self.rect_data_buffer.size() {
          self.rect_data_buffer.destroy();
@@ -239,9 +218,8 @@ impl RoundedRects {
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, &self.bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-      render_pass.draw(0..self.vertices.len() as u32, 0..1);
+      render_pass.draw(0..6, 0..self.rect_data.len() as u32);
 
-      self.vertices.clear();
       self.rect_data.clear();
    }
 }
@@ -276,15 +254,13 @@ unsafe impl Pod for RectData {}
 #[repr(C)]
 struct Vertex {
    position: Vec2,
-   rect_index: u32,
 }
 
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
 
-fn vertex(rect_index: u32, position: Vec2) -> Vertex {
+fn vertex(x: f32, y: f32) -> Vertex {
    Vertex {
-      position,
-      rect_index,
+      position: vec2(x, y),
    }
 }

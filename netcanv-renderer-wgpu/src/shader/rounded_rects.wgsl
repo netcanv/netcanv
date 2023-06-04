@@ -15,7 +15,6 @@ struct Vertex {
    @builtin(position) position: vec4f,
    @location(0) in_position: vec2f,
    @location(1) rect_index: u32,
-   @location(2) transformed_position: vec2f,
 }
 
 @group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
@@ -23,18 +22,18 @@ struct Vertex {
 
 @vertex
 fn main_vs(
+   @builtin(instance_index) rect_index: u32,
    @location(0) position: vec2f,
-   @location(1) rect_index: u32,
 ) -> Vertex
 {
-   let transformed_position = scene_uniforms.transform * vec3f(position, 1.0);
-   let depth_index = rect_data[rect_index].depth_index;
+   let data = rect_data[rect_index];
+   let local_position = position * data.rect.zw + data.rect.xy;
+   let scene_position = scene_uniforms.transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
-   vertex.position = vec4f(transformed_position.xy, f32(depth_index) / 65535.0, 1.0);
-   vertex.in_position = position;
+   vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);
+   vertex.in_position = local_position;
    vertex.rect_index = rect_index;
-   vertex.transformed_position = transformed_position.xy;
    return vertex;
 }
 
@@ -63,15 +62,16 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    // Prevent wonkiness around the edges by flooring the rect's coordinates.
    data.rect = floor(data.rect);
 
-   let center = (data.rect.xy + data.rect.zw) * 0.5;
-   let half_extents = ((data.rect.zw - data.rect.xy) * 0.5 - vec2f(data.corner_radius));
+   let center = data.rect.xy + data.rect.zw * 0.5;
+   let half_extents = data.rect.zw * 0.5 - vec2f(data.corner_radius);
    let sdf = rectangle_sdf(vertex.in_position - center, half_extents) - data.corner_radius + 0.5;
    let outline = sdf + data.outline;
 
-   let width = abs(data.rect.x - data.rect.z);
-   let height = abs(data.rect.y - data.rect.w);
+   let width = data.rect.z;
+   let height = data.rect.w;
    let corner_radius = clamp(data.corner_radius, 0.0, min(width / 2.0, height / 2.0));
-   let inner_rect = data.rect + vec4f(corner_offset, corner_offset, -corner_offset, -corner_offset);
+   let inner_rect = vec4f(data.rect.xy, data.rect.xy + data.rect.zw)
+      + vec4f(corner_offset, corner_offset, -corner_offset, -corner_offset);
    let smoothing = corner_radius * 0.1;
    let R = 2.0 * pi * corner_radius / 8.0 + smoothing;
    var corners = clamp(
