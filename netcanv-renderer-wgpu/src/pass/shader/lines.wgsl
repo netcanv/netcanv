@@ -14,14 +14,20 @@ struct Line {
 struct Vertex {
    @builtin(position) position: vec4f,
    @location(0) line_index: u32,
+   @location(1) local_position: vec2f,
 }
 
 @group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 @group(0) @binding(1) var<uniform> line_data: array<Line, 256>;
 
-const cap_butt = 0;
-const cap_square = 1;
-const cap_round = 2;
+const cap_butt: u32 = 0u;
+const cap_square: u32 = 1u;
+const cap_round: u32 = 2u;
+
+// WGSL doesn't have array literals for some reason so we use a vector.
+// Conveniently there are only three types of line caps.
+const should_extend_cap = vec3f(0.0, 1.0, 1.0);
+const should_draw_square_cap = vec3f(0.0, 1.0, 0.0);
 
 fn line_axes(line: vec4f, thickness: f32) -> vec4f {
    let x_axis = line.zw - line.xy;
@@ -37,23 +43,60 @@ fn main_vs(
 ) -> Vertex
 {
    let data = line_data[line_index];
-   let axes = line_axes(data.line, data.thickness);
+
+   // We need to extend the line by its thickness if we're using a cap that needs more sample
+   // coverage.
+   var line = data.line;
+   let direction = normalize(line.zw - line.xy);
+   let square_cap = direction * data.thickness * should_extend_cap[data.cap] * 0.5;
+   line += vec4f(-square_cap, square_cap);
+
+   let axes = line_axes(line, data.thickness);
    let x_axis = axes.xy;
    let y_axis = axes.zw;
 
-   let local_position = data.line.xy + position.x * x_axis + position.y * y_axis;
+   let local_position = line.xy + position.x * x_axis + position.y * y_axis;
    let scene_position = scene_uniforms.transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
    vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);
    vertex.line_index = line_index;
+   vertex.local_position = local_position;
    return vertex;
+}
+
+fn line_sdf(uv: vec2f, origin: vec2f, tangent: vec2f, normal: vec2f, thickness: f32) -> f32 {
+   let line = abs(dot(normal, uv - origin));
+   return line - thickness;
+}
+
+fn circle_sdf_squared(uv: vec2f, origin: vec2f, radius: f32) -> f32 {
+   let delta = origin - uv;
+   return length(delta) - radius;
 }
 
 @fragment
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    let data = line_data[vertex.line_index];
 
-   let color = unpack4x8unorm(data.color);
+   let uv = vertex.local_position;
+   let origin = data.line.xy;
+   let center = (data.line.xy + data.line.zw) * 0.5;
+   let tangent = normalize(data.line.zw - data.line.xy);
+   let normal = vec2f(-tangent.y, tangent.x);
+   let length = length(data.line.zw - data.line.xy) + data.thickness * should_draw_square_cap[data.cap];
+
+   let tangent_sdf = line_sdf(uv, origin, tangent, normal, data.thickness * 0.5);
+   let normal_sdf = line_sdf(uv, center, normal, tangent, length * 0.5);
+
+   var alpha = clamp(-tangent_sdf, 0.0, 1.0) * clamp(-normal_sdf, 0.0, 1.0);
+   if data.cap == cap_round {
+      let start = circle_sdf_squared(uv, data.line.xy, data.thickness * 0.5);
+      let end = circle_sdf_squared(uv, data.line.zw, data.thickness * 0.5);
+      alpha = clamp(alpha + clamp(-start, 0.0, 1.0) + clamp(-end, 0.0, 1.0), 0.0, 1.0);
+   }
+
+   var color = unpack4x8unorm(data.color);
+   color *= alpha * color.a;
    return color;
 }

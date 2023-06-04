@@ -20,7 +20,7 @@ pub struct Lines {
 }
 
 impl Lines {
-   pub const RESERVED_LINE_COUNT: usize = 512;
+   pub const RESERVED_LINE_COUNT: usize = 256;
 
    pub fn new(gpu: &Gpu) -> Self {
       let shader = gpu.device.create_shader_module(wgpu::include_wgsl!("shader/lines.wgsl"));
