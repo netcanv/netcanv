@@ -1,3 +1,5 @@
+const max_line_count = 512u;
+
 struct SceneUniforms {
    transform: mat3x3f,
 }
@@ -18,11 +20,11 @@ struct Vertex {
 }
 
 @group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(0) @binding(1) var<uniform> line_data: array<Line, 256>;
+@group(0) @binding(1) var<uniform> line_data: array<Line, max_line_count>;
 
-const cap_butt: u32 = 0u;
-const cap_square: u32 = 1u;
-const cap_round: u32 = 2u;
+const cap_butt = 0u;
+const cap_square = 1u;
+const cap_round = 2u;
 
 // WGSL doesn't have array literals for some reason so we use a vector.
 // Conveniently there are only three types of line caps.

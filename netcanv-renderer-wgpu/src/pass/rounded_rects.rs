@@ -6,23 +6,23 @@ use netcanv_renderer::paws::{Color, Rect};
 use wgpu::include_wgsl;
 use wgpu::util::DeviceExt;
 
+use crate::batch_storage::{BatchStorage, BatchStorageConfig};
 use crate::gpu::Gpu;
 use crate::ClearOps;
 
 use super::vertex::{vertex, Vertex};
 
 /// Pipeline for drawing rounded rectangles.
-pub struct RoundedRects {
+pub(crate) struct RoundedRects {
    vertex_buffer: wgpu::Buffer,
-   rect_data_buffer: wgpu::Buffer,
-   bind_group: wgpu::BindGroup,
+   batch_storage: BatchStorage,
    render_pipeline: wgpu::RenderPipeline,
 
    rect_data: Vec<RectData>,
 }
 
 impl RoundedRects {
-   const RESERVED_RECT_COUNT: usize = 256;
+   const RESERVED_RECT_COUNT: usize = 512;
 
    pub fn new(gpu: &Gpu) -> Self {
       let shader = gpu.device.create_shader_module(include_wgsl!("shader/rounded_rects.wgsl"));
@@ -39,30 +39,8 @@ impl RoundedRects {
          ]),
          usage: wgpu::BufferUsages::VERTEX,
       });
-      let rect_data_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-         label: Some("RoundedRects: Data Buffer"),
-         size: (size_of::<RectData>() * Self::RESERVED_RECT_COUNT) as wgpu::BufferAddress,
-         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-         mapped_at_creation: false,
-      });
 
-      let (bind_group, render_pipeline) = Self::create_pipeline(gpu, &shader, &rect_data_buffer);
-
-      Self {
-         vertex_buffer,
-         rect_data_buffer,
-         bind_group,
-         render_pipeline,
-         rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
-      }
-   }
-
-   fn create_pipeline(
-      gpu: &Gpu,
-      shader: &wgpu::ShaderModule,
-      rect_data_buffer: &wgpu::Buffer,
-   ) -> (wgpu::BindGroup, wgpu::RenderPipeline) {
-      let (scene_uniforms_layout, scene_uniforms) = gpu.scene_uniforms_binding(0);
+      let (scene_uniforms_layout, _) = gpu.scene_uniforms_binding(0);
 
       let bind_group_layout =
          gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -81,34 +59,23 @@ impl RoundedRects {
                },
             ],
          });
+
       let pipeline_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
          label: Some("RoundedRects: Pipeline Layout"),
          bind_group_layouts: &[&bind_group_layout],
          push_constant_ranges: &[],
       });
-      let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-         label: Some("RoundedRects: Bind Group"),
-         layout: &bind_group_layout,
-         entries: &[
-            scene_uniforms,
-            wgpu::BindGroupEntry {
-               binding: 1,
-               resource: rect_data_buffer.as_entire_binding(),
-            },
-         ],
-      });
-
       let render_pipeline = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
          label: Some("RoundedRects: Render Pipeline"),
          layout: Some(&pipeline_layout),
          vertex: wgpu::VertexState {
-            module: shader,
+            module: &shader,
             entry_point: "main_vs",
             buffers: &[Vertex::LAYOUT],
          },
          primitive: wgpu::PrimitiveState::default(),
          fragment: Some(wgpu::FragmentState {
-            module: shader,
+            module: &shader,
             entry_point: "main_fs",
             targets: &[Some(gpu.color_target_state())],
          }),
@@ -116,7 +83,18 @@ impl RoundedRects {
          multisample: wgpu::MultisampleState::default(),
          multiview: None,
       });
-      (bind_group, render_pipeline)
+
+      Self {
+         vertex_buffer,
+         batch_storage: BatchStorage::new(BatchStorageConfig {
+            buffer_name: "RoundedRects: Rectangle Data Buffer",
+            bind_group_name: "RoundedRects: Bind Group",
+            buffer_size: (size_of::<RectData>() * Self::RESERVED_RECT_COUNT) as wgpu::BufferAddress,
+            bind_group_layout,
+         }),
+         render_pipeline,
+         rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
+      }
    }
 
    pub fn add(
@@ -141,31 +119,38 @@ impl RoundedRects {
       });
    }
 
-   pub fn flush(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder, clear_ops: ClearOps) {
+   pub fn flush(
+      &mut self,
+      gpu: &Gpu,
+      encoder: &mut wgpu::CommandEncoder,
+      clear_ops: &mut ClearOps,
+   ) {
       // TODO: This should interact with clearing, probably.
       if self.rect_data.is_empty() {
          return;
       }
 
-      let rect_data_bytes = bytemuck::cast_slice(&self.rect_data);
-      gpu.queue.write_buffer(&self.rect_data_buffer, 0, rect_data_bytes);
+      let (rect_data_buffer, bind_group) = self.batch_storage.next_batch(gpu);
 
-      let (color_ops, depth_ops) = clear_ops;
+      let rect_data_bytes = bytemuck::cast_slice(&self.rect_data);
+      gpu.queue.write_buffer(rect_data_buffer, 0, rect_data_bytes);
+
+      let ClearOps { color, depth } = clear_ops.take();
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
          label: Some("RoundedRects"),
          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: gpu.render_target(),
             resolve_target: None,
-            ops: color_ops,
+            ops: color,
          })],
          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &gpu.depth_buffer_view,
-            depth_ops: Some(depth_ops),
+            depth_ops: Some(depth),
             stencil_ops: None,
          }),
       });
       render_pass.set_pipeline(&self.render_pipeline);
-      render_pass.set_bind_group(0, &self.bind_group, &[]);
+      render_pass.set_bind_group(0, bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.draw(0..6, 0..self.rect_data.len() as u32);
 
@@ -174,6 +159,10 @@ impl RoundedRects {
 
    pub fn needs_flush(&self) -> bool {
       self.rect_data.len() == self.rect_data.capacity()
+   }
+
+   pub fn rewind(&mut self) {
+      self.batch_storage.rewind();
    }
 }
 

@@ -4,40 +4,64 @@ use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 use crate::common::paws_color_to_wgpu;
 use crate::WgpuBackend;
 
-pub(crate) type ClearOps = (wgpu::Operations<wgpu::Color>, wgpu::Operations<f32>);
+pub(crate) struct ClearOps {
+   pub color: wgpu::Operations<wgpu::Color>,
+   pub depth: wgpu::Operations<f32>,
+}
+
+impl ClearOps {
+   pub fn take(&mut self) -> ClearOps {
+      std::mem::take(self)
+   }
+}
+
+impl Default for ClearOps {
+   fn default() -> Self {
+      Self {
+         color: wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: true,
+         },
+         depth: wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: true,
+         },
+      }
+   }
+}
 
 impl WgpuBackend {
-   pub(crate) fn flush(&mut self, encoder: &mut wgpu::CommandEncoder) {
-      let clear_ops = self.flush_clear();
-      self.rounded_rects.flush(&self.gpu, encoder, clear_ops);
-
-      let clear_ops = self.flush_clear();
-      self.lines.flush(&self.gpu, encoder, clear_ops);
+   pub(crate) fn rewind(&mut self) {
+      self.rounded_rects.rewind();
+      self.lines.rewind();
    }
 
-   fn flush_clear(&mut self) -> ClearOps {
+   pub(crate) fn flush(&mut self) {
+      let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+         label: Some("Render Pass"),
+      });
+
+      let mut clear_ops = self.clear_ops();
+      self.rounded_rects.flush(&self.gpu, &mut encoder, &mut clear_ops);
+      self.lines.flush(&self.gpu, &mut encoder, &mut clear_ops);
+
+      self.command_buffers.push(encoder.finish());
+   }
+
+   fn clear_ops(&mut self) -> ClearOps {
       if let Some(color) = self.clear.take() {
-         (
-            wgpu::Operations {
+         ClearOps {
+            color: wgpu::Operations {
                load: wgpu::LoadOp::Clear(paws_color_to_wgpu(color)),
                store: true,
             },
-            wgpu::Operations {
+            depth: wgpu::Operations {
                load: wgpu::LoadOp::Clear(0.0),
                store: true,
             },
-         )
+         }
       } else {
-         (
-            wgpu::Operations {
-               load: wgpu::LoadOp::Load,
-               store: true,
-            },
-            wgpu::Operations {
-               load: wgpu::LoadOp::Load,
-               store: true,
-            },
-         )
+         ClearOps::default()
       }
    }
 }
@@ -55,16 +79,25 @@ impl Renderer for WgpuBackend {
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
       self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
+      if self.rounded_rects.needs_flush() {
+         self.flush();
+      }
    }
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
       if thickness > 0.0 {
          self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, thickness);
+         if self.rounded_rects.needs_flush() {
+            self.flush();
+         }
       }
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
       self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
+      if self.lines.needs_flush() {
+         self.flush();
+      }
    }
 
    fn text(

@@ -10,6 +10,7 @@ use winit::window::{Window, WindowBuilder};
 
 pub use winit;
 
+mod batch_storage;
 pub mod cli;
 mod common;
 mod gpu;
@@ -28,6 +29,8 @@ pub struct WgpuBackend {
    clear: Option<Color>,
    rounded_rects: pass::RoundedRects,
    lines: pass::Lines,
+
+   command_buffers: Vec<wgpu::CommandBuffer>,
 }
 
 impl WgpuBackend {
@@ -60,6 +63,8 @@ impl WgpuBackend {
          )?;
 
       let capabilities = surface.get_capabilities(&adapter);
+      log::info!("adapter capabilities: {capabilities:#?}");
+      log::info!("adapter limits: {:#?}", adapter.limits());
 
       let (device, queue) = adapter.request_device(
          &wgpu::DeviceDescriptor {
@@ -104,6 +109,8 @@ impl WgpuBackend {
 
          clear: None,
          context_size,
+
+         command_buffers: vec![],
       })
    }
 
@@ -128,18 +135,22 @@ impl UiRenderFrame for Ui<WgpuBackend> {
          .gpu
          .surface
          .get_current_texture()
-         .context("Failed to acquire next swap chain texture")?;
+         .context("Failed to acquire next swapchain texture")?;
       let frame_texture = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-      let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-         label: Some("Render Pass Encoder"),
-      });
       self.gpu.current_render_target = Some(frame_texture);
       self.gpu.depth_index_counter.set(0);
 
+      self.rewind();
       f(self);
-      self.flush(&mut encoder);
+      self.flush();
 
-      self.gpu.queue.submit([encoder.finish()]);
+      {
+         // Slight borrow checker hack here because borrowing out individual fields doesn't work
+         // through Deref.
+         let backend = self.render();
+         backend.gpu.queue.submit(backend.command_buffers.drain(..));
+      }
+
       frame.present();
 
       Ok(())

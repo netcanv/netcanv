@@ -1,3 +1,5 @@
+const max_rect_count = 512u;
+
 struct SceneUniforms {
    transform: mat3x3f,
 }
@@ -18,7 +20,7 @@ struct Vertex {
 }
 
 @group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(0) @binding(1) var<uniform> rect_data: array<Rect, 256>;
+@group(0) @binding(1) var<uniform> rect_data: array<Rect, max_rect_count>;
 
 @vertex
 fn main_vs(

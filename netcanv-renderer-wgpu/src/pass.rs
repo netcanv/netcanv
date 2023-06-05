@@ -2,5 +2,5 @@ mod lines;
 mod rounded_rects;
 mod vertex;
 
-pub use lines::*;
-pub use rounded_rects::*;
+pub(crate) use lines::*;
+pub(crate) use rounded_rects::*;
