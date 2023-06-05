@@ -38,28 +38,24 @@ impl Lines {
          usage: wgpu::BufferUsages::VERTEX,
       });
 
-      let (scene_uniforms_layout, _) = gpu.scene_uniforms_binding(0);
       let bind_group_layout =
          gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Lines: Bind Group Layout"),
-            entries: &[
-               scene_uniforms_layout,
-               wgpu::BindGroupLayoutEntry {
-                  binding: 1,
-                  visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                  ty: wgpu::BindingType::Buffer {
-                     ty: wgpu::BufferBindingType::Uniform,
-                     has_dynamic_offset: false,
-                     min_binding_size: None,
-                  },
-                  count: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+               binding: 0,
+               visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+               ty: wgpu::BindingType::Buffer {
+                  ty: wgpu::BufferBindingType::Uniform,
+                  has_dynamic_offset: false,
+                  min_binding_size: None,
                },
-            ],
+               count: None,
+            }],
          });
 
       let pipeline_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
          label: Some("Lines: Render Pipeline Layout"),
-         bind_group_layouts: &[&bind_group_layout],
+         bind_group_layouts: &[&bind_group_layout, &gpu.scene_uniform_bind_group_layout],
          push_constant_ranges: &[],
       });
       let render_pipeline = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -152,6 +148,7 @@ impl Lines {
       });
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, bind_group, &[]);
+      render_pass.set_bind_group(1, &gpu.scene_uniform_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.draw(0..6, 0..self.line_data.len() as u32);
 

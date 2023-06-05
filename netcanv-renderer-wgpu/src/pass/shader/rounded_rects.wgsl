@@ -19,8 +19,8 @@ struct Vertex {
    @location(1) rect_index: u32,
 }
 
-@group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(0) @binding(1) var<uniform> rect_data: array<Rect, max_rect_count>;
+@group(0) @binding(0) var<uniform> rect_data: array<Rect, max_rect_count>;
+@group(1) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 
 @vertex
 fn main_vs(
@@ -45,9 +45,6 @@ fn rectangle_sdf(uv: vec2f, half_extents: vec2f) -> f32 {
    let inside_distance = min(max(componentwise_edge_distance.x, componentwise_edge_distance.y), 0.0);
    return outside_distance + inside_distance;
 }
-
-const pi = 3.141592654;
-const corner_offset = 0.2928932188; // 1.0 - sqrt(2.0) / 2.0;
 
 @fragment
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {

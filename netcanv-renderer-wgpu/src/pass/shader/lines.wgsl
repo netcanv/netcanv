@@ -19,8 +19,8 @@ struct Vertex {
    @location(1) local_position: vec2f,
 }
 
-@group(0) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(0) @binding(1) var<uniform> line_data: array<Line, max_line_count>;
+@group(0) @binding(0) var<uniform> line_data: array<Line, max_line_count>;
+@group(1) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 
 const cap_butt = 0u;
 const cap_square = 1u;

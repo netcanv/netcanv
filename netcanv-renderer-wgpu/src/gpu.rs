@@ -14,6 +14,8 @@ pub struct Gpu {
    pub queue: wgpu::Queue,
 
    pub scene_uniform_buffer: wgpu::Buffer,
+   pub scene_uniform_bind_group_layout: wgpu::BindGroupLayout,
+   pub scene_uniform_bind_group: wgpu::BindGroup,
    pub depth_buffer: wgpu::Texture,
    pub depth_buffer_view: wgpu::TextureView,
 
@@ -107,28 +109,6 @@ impl Gpu {
 
    pub fn render_target(&self) -> &wgpu::TextureView {
       self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
-   }
-
-   pub fn scene_uniforms_binding(
-      &self,
-      binding: u32,
-   ) -> (wgpu::BindGroupLayoutEntry, wgpu::BindGroupEntry) {
-      (
-         wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility: wgpu::ShaderStages::VERTEX,
-            ty: wgpu::BindingType::Buffer {
-               ty: wgpu::BufferBindingType::Uniform,
-               has_dynamic_offset: false,
-               min_binding_size: None,
-            },
-            count: None,
-         },
-         wgpu::BindGroupEntry {
-            binding,
-            resource: self.scene_uniform_buffer.as_entire_binding(),
-         },
-      )
    }
 
    pub fn color_target_state(&self) -> wgpu::ColorTargetState {

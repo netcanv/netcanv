@@ -2,6 +2,7 @@ use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, V
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 
 use crate::common::paws_color_to_wgpu;
+use crate::image::Image;
 use crate::WgpuBackend;
 
 pub(crate) struct ClearOps {
@@ -34,6 +35,7 @@ impl WgpuBackend {
    pub(crate) fn rewind(&mut self) {
       self.rounded_rects.rewind();
       self.lines.rewind();
+      self.images.rewind();
    }
 
    pub(crate) fn flush(&mut self) {
@@ -44,6 +46,7 @@ impl WgpuBackend {
       let mut clear_ops = self.clear_ops();
       self.rounded_rects.flush(&self.gpu, &mut encoder, &mut clear_ops);
       self.lines.flush(&self.gpu, &mut encoder, &mut clear_ops);
+      self.images.flush(&self.gpu, &self.image_storage, &mut encoder, &mut clear_ops);
 
       self.command_buffers.push(encoder.finish());
    }
@@ -118,7 +121,7 @@ impl RenderBackend for WgpuBackend {
    type Framebuffer = Framebuffer;
 
    fn create_image_from_rgba(&mut self, width: u32, height: u32, pixel_data: &[u8]) -> Self::Image {
-      Image { width, height }
+      self.create_image_from_rgba_impl(width, height, pixel_data)
    }
 
    fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font {
@@ -135,29 +138,18 @@ impl RenderBackend for WgpuBackend {
       self.clear = Some(color);
    }
 
-   fn image(&mut self, rect: Rect, image: &Self::Image) {}
+   fn image(&mut self, rect: Rect, image: &Self::Image) {
+      self.images.add(self.gpu.next_depth_index(), rect, image);
+      if self.images.needs_flush() {
+         self.flush();
+      }
+   }
 
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {}
 
    fn scale(&mut self, scale: Vector) {}
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Image {
-   width: u32,
-   height: u32,
-}
-
-impl netcanv_renderer::Image for Image {
-   fn colorized(&self, color: Color) -> Self {
-      *self
-   }
-
-   fn size(&self) -> (u32, u32) {
-      (self.width, self.height)
-   }
 }
 
 pub struct Framebuffer;

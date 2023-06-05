@@ -25,7 +25,6 @@ impl BatchStorage {
 
    pub fn next_batch(&mut self, gpu: &Gpu) -> (&wgpu::Buffer, &wgpu::BindGroup) {
       if self.buffers.get(self.current_batch).is_none() {
-         let (_, scene_uniforms) = gpu.scene_uniforms_binding(0);
          let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!(
                "{}: Data Buffer #{}",
@@ -43,13 +42,10 @@ impl BatchStorage {
                self.bind_groups.len()
             )),
             layout: &self.config.bind_group_layout,
-            entries: &[
-               scene_uniforms,
-               wgpu::BindGroupEntry {
-                  binding: 1,
-                  resource: buffer.as_entire_binding(),
-               },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+               binding: 0,
+               resource: buffer.as_entire_binding(),
+            }],
          });
          self.buffers.push(buffer);
          self.bind_groups.push(bind_group);

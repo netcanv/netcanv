@@ -3,32 +3,32 @@ use std::mem::size_of;
 use bytemuck::{Pod, Zeroable};
 use glam::{vec4, Vec4};
 use netcanv_renderer::paws::{Color, Rect};
-use wgpu::include_wgsl;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
 use crate::gpu::Gpu;
-use crate::ClearOps;
+use crate::image::ImageStorage;
+use crate::{ClearOps, Image};
 
 use super::vertex::{vertex, Vertex};
 
-/// Pipeline for drawing rounded rectangles.
-pub(crate) struct RoundedRects {
+pub(crate) struct Images {
    vertex_buffer: wgpu::Buffer,
    batch_storage: BatchStorage,
    render_pipeline: wgpu::RenderPipeline,
 
-   rect_data: Vec<RectData>,
+   image_rect_data: Vec<ImageRectData>,
+   image_bindings: Vec<u32>,
 }
 
-impl RoundedRects {
+impl Images {
    const RESERVED_RECT_COUNT: usize = 512;
 
-   pub fn new(gpu: &Gpu) -> Self {
-      let shader = gpu.device.create_shader_module(include_wgsl!("shader/rounded_rects.wgsl"));
+   pub fn new(gpu: &Gpu, image_storage: &ImageStorage) -> Self {
+      let shader = gpu.device.create_shader_module(wgpu::include_wgsl!("shader/images.wgsl"));
 
       let vertex_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-         label: Some("RoundedRects: Vertex Buffer"),
+         label: Some("Images: Vertex Buffer"),
          contents: bytemuck::cast_slice(&[
             vertex(1.0, 1.0),
             vertex(0.0, 1.0),
@@ -40,9 +40,9 @@ impl RoundedRects {
          usage: wgpu::BufferUsages::VERTEX,
       });
 
-      let bind_group_layout =
+      let image_rect_data_bind_group_layout =
          gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("RoundedRects: Bind Group Layout"),
+            label: Some("Images: Data Buffer Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                binding: 0,
                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -56,12 +56,16 @@ impl RoundedRects {
          });
 
       let pipeline_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-         label: Some("RoundedRects: Pipeline Layout"),
-         bind_group_layouts: &[&bind_group_layout, &gpu.scene_uniform_bind_group_layout],
+         label: Some("Images: Render Pipeline Layout"),
+         bind_group_layouts: &[
+            &image_storage.bind_group_layout,
+            &image_rect_data_bind_group_layout,
+            &gpu.scene_uniform_bind_group_layout,
+         ],
          push_constant_ranges: &[],
       });
       let render_pipeline = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-         label: Some("RoundedRects: Render Pipeline"),
+         label: Some("Images: Render Pipeline"),
          layout: Some(&pipeline_layout),
          vertex: wgpu::VertexState {
             module: &shader,
@@ -69,69 +73,65 @@ impl RoundedRects {
             buffers: &[Vertex::LAYOUT],
          },
          primitive: wgpu::PrimitiveState::default(),
+         depth_stencil: Some(gpu.depth_stencil_state()),
+         multisample: wgpu::MultisampleState::default(),
          fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point: "main_fs",
             targets: &[Some(gpu.color_target_state())],
          }),
-         depth_stencil: Some(gpu.depth_stencil_state()),
-         multisample: wgpu::MultisampleState::default(),
          multiview: None,
       });
 
       Self {
          vertex_buffer,
          batch_storage: BatchStorage::new(BatchStorageConfig {
-            name: "RoundedRects",
-            buffer_size: (size_of::<RectData>() * Self::RESERVED_RECT_COUNT) as wgpu::BufferAddress,
-            bind_group_layout,
+            name: "Images",
+            buffer_size: (size_of::<ImageRectData>() * Self::RESERVED_RECT_COUNT)
+               as wgpu::BufferAddress,
+            bind_group_layout: image_rect_data_bind_group_layout,
          }),
          render_pipeline,
-         rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
+         image_rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
+         image_bindings: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
       }
    }
 
-   pub fn add(
-      &mut self,
-      depth_index: u32,
-      rect: Rect,
-      color: Color,
-      corner_radius: f32,
-      outline: f32,
-   ) {
+   pub fn add(&mut self, depth_index: u32, rect: Rect, image: &Image) {
       assert!(
-         self.rect_data.len() < self.rect_data.capacity(),
-         "too many rectangles without flushing"
+         self.image_rect_data.len() < self.image_rect_data.capacity(),
+         "too many images without flushing"
       );
 
-      self.rect_data.push(RectData {
-         color,
+      self.image_rect_data.push(ImageRectData {
+         rect: vec4(rect.x(), rect.y(), rect.width(), rect.height()),
          depth_index,
-         rect: vec4(rect.left(), rect.top(), rect.width(), rect.height()),
-         corner_radius,
-         outline,
+         color: image.color.unwrap_or(Color::TRANSPARENT),
+         colorize: image.color.is_some() as u32,
       });
+      self.image_bindings.push(image.index);
    }
 
    pub fn flush(
       &mut self,
       gpu: &Gpu,
+      image_storage: &ImageStorage,
       encoder: &mut wgpu::CommandEncoder,
       clear_ops: &mut ClearOps,
    ) {
       // TODO: This should interact with clearing, probably.
-      if self.rect_data.is_empty() {
+      if self.image_rect_data.is_empty() {
          return;
       }
 
-      let (rect_data_buffer, bind_group) = self.batch_storage.next_batch(gpu);
+      let (image_rect_data_buffer, bind_group) = self.batch_storage.next_batch(gpu);
 
-      let rect_data_bytes = bytemuck::cast_slice(&self.rect_data);
-      gpu.queue.write_buffer(rect_data_buffer, 0, rect_data_bytes);
+      let image_rect_data_bytes = bytemuck::cast_slice(&self.image_rect_data);
+      gpu.queue.write_buffer(image_rect_data_buffer, 0, image_rect_data_bytes);
 
       let ClearOps { color, depth } = clear_ops.take();
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-         label: Some("RoundedRects"),
+         label: Some("Images"),
          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: gpu.render_target(),
             resolve_target: None,
@@ -144,16 +144,25 @@ impl RoundedRects {
          }),
       });
       render_pass.set_pipeline(&self.render_pipeline);
-      render_pass.set_bind_group(0, bind_group, &[]);
-      render_pass.set_bind_group(1, &gpu.scene_uniform_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-      render_pass.draw(0..6, 0..self.rect_data.len() as u32);
+      render_pass.set_bind_group(1, bind_group, &[]);
+      render_pass.set_bind_group(2, &gpu.scene_uniform_bind_group, &[]);
+      for (i, &image_index) in self.image_bindings.iter().enumerate() {
+         let i = i as u32;
+         render_pass.set_bind_group(
+            0,
+            &image_storage.images[image_index as usize].bind_group,
+            &[],
+         );
+         render_pass.draw(0..6, i..i + 1);
+      }
 
-      self.rect_data.clear();
+      self.image_rect_data.clear();
+      self.image_bindings.clear();
    }
 
    pub fn needs_flush(&self) -> bool {
-      self.rect_data.len() == self.rect_data.capacity()
+      self.image_rect_data.len() >= self.image_rect_data.capacity()
    }
 
    pub fn rewind(&mut self) {
@@ -163,26 +172,12 @@ impl RoundedRects {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, align(16))]
-struct RectData {
+struct ImageRectData {
    rect: Vec4,
    depth_index: u32,
-   corner_radius: f32,
    color: Color,
-   /// This being <= 0 means we should fill in the rectangle.
-   outline: f32,
+   colorize: u32,
 }
 
-impl Default for RectData {
-   fn default() -> Self {
-      Self {
-         rect: Default::default(),
-         depth_index: Default::default(),
-         corner_radius: Default::default(),
-         color: Color::TRANSPARENT,
-         outline: 0.0,
-      }
-   }
-}
-
-unsafe impl Zeroable for RectData {}
-unsafe impl Pod for RectData {}
+unsafe impl Pod for ImageRectData {}
+unsafe impl Zeroable for ImageRectData {}

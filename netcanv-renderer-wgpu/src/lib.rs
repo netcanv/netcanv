@@ -3,6 +3,7 @@ use std::cell::Cell;
 use anyhow::Context;
 use cli::RendererCli;
 use gpu::{Gpu, SceneUniforms};
+use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
@@ -14,9 +15,11 @@ mod batch_storage;
 pub mod cli;
 mod common;
 mod gpu;
+mod image;
 mod pass;
 mod rendering;
 
+pub use image::*;
 pub use rendering::*;
 
 pub struct WgpuBackend {
@@ -26,9 +29,12 @@ pub struct WgpuBackend {
    // TODO: We should have this be event-driven instead of polling every frame.
    context_size: PhysicalSize<u32>,
 
+   image_storage: ImageStorage,
+
    clear: Option<Color>,
    rounded_rects: pass::RoundedRects,
    lines: pass::Lines,
+   images: pass::Images,
 
    command_buffers: Vec<wgpu::CommandBuffer>,
 }
@@ -81,6 +87,52 @@ impl WgpuBackend {
          usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
          mapped_at_creation: false,
       });
+      let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+         label: Some("Image Sampler"),
+         address_mode_u: wgpu::AddressMode::ClampToEdge,
+         address_mode_v: wgpu::AddressMode::ClampToEdge,
+         address_mode_w: wgpu::AddressMode::ClampToEdge,
+         mag_filter: wgpu::FilterMode::Linear,
+         min_filter: wgpu::FilterMode::Linear,
+         ..Default::default()
+      });
+
+      let scene_uniform_bind_group_layout =
+         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Scene Uniform Bind Group Layout"),
+            entries: &[
+               wgpu::BindGroupLayoutEntry {
+                  binding: 0,
+                  visibility: wgpu::ShaderStages::VERTEX,
+                  ty: wgpu::BindingType::Buffer {
+                     ty: wgpu::BufferBindingType::Uniform,
+                     has_dynamic_offset: false,
+                     min_binding_size: None,
+                  },
+                  count: None,
+               },
+               wgpu::BindGroupLayoutEntry {
+                  binding: 1,
+                  visibility: wgpu::ShaderStages::FRAGMENT,
+                  ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                  count: None,
+               },
+            ],
+         });
+      let scene_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+         label: Some("Scene Uniform Bind Group"),
+         layout: &scene_uniform_bind_group_layout,
+         entries: &[
+            wgpu::BindGroupEntry {
+               binding: 0,
+               resource: scene_uniform_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+               binding: 1,
+               resource: wgpu::BindingResource::Sampler(&image_sampler),
+            },
+         ],
+      });
 
       let depth_buffer = Gpu::create_depth_buffer(&device, window.inner_size());
       let depth_buffer_view = depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
@@ -92,6 +144,8 @@ impl WgpuBackend {
          device,
          queue,
          scene_uniform_buffer,
+         scene_uniform_bind_group_layout,
+         scene_uniform_bind_group,
          depth_buffer,
          depth_buffer_view,
          current_render_target: None,
@@ -99,17 +153,21 @@ impl WgpuBackend {
       };
       gpu.handle_resize(window.inner_size());
 
+      let image_storage = ImageStorage::new(&gpu);
+
       let context_size = window.inner_size();
       Ok(Self {
          rounded_rects: pass::RoundedRects::new(&gpu),
          lines: pass::Lines::new(&gpu),
+         images: pass::Images::new(&gpu, &image_storage),
+
+         image_storage,
 
          window,
          gpu,
 
          clear: None,
          context_size,
-
          command_buffers: vec![],
       })
    }
