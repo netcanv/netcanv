@@ -87,8 +87,7 @@ impl RoundedRects {
       Self {
          vertex_buffer,
          batch_storage: BatchStorage::new(BatchStorageConfig {
-            buffer_name: "RoundedRects: Rectangle Data Buffer",
-            bind_group_name: "RoundedRects: Bind Group",
+            name: "RoundedRects",
             buffer_size: (size_of::<RectData>() * Self::RESERVED_RECT_COUNT) as wgpu::BufferAddress,
             bind_group_layout,
          }),

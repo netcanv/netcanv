@@ -1,8 +1,7 @@
 use crate::gpu::Gpu;
 
 pub struct BatchStorageConfig {
-   pub buffer_name: &'static str,
-   pub bind_group_name: &'static str,
+   pub name: &'static str,
    pub buffer_size: wgpu::BufferAddress,
    pub bind_group_layout: wgpu::BindGroupLayout,
 }
@@ -29,8 +28,8 @@ impl BatchStorage {
          let (_, scene_uniforms) = gpu.scene_uniforms_binding(0);
          let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!(
-               "{} #{}",
-               self.config.buffer_name,
+               "{}: Data Buffer #{}",
+               self.config.name,
                self.buffers.len()
             )),
             size: self.config.buffer_size,
@@ -39,8 +38,8 @@ impl BatchStorage {
          });
          let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(&format!(
-               "{} #{}",
-               self.config.bind_group_name,
+               "{}: Bind Group #{}",
+               self.config.name,
                self.bind_groups.len()
             )),
             layout: &self.config.bind_group_layout,

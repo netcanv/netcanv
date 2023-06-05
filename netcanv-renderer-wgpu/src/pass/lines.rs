@@ -84,8 +84,7 @@ impl Lines {
       Self {
          vertex_buffer,
          batch_storage: BatchStorage::new(BatchStorageConfig {
-            buffer_name: "Lines: Line Data Buffer",
-            bind_group_name: "Lines: Bind Group",
+            name: "Lines",
             buffer_size: (size_of::<LineData>() * Self::RESERVED_LINE_COUNT) as wgpu::BufferAddress,
             bind_group_layout,
          }),
