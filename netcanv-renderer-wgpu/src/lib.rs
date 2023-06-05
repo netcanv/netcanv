@@ -76,7 +76,7 @@ impl WgpuBackend {
       ).await.context("Failed to acquire graphics device. Try updating your graphics drivers. If that doesn't work, your hardware may be too old to run NetCanv.")?;
 
       let scene_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-         label: Some("Immediate Geometry Uniform Buffer"),
+         label: Some("Scene Uniform Buffer"),
          size: std::mem::size_of::<SceneUniforms>() as wgpu::BufferAddress,
          usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
          mapped_at_creation: false,
