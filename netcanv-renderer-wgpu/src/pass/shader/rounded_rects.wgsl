@@ -1,9 +1,5 @@
 const max_rect_count = 512u;
 
-struct SceneUniforms {
-   transform: mat3x3f,
-}
-
 struct Rect {
    @align(16)
    rect: vec4f, // xy = top-left, zw = bottom-right
@@ -20,7 +16,8 @@ struct Vertex {
 }
 
 @group(0) @binding(0) var<uniform> rect_data: array<Rect, max_rect_count>;
-@group(1) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
+@group(1) @binding(0) var<uniform> model_transform: mat3x3f;
+@group(2) @binding(0) var<uniform> scene_transform: mat3x3f;
 
 @vertex
 fn main_vs(
@@ -30,7 +27,7 @@ fn main_vs(
 {
    let data = rect_data[rect_index];
    let local_position = position * data.rect.zw + data.rect.xy;
-   let scene_position = scene_uniforms.transform * vec3f(local_position, 1.0);
+   let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
    vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);

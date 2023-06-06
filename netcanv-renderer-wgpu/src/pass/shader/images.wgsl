@@ -1,9 +1,5 @@
 const max_image_count = 512u;
 
-struct SceneUniforms {
-   transform: mat3x3f,
-}
-
 struct Vertex {
    @builtin(position) position: vec4f,
    @location(0) uv: vec2f,
@@ -20,8 +16,9 @@ struct ImageRect {
 
 @group(0) @binding(0) var image_texture: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> image_rect_data: array<ImageRect, max_image_count>;
-@group(2) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(2) @binding(1) var image_sampler: sampler;
+@group(2) @binding(0) var<uniform> model_transform: mat3x3f;
+@group(3) @binding(0) var<uniform> scene_transform: mat3x3f;
+@group(3) @binding(1) var image_sampler: sampler;
 
 @vertex
 fn main_vs(
@@ -30,7 +27,7 @@ fn main_vs(
 ) -> Vertex {
    let data = image_rect_data[rect_index];
    let local_position = position * data.rect.zw + data.rect.xy;
-   let scene_position = scene_uniforms.transform * vec3f(local_position, 1.0);
+   let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
    vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);

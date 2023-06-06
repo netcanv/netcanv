@@ -1,10 +1,14 @@
 use std::cell::Cell;
+use std::mem::size_of;
 
 use anyhow::Context;
 use cli::RendererCli;
+use glam::{Mat3A, Vec2};
 use gpu::{Gpu, SceneUniforms};
 use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
+use transform::Transform;
+use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
@@ -18,9 +22,13 @@ mod gpu;
 mod image;
 mod pass;
 mod rendering;
+mod transform;
 
 pub use image::*;
 pub use rendering::*;
+
+use crate::batch_storage::{BatchStorage, BatchStorageConfig};
+use crate::pass::PassCreationContext;
 
 pub struct WgpuBackend {
    window: Window,
@@ -30,8 +38,12 @@ pub struct WgpuBackend {
    context_size: PhysicalSize<u32>,
 
    image_storage: ImageStorage,
+   transform_stack: Vec<Transform>,
+   identity_model_transform_bind_group: wgpu::BindGroup,
+   model_transform_storage: BatchStorage,
 
    clear: Option<Color>,
+
    rounded_rects: pass::RoundedRects,
    lines: pass::Lines,
    images: pass::Images,
@@ -87,6 +99,13 @@ impl WgpuBackend {
          usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
          mapped_at_creation: false,
       });
+      let identity_mat3x3f = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+         label: Some("Identity mat3x3f"),
+         contents: bytemuck::cast_slice(&[
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+         ]),
+         usage: wgpu::BufferUsages::UNIFORM,
+      });
       let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
          label: Some("Image Sampler"),
          address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -134,6 +153,30 @@ impl WgpuBackend {
          ],
       });
 
+      let model_transform_bind_group_layout =
+         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Model Transform Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+               binding: 0,
+               visibility: wgpu::ShaderStages::VERTEX,
+               ty: wgpu::BindingType::Buffer {
+                  ty: wgpu::BufferBindingType::Uniform,
+                  has_dynamic_offset: false,
+                  min_binding_size: None,
+               },
+               count: None,
+            }],
+         });
+      let identity_model_transform_bind_group =
+         device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Identity Model Transform Bind Group"),
+            layout: &model_transform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+               binding: 0,
+               resource: identity_mat3x3f.as_entire_binding(),
+            }],
+         });
+
       let depth_buffer = Gpu::create_depth_buffer(&device, window.inner_size());
       let depth_buffer_view = depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -143,12 +186,16 @@ impl WgpuBackend {
          capabilities,
          device,
          queue,
+
          scene_uniform_buffer,
          scene_uniform_bind_group_layout,
          scene_uniform_bind_group,
+
          depth_buffer,
          depth_buffer_view,
+
          current_render_target: None,
+
          depth_index_counter: Cell::new(0),
       };
       gpu.handle_resize(window.inner_size());
@@ -156,12 +203,23 @@ impl WgpuBackend {
       let image_storage = ImageStorage::new(&gpu);
 
       let context_size = window.inner_size();
+      let pass_creation_context = PassCreationContext {
+         gpu: &gpu,
+         model_transform_bind_group_layout: &model_transform_bind_group_layout,
+      };
       Ok(Self {
-         rounded_rects: pass::RoundedRects::new(&gpu),
-         lines: pass::Lines::new(&gpu),
-         images: pass::Images::new(&gpu, &image_storage),
+         rounded_rects: pass::RoundedRects::new(&pass_creation_context),
+         lines: pass::Lines::new(&pass_creation_context),
+         images: pass::Images::new(&pass_creation_context, &image_storage),
 
          image_storage,
+         transform_stack: vec![Transform::Translation(Vec2::ZERO)],
+         identity_model_transform_bind_group,
+         model_transform_storage: BatchStorage::new(BatchStorageConfig {
+            name: "Model Transforms",
+            buffer_size: size_of::<Mat3A>() as wgpu::BufferAddress,
+            bind_group_layout: model_transform_bind_group_layout,
+         }),
 
          window,
          gpu,

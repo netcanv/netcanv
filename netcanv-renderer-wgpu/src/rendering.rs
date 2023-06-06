@@ -1,8 +1,11 @@
+use glam::Vec2;
 use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
 
-use crate::common::paws_color_to_wgpu;
+use crate::common::{paws_color_to_wgpu, vector_to_vec2};
+use crate::gpu::Gpu;
 use crate::image::Image;
+use crate::transform::Transform;
 use crate::WgpuBackend;
 
 pub(crate) struct ClearOps {
@@ -31,6 +34,13 @@ impl Default for ClearOps {
    }
 }
 
+pub(crate) struct FlushContext<'a> {
+   pub gpu: &'a Gpu,
+   pub encoder: &'a mut wgpu::CommandEncoder,
+   pub clear_ops: &'a mut ClearOps,
+   pub model_transform_bind_group: &'a wgpu::BindGroup,
+}
+
 impl WgpuBackend {
    pub(crate) fn rewind(&mut self) {
       self.rounded_rects.rewind();
@@ -40,13 +50,32 @@ impl WgpuBackend {
 
    pub(crate) fn flush(&mut self) {
       let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-         label: Some("Render Pass"),
+         label: Some("Flush"),
       });
-
       let mut clear_ops = self.clear_ops();
-      self.rounded_rects.flush(&self.gpu, &mut encoder, &mut clear_ops);
-      self.lines.flush(&self.gpu, &mut encoder, &mut clear_ops);
-      self.images.flush(&self.gpu, &self.image_storage, &mut encoder, &mut clear_ops);
+
+      let model_transform_bind_group = if let Transform::Matrix(matrix) = self.current_transform() {
+         let (buffer, bind_group) = self.model_transform_storage.next_batch(&self.gpu);
+         self.gpu.queue.write_buffer(
+            buffer,
+            0,
+            bytemuck::bytes_of(&matrix.to_cols_array_2d().map(|[a, b, c]| [a, b, c, 0.0])),
+         );
+         bind_group
+      } else {
+         &self.identity_model_transform_bind_group
+      };
+
+      let mut context = FlushContext {
+         gpu: &self.gpu,
+         encoder: &mut encoder,
+         clear_ops: &mut clear_ops,
+         model_transform_bind_group,
+      };
+
+      self.rounded_rects.flush(&mut context);
+      self.lines.flush(&mut context);
+      self.images.flush(&mut context, &self.image_storage);
 
       self.command_buffers.push(encoder.finish());
    }
@@ -72,11 +101,28 @@ impl WgpuBackend {
 impl Renderer for WgpuBackend {
    type Font = Font;
 
-   fn push(&mut self) {}
+   fn push(&mut self) {
+      let transform = self.current_transform();
+      self.transform_stack.push(transform);
+   }
 
-   fn pop(&mut self) {}
+   fn pop(&mut self) {
+      if let Transform::Matrix(_) = self.current_transform() {
+         self.flush();
+      }
+      self.transform_stack.pop();
+      if self.transform_stack.is_empty() {
+         self.transform_stack.push(Transform::Translation(Vec2::ZERO));
+      }
+   }
 
-   fn translate(&mut self, vec: Vector) {}
+   fn translate(&mut self, vec: Vector) {
+      let transform = self.current_transform();
+      *self.current_transform_mut() = transform.translate(vector_to_vec2(vec));
+      if self.current_transform().is_matrix() {
+         self.flush();
+      }
+   }
 
    fn clip(&mut self, rect: Rect) {}
 
@@ -147,7 +193,13 @@ impl RenderBackend for WgpuBackend {
 
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {}
 
-   fn scale(&mut self, scale: Vector) {}
+   fn scale(&mut self, scale: Vector) {
+      // In case of scaling we always end up with a matrix so we need to flush whatever was about
+      // to be rendered.
+      self.flush();
+      let transform = self.current_transform();
+      *self.current_transform_mut() = transform.scale(vector_to_vec2(scale));
+   }
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
 }

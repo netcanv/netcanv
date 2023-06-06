@@ -7,10 +7,10 @@ use wgpu::include_wgsl;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::gpu::Gpu;
-use crate::ClearOps;
+use crate::{ClearOps, FlushContext};
 
 use super::vertex::{vertex, Vertex};
+use super::PassCreationContext;
 
 /// Pipeline for drawing rounded rectangles.
 pub(crate) struct RoundedRects {
@@ -24,24 +24,26 @@ pub(crate) struct RoundedRects {
 impl RoundedRects {
    const RESERVED_RECT_COUNT: usize = 512;
 
-   pub fn new(gpu: &Gpu) -> Self {
-      let shader = gpu.device.create_shader_module(include_wgsl!("shader/rounded_rects.wgsl"));
+   pub fn new(context: &PassCreationContext<'_>) -> Self {
+      let shader =
+         context.gpu.device.create_shader_module(include_wgsl!("shader/rounded_rects.wgsl"));
 
-      let vertex_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-         label: Some("RoundedRects: Vertex Buffer"),
-         contents: bytemuck::cast_slice(&[
-            vertex(1.0, 1.0),
-            vertex(0.0, 1.0),
-            vertex(0.0, 0.0),
-            vertex(1.0, 1.0),
-            vertex(1.0, 0.0),
-            vertex(0.0, 0.0),
-         ]),
-         usage: wgpu::BufferUsages::VERTEX,
-      });
+      let vertex_buffer =
+         context.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("RoundedRects: Vertex Buffer"),
+            contents: bytemuck::cast_slice(&[
+               vertex(1.0, 1.0),
+               vertex(0.0, 1.0),
+               vertex(0.0, 0.0),
+               vertex(1.0, 1.0),
+               vertex(1.0, 0.0),
+               vertex(0.0, 0.0),
+            ]),
+            usage: wgpu::BufferUsages::VERTEX,
+         });
 
       let bind_group_layout =
-         gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+         context.gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("RoundedRects: Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                binding: 0,
@@ -55,29 +57,35 @@ impl RoundedRects {
             }],
          });
 
-      let pipeline_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-         label: Some("RoundedRects: Pipeline Layout"),
-         bind_group_layouts: &[&bind_group_layout, &gpu.scene_uniform_bind_group_layout],
-         push_constant_ranges: &[],
-      });
-      let render_pipeline = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-         label: Some("RoundedRects: Render Pipeline"),
-         layout: Some(&pipeline_layout),
-         vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: "main_vs",
-            buffers: &[Vertex::LAYOUT],
-         },
-         primitive: wgpu::PrimitiveState::default(),
-         fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: "main_fs",
-            targets: &[Some(gpu.color_target_state())],
-         }),
-         depth_stencil: Some(gpu.depth_stencil_state()),
-         multisample: wgpu::MultisampleState::default(),
-         multiview: None,
-      });
+      let pipeline_layout =
+         context.gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("RoundedRects: Pipeline Layout"),
+            bind_group_layouts: &[
+               &bind_group_layout,
+               context.model_transform_bind_group_layout,
+               &context.gpu.scene_uniform_bind_group_layout,
+            ],
+            push_constant_ranges: &[],
+         });
+      let render_pipeline =
+         context.gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("RoundedRects: Render Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+               module: &shader,
+               entry_point: "main_vs",
+               buffers: &[Vertex::LAYOUT],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            fragment: Some(wgpu::FragmentState {
+               module: &shader,
+               entry_point: "main_fs",
+               targets: &[Some(context.gpu.color_target_state())],
+            }),
+            depth_stencil: Some(context.gpu.depth_stencil_state()),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+         });
 
       Self {
          vertex_buffer,
@@ -113,39 +121,35 @@ impl RoundedRects {
       });
    }
 
-   pub fn flush(
-      &mut self,
-      gpu: &Gpu,
-      encoder: &mut wgpu::CommandEncoder,
-      clear_ops: &mut ClearOps,
-   ) {
+   pub fn flush(&mut self, context: &mut FlushContext<'_>) {
       // TODO: This should interact with clearing, probably.
       if self.rect_data.is_empty() {
          return;
       }
 
-      let (rect_data_buffer, bind_group) = self.batch_storage.next_batch(gpu);
+      let (rect_data_buffer, bind_group) = self.batch_storage.next_batch(context.gpu);
 
       let rect_data_bytes = bytemuck::cast_slice(&self.rect_data);
-      gpu.queue.write_buffer(rect_data_buffer, 0, rect_data_bytes);
+      context.gpu.queue.write_buffer(rect_data_buffer, 0, rect_data_bytes);
 
-      let ClearOps { color, depth } = clear_ops.take();
-      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+      let ClearOps { color, depth } = context.clear_ops.take();
+      let mut render_pass = context.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
          label: Some("RoundedRects"),
          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: gpu.render_target(),
+            view: context.gpu.render_target(),
             resolve_target: None,
             ops: color,
          })],
          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &gpu.depth_buffer_view,
+            view: &context.gpu.depth_buffer_view,
             depth_ops: Some(depth),
             stencil_ops: None,
          }),
       });
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, bind_group, &[]);
-      render_pass.set_bind_group(1, &gpu.scene_uniform_bind_group, &[]);
+      render_pass.set_bind_group(1, context.model_transform_bind_group, &[]);
+      render_pass.set_bind_group(2, &context.gpu.scene_uniform_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.draw(0..6, 0..self.rect_data.len() as u32);
 

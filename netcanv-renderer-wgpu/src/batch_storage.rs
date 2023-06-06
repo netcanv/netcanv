@@ -1,3 +1,5 @@
+use wgpu::BindGroupEntry;
+
 use crate::gpu::Gpu;
 
 pub struct BatchStorageConfig {
@@ -23,7 +25,11 @@ impl BatchStorage {
       }
    }
 
-   pub fn next_batch(&mut self, gpu: &Gpu) -> (&wgpu::Buffer, &wgpu::BindGroup) {
+   pub fn next_batch_with_bind_group<const N: usize>(
+      &mut self,
+      gpu: &Gpu,
+      make_bind_group: impl FnOnce(&wgpu::Buffer) -> [BindGroupEntry; N],
+   ) -> (&wgpu::Buffer, &wgpu::BindGroup) {
       if self.buffers.get(self.current_batch).is_none() {
          let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!(
@@ -42,10 +48,7 @@ impl BatchStorage {
                self.bind_groups.len()
             )),
             layout: &self.config.bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-               binding: 0,
-               resource: buffer.as_entire_binding(),
-            }],
+            entries: &make_bind_group(&buffer),
          });
          self.buffers.push(buffer);
          self.bind_groups.push(bind_group);
@@ -56,6 +59,15 @@ impl BatchStorage {
       );
       self.current_batch += 1;
       batch
+   }
+
+   pub fn next_batch(&mut self, gpu: &Gpu) -> (&wgpu::Buffer, &wgpu::BindGroup) {
+      self.next_batch_with_bind_group(gpu, |buffer| {
+         [wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+         }]
+      })
    }
 
    pub fn rewind(&mut self) {

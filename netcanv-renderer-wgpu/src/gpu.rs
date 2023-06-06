@@ -16,6 +16,7 @@ pub struct Gpu {
    pub scene_uniform_buffer: wgpu::Buffer,
    pub scene_uniform_bind_group_layout: wgpu::BindGroupLayout,
    pub scene_uniform_bind_group: wgpu::BindGroup,
+
    pub depth_buffer: wgpu::Texture,
    pub depth_buffer_view: wgpu::TextureView,
 
