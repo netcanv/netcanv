@@ -54,7 +54,8 @@ impl WgpuBackend {
       });
       let mut clear_ops = self.clear_ops();
 
-      let model_transform_bind_group = if let Transform::Matrix(matrix) = self.current_transform() {
+      let model_transform_bind_group = if let Transform::Matrix(matrix) = *self.current_transform()
+      {
          let (buffer, bind_group) = self.model_transform_storage.next_batch(&self.gpu);
          self.gpu.queue.write_buffer(
             buffer,
@@ -102,7 +103,7 @@ impl Renderer for WgpuBackend {
    type Font = Font;
 
    fn push(&mut self) {
-      let transform = self.current_transform();
+      let transform = *self.current_transform();
       self.transform_stack.push(transform);
    }
 
@@ -127,6 +128,7 @@ impl Renderer for WgpuBackend {
    fn clip(&mut self, rect: Rect) {}
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
+      let rect = self.current_transform().translate_rect(rect);
       self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
       if self.rounded_rects.needs_flush() {
          self.flush();
@@ -135,6 +137,7 @@ impl Renderer for WgpuBackend {
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
       if thickness > 0.0 {
+         let rect = self.current_transform().translate_rect(rect);
          self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, thickness);
          if self.rounded_rects.needs_flush() {
             self.flush();
@@ -143,6 +146,8 @@ impl Renderer for WgpuBackend {
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
+      let a = self.current_transform().translate_vector(a);
+      let b = self.current_transform().translate_vector(b);
       self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
       if self.lines.needs_flush() {
          self.flush();
@@ -185,6 +190,7 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {
+      let rect = self.current_transform().translate_rect(rect);
       self.images.add(self.gpu.next_depth_index(), rect, image);
       if self.images.needs_flush() {
          self.flush();

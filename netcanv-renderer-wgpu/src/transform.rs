@@ -1,4 +1,5 @@
 use glam::{Mat3A, Vec2};
+use netcanv_renderer::paws::{vector, Rect, Vector};
 
 use crate::WgpuBackend;
 
@@ -11,8 +12,8 @@ pub enum Transform {
 }
 
 impl WgpuBackend {
-   pub(crate) fn current_transform(&self) -> Transform {
-      *self.transform_stack.last().expect("transform stack is empty")
+   pub(crate) fn current_transform(&self) -> &Transform {
+      self.transform_stack.last().expect("transform stack is empty")
    }
 
    pub(crate) fn current_transform_mut(&mut self) -> &mut Transform {
@@ -39,5 +40,19 @@ impl Transform {
 
    pub fn is_matrix(&self) -> bool {
       matches!(self, Self::Matrix(..))
+   }
+
+   pub fn translate_vector(&self, vec: Vector) -> Vector {
+      match self {
+         Transform::Translation(t) => vector(vec.x + t.x, vec.y + t.y),
+         _ => vec,
+      }
+   }
+
+   pub fn translate_rect(&self, rect: Rect) -> Rect {
+      match self {
+         Transform::Translation(t) => Rect::new(rect.position + vector(t.x, t.y), rect.size),
+         _ => rect,
+      }
    }
 }

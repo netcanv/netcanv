@@ -680,7 +680,6 @@ impl AppState for State {
       self.process_language_menu(ui, input);
 
       ui.render().push();
-      ui.render().scale(vector(2.0, 2.0));
       ui.render().line(
          vector(32.0, 32.0 + 64.0),
          vector(256.0, 32.0 + 64.0),
