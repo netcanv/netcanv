@@ -7,9 +7,9 @@ edition = "2021"
 anyhow = "1.0.40"
 bytemuck = "1.13.1"
 clap = { workspace = true }
+glam = "0.24.0"
 log = { workspace = true }
 wgpu = "0.16.1"
 winit = { version = "0.28.6", features = ["serde"] }
 
 netcanv-renderer = { path = "../netcanv-renderer" }
-glam = "0.24.0"

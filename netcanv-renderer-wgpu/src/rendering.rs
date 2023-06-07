@@ -10,7 +10,6 @@ use crate::WgpuBackend;
 
 pub(crate) struct ClearOps {
    pub color: wgpu::Operations<wgpu::Color>,
-   pub depth: wgpu::Operations<f32>,
 }
 
 impl ClearOps {
@@ -26,34 +25,45 @@ impl Default for ClearOps {
             load: wgpu::LoadOp::Load,
             store: true,
          },
-         depth: wgpu::Operations {
-            load: wgpu::LoadOp::Load,
-            store: true,
-         },
       }
    }
 }
 
-pub(crate) struct FlushContext<'a> {
-   pub gpu: &'a Gpu,
-   pub encoder: &'a mut wgpu::CommandEncoder,
-   pub clear_ops: &'a mut ClearOps,
-   pub model_transform_bind_group: &'a wgpu::BindGroup,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Pass {
+   // NOTE: The order here must match the order of pass `flush` calls in `WgpuBackend::flush`.
+   RoundedRects,
+   Lines,
+   Images,
+}
+
+pub(crate) struct FlushContext<'flush> {
+   pub gpu: &'flush Gpu,
+   pub model_transform_bind_group: &'flush wgpu::BindGroup,
 }
 
 impl WgpuBackend {
    pub(crate) fn rewind(&mut self) {
+      self.last_pass = None;
       self.rounded_rects.rewind();
       self.lines.rewind();
       self.images.rewind();
+   }
+
+   fn switch_pass(&mut self, new_pass: Pass) {
+      let last_pass = self.last_pass;
+      self.last_pass = Some(new_pass);
+      if Some(new_pass) < last_pass {
+         self.flush();
+      }
    }
 
    pub(crate) fn flush(&mut self) {
       let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
          label: Some("Flush"),
       });
-      let mut clear_ops = self.clear_ops();
 
+      let clear_ops = self.clear_ops().take();
       let model_transform_bind_group = if let Transform::Matrix(matrix) = *self.current_transform()
       {
          let (buffer, bind_group) = self.model_transform_storage.next_batch(&self.gpu);
@@ -67,16 +77,27 @@ impl WgpuBackend {
          &self.identity_model_transform_bind_group
       };
 
-      let mut context = FlushContext {
-         gpu: &self.gpu,
-         encoder: &mut encoder,
-         clear_ops: &mut clear_ops,
-         model_transform_bind_group,
-      };
+      {
+         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Flush"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+               view: self.gpu.render_target(),
+               resolve_target: None,
+               ops: clear_ops.color,
+            })],
+            depth_stencil_attachment: None,
+         });
 
-      self.rounded_rects.flush(&mut context);
-      self.lines.flush(&mut context);
-      self.images.flush(&mut context, &self.image_storage);
+         let mut context = FlushContext {
+            gpu: &self.gpu,
+            model_transform_bind_group,
+         };
+
+         self.rounded_rects.flush(&mut context, &mut render_pass);
+         self.lines.flush(&mut context, &mut render_pass);
+         self.images.flush(&mut context, &self.image_storage, &mut render_pass);
+         self.last_pass = None;
+      }
 
       self.command_buffers.push(encoder.finish());
    }
@@ -86,10 +107,6 @@ impl WgpuBackend {
          ClearOps {
             color: wgpu::Operations {
                load: wgpu::LoadOp::Clear(paws_color_to_wgpu(color)),
-               store: true,
-            },
-            depth: wgpu::Operations {
-               load: wgpu::LoadOp::Clear(0.0),
                store: true,
             },
          }
@@ -128,16 +145,20 @@ impl Renderer for WgpuBackend {
    fn clip(&mut self, rect: Rect) {}
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      let rect = self.current_transform().translate_rect(rect);
-      self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
-      if self.rounded_rects.needs_flush() {
-         self.flush();
+      if color.a > 0 {
+         let rect = self.current_transform().translate_rect(rect);
+         self.switch_pass(Pass::RoundedRects);
+         self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
+         if self.rounded_rects.needs_flush() {
+            self.flush();
+         }
       }
    }
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
-      if thickness > 0.0 {
+      if thickness > 0.0 && color.a > 0 {
          let rect = self.current_transform().translate_rect(rect);
+         self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, thickness);
          if self.rounded_rects.needs_flush() {
             self.flush();
@@ -146,11 +167,14 @@ impl Renderer for WgpuBackend {
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
-      let a = self.current_transform().translate_vector(a);
-      let b = self.current_transform().translate_vector(b);
-      self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
-      if self.lines.needs_flush() {
-         self.flush();
+      if color.a > 0 {
+         let a = self.current_transform().translate_vector(a);
+         let b = self.current_transform().translate_vector(b);
+         self.switch_pass(Pass::Lines);
+         self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
+         if self.lines.needs_flush() {
+            self.flush();
+         }
       }
    }
 
@@ -190,10 +214,13 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {
-      let rect = self.current_transform().translate_rect(rect);
-      self.images.add(self.gpu.next_depth_index(), rect, image);
-      if self.images.needs_flush() {
-         self.flush();
+      if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
+         let rect = self.current_transform().translate_rect(rect);
+         self.switch_pass(Pass::Images);
+         self.images.add(self.gpu.next_depth_index(), rect, image);
+         if self.images.needs_flush() {
+            self.flush();
+         }
       }
    }
 

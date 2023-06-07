@@ -6,7 +6,7 @@ use netcanv_renderer::paws::{Color, LineCap, Point};
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::{ClearOps, FlushContext};
+use crate::FlushContext;
 
 use super::vertex::{vertex, Vertex};
 use super::PassCreationContext;
@@ -75,7 +75,7 @@ impl Lines {
                buffers: &[Vertex::LAYOUT],
             },
             primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(context.gpu.depth_stencil_state()),
+            depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                module: &shader,
@@ -124,7 +124,11 @@ impl Lines {
       });
    }
 
-   pub fn flush(&mut self, context: &mut FlushContext<'_>) {
+   pub fn flush<'a>(
+      &'a mut self,
+      context: &mut FlushContext<'a>,
+      render_pass: &mut wgpu::RenderPass<'a>,
+   ) {
       // TODO: This should interact with clearing, probably.
       if self.line_data.is_empty() {
          return;
@@ -135,26 +139,14 @@ impl Lines {
       let line_data_bytes = bytemuck::cast_slice(&self.line_data);
       context.gpu.queue.write_buffer(line_data_buffer, 0, line_data_bytes);
 
-      let ClearOps { color, depth } = context.clear_ops.take();
-      let mut render_pass = context.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-         label: Some("Lines"),
-         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: context.gpu.render_target(),
-            resolve_target: None,
-            ops: color,
-         })],
-         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &context.gpu.depth_buffer_view,
-            depth_ops: Some(depth),
-            stencil_ops: None,
-         }),
-      });
+      render_pass.push_debug_group("Lines");
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, bind_group, &[]);
       render_pass.set_bind_group(1, context.model_transform_bind_group, &[]);
       render_pass.set_bind_group(2, &context.gpu.scene_uniform_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.draw(0..6, 0..self.line_data.len() as u32);
+      render_pass.pop_debug_group();
 
       self.line_data.clear();
    }

@@ -17,39 +17,15 @@ pub struct Gpu {
    pub scene_uniform_bind_group_layout: wgpu::BindGroupLayout,
    pub scene_uniform_bind_group: wgpu::BindGroup,
 
-   pub depth_buffer: wgpu::Texture,
-   pub depth_buffer_view: wgpu::TextureView,
-
    pub current_render_target: Option<wgpu::TextureView>,
 
    pub depth_index_counter: Cell<u32>,
 }
 
 impl Gpu {
-   pub fn create_depth_buffer(device: &wgpu::Device, size: PhysicalSize<u32>) -> wgpu::Texture {
-      device.create_texture(&wgpu::TextureDescriptor {
-         label: Some("Scene Depth Buffer"),
-         size: wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-         },
-         mip_level_count: 1,
-         sample_count: 1,
-         dimension: wgpu::TextureDimension::D2,
-         format: wgpu::TextureFormat::Depth24Plus,
-         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-         view_formats: &[],
-      })
-   }
-
    pub fn handle_resize(&mut self, window_size: PhysicalSize<u32>) {
       self.configure_surface(window_size);
       self.update_scene_uniforms(window_size);
-      self.depth_buffer.destroy();
-      self.depth_buffer = Self::create_depth_buffer(&self.device, window_size);
-      self.depth_buffer_view =
-         self.depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
    }
 
    pub fn surface_format(&self) -> wgpu::TextureFormat {
@@ -120,16 +96,6 @@ impl Gpu {
             alpha: wgpu::BlendComponent::OVER,
          }),
          write_mask: wgpu::ColorWrites::ALL,
-      }
-   }
-
-   pub fn depth_stencil_state(&self) -> wgpu::DepthStencilState {
-      wgpu::DepthStencilState {
-         format: self.depth_buffer.format(),
-         depth_write_enabled: true,
-         depth_compare: wgpu::CompareFunction::GreaterEqual,
-         stencil: wgpu::StencilState::default(),
-         bias: wgpu::DepthBiasState::default(),
       }
    }
 }

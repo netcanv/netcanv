@@ -43,6 +43,7 @@ pub struct WgpuBackend {
    model_transform_storage: BatchStorage,
 
    clear: Option<Color>,
+   last_pass: Option<Pass>,
 
    rounded_rects: pass::RoundedRects,
    lines: pass::Lines,
@@ -177,9 +178,6 @@ impl WgpuBackend {
             }],
          });
 
-      let depth_buffer = Gpu::create_depth_buffer(&device, window.inner_size());
-      let depth_buffer_view = depth_buffer.create_view(&wgpu::TextureViewDescriptor::default());
-
       let mut gpu = Gpu {
          surface,
          adapter,
@@ -190,9 +188,6 @@ impl WgpuBackend {
          scene_uniform_buffer,
          scene_uniform_bind_group_layout,
          scene_uniform_bind_group,
-
-         depth_buffer,
-         depth_buffer_view,
 
          current_render_target: None,
 
@@ -225,6 +220,7 @@ impl WgpuBackend {
          gpu,
 
          clear: None,
+         last_pass: None,
          context_size,
          command_buffers: vec![],
       })
