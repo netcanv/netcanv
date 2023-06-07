@@ -3,7 +3,6 @@ const max_line_count = 512u;
 struct Line {
    @align(16)
    line: vec4f, // xy = start point, zw = end point
-   depth_index: u32,
    thickness: f32,
    cap: u32,
    color: u32,
@@ -60,7 +59,7 @@ fn main_vs(
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
-   vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);
+   vertex.position = vec4f(scene_position.xy, 0.0, 1.0);
    vertex.line_index = line_index;
    vertex.local_position = local_position;
    return vertex;

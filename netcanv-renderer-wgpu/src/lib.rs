@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::mem::size_of;
 
 use anyhow::Context;
@@ -190,8 +189,6 @@ impl WgpuBackend {
          scene_uniform_bind_group,
 
          current_render_target: None,
-
-         depth_index_counter: Cell::new(0),
       };
       gpu.handle_resize(window.inner_size());
 
@@ -250,7 +247,6 @@ impl UiRenderFrame for Ui<WgpuBackend> {
          .context("Failed to acquire next swapchain texture")?;
       let frame_texture = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
       self.gpu.current_render_target = Some(frame_texture);
-      self.gpu.depth_index_counter.set(0);
 
       self.rewind();
       f(self);

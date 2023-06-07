@@ -148,7 +148,7 @@ impl Renderer for WgpuBackend {
       if color.a > 0 {
          let rect = self.current_transform().translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
-         self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, -1.0);
+         self.rounded_rects.add(rect, color, radius, -1.0);
          if self.rounded_rects.needs_flush() {
             self.flush();
          }
@@ -159,7 +159,7 @@ impl Renderer for WgpuBackend {
       if thickness > 0.0 && color.a > 0 {
          let rect = self.current_transform().translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
-         self.rounded_rects.add(self.gpu.next_depth_index(), rect, color, radius, thickness);
+         self.rounded_rects.add(rect, color, radius, thickness);
          if self.rounded_rects.needs_flush() {
             self.flush();
          }
@@ -171,7 +171,7 @@ impl Renderer for WgpuBackend {
          let a = self.current_transform().translate_vector(a);
          let b = self.current_transform().translate_vector(b);
          self.switch_pass(Pass::Lines);
-         self.lines.add(self.gpu.next_depth_index(), a, b, color, cap, thickness);
+         self.lines.add(a, b, color, cap, thickness);
          if self.lines.needs_flush() {
             self.flush();
          }
@@ -217,7 +217,7 @@ impl RenderBackend for WgpuBackend {
       if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
          let rect = self.current_transform().translate_rect(rect);
          self.switch_pass(Pass::Images);
-         self.images.add(self.gpu.next_depth_index(), rect, image);
+         self.images.add(rect, image);
          if self.images.needs_flush() {
             self.flush();
          }

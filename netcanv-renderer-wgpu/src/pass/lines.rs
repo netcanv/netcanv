@@ -97,15 +97,7 @@ impl Lines {
       }
    }
 
-   pub fn add(
-      &mut self,
-      depth_index: u32,
-      a: Point,
-      b: Point,
-      color: Color,
-      cap: LineCap,
-      thickness: f32,
-   ) {
+   pub fn add(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
       assert!(
          self.line_data.len() < self.line_data.capacity(),
          "too many lines without flushing"
@@ -113,7 +105,6 @@ impl Lines {
 
       self.line_data.push(LineData {
          line: vec4(a.x, a.y, b.x, b.y),
-         depth_index,
          thickness,
          cap: match cap {
             LineCap::Butt => LineData::BUTT,
@@ -164,7 +155,6 @@ impl Lines {
 #[repr(C, align(16))]
 struct LineData {
    line: Vec4,
-   depth_index: u32,
    thickness: f32,
    cap: u32,
    color: Color,

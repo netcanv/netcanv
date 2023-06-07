@@ -102,7 +102,7 @@ impl Images {
       }
    }
 
-   pub fn add(&mut self, depth_index: u32, rect: Rect, image: &Image) {
+   pub fn add(&mut self, rect: Rect, image: &Image) {
       assert!(
          self.image_rect_data.len() < self.image_rect_data.capacity(),
          "too many images without flushing"
@@ -110,7 +110,6 @@ impl Images {
 
       self.image_rect_data.push(ImageRectData {
          rect: vec4(rect.x(), rect.y(), rect.width(), rect.height()),
-         depth_index,
          color: image.color.unwrap_or(Color::TRANSPARENT),
          colorize: image.color.is_some() as u32,
       });
@@ -167,7 +166,6 @@ impl Images {
 #[repr(C, align(16))]
 struct ImageRectData {
    rect: Vec4,
-   depth_index: u32,
    color: Color,
    colorize: u32,
 }

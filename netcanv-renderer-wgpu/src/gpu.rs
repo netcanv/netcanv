@@ -1,5 +1,3 @@
-use std::cell::Cell;
-
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
 use log::debug;
@@ -18,8 +16,6 @@ pub struct Gpu {
    pub scene_uniform_bind_group: wgpu::BindGroup,
 
    pub current_render_target: Option<wgpu::TextureView>,
-
-   pub depth_index_counter: Cell<u32>,
 }
 
 impl Gpu {
@@ -76,12 +72,6 @@ impl Gpu {
             ),
          }),
       )
-   }
-
-   pub fn next_depth_index(&self) -> u32 {
-      let index = self.depth_index_counter.get();
-      self.depth_index_counter.set(index.saturating_add(1));
-      index
    }
 
    pub fn render_target(&self) -> &wgpu::TextureView {

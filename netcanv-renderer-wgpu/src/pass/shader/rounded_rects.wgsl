@@ -3,7 +3,6 @@ const max_rect_count = 512u;
 struct Rect {
    @align(16)
    rect: vec4f, // xy = top-left, zw = bottom-right
-   depth_index: u32,
    corner_radius: f32,
    color: u32,
    outline: f32,
@@ -30,7 +29,7 @@ fn main_vs(
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
-   vertex.position = vec4f(scene_position.xy, f32(data.depth_index) / 65535.0, 1.0);
+   vertex.position = vec4f(scene_position.xy, 0.0, 1.0);
    vertex.in_position = local_position;
    vertex.rect_index = rect_index;
    return vertex;

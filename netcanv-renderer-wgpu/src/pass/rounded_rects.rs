@@ -99,14 +99,7 @@ impl RoundedRects {
       }
    }
 
-   pub fn add(
-      &mut self,
-      depth_index: u32,
-      rect: Rect,
-      color: Color,
-      corner_radius: f32,
-      outline: f32,
-   ) {
+   pub fn add(&mut self, rect: Rect, color: Color, corner_radius: f32, outline: f32) {
       assert!(
          self.rect_data.len() < self.rect_data.capacity(),
          "too many rectangles without flushing"
@@ -114,7 +107,6 @@ impl RoundedRects {
 
       self.rect_data.push(RectData {
          color,
-         depth_index,
          rect: vec4(rect.left(), rect.top(), rect.width(), rect.height()),
          corner_radius,
          outline,
@@ -161,7 +153,6 @@ impl RoundedRects {
 #[repr(C, align(16))]
 struct RectData {
    rect: Vec4,
-   depth_index: u32,
    corner_radius: f32,
    color: Color,
    /// This being <= 0 means we should fill in the rectangle.
@@ -172,7 +163,6 @@ impl Default for RectData {
    fn default() -> Self {
       Self {
          rect: Default::default(),
-         depth_index: Default::default(),
          corner_radius: Default::default(),
          color: Color::TRANSPARENT,
          outline: 0.0,
