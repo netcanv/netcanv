@@ -6,6 +6,8 @@ use glam::{Mat3A, Vec2};
 use gpu::{Gpu, SceneUniforms};
 use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
+use rendering::Pass;
+use text::TextRenderer;
 use transform::Transform;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -21,10 +23,12 @@ mod gpu;
 mod image;
 mod pass;
 mod rendering;
+mod text;
 mod transform;
 
-pub use image::*;
-pub use rendering::*;
+pub use image::Image;
+pub use rendering::Framebuffer;
+pub use text::Font;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
 use crate::pass::PassCreationContext;
@@ -37,6 +41,7 @@ pub struct WgpuBackend {
    context_size: PhysicalSize<u32>,
 
    image_storage: ImageStorage,
+   text_renderer: TextRenderer,
    transform_stack: Vec<Transform>,
    identity_model_transform_bind_group: wgpu::BindGroup,
    model_transform_storage: BatchStorage,
@@ -47,6 +52,7 @@ pub struct WgpuBackend {
    rounded_rects: pass::RoundedRects,
    lines: pass::Lines,
    images: pass::Images,
+   text: pass::Text,
 
    command_buffers: Vec<wgpu::CommandBuffer>,
 }
@@ -193,6 +199,7 @@ impl WgpuBackend {
       gpu.handle_resize(window.inner_size());
 
       let image_storage = ImageStorage::new(&gpu);
+      let text_renderer = TextRenderer::new(&gpu);
 
       let context_size = window.inner_size();
       let pass_creation_context = PassCreationContext {
@@ -203,8 +210,10 @@ impl WgpuBackend {
          rounded_rects: pass::RoundedRects::new(&pass_creation_context),
          lines: pass::Lines::new(&pass_creation_context),
          images: pass::Images::new(&pass_creation_context, &image_storage),
+         text: pass::Text::new(&pass_creation_context, &text_renderer),
 
          image_storage,
+         text_renderer,
          transform_stack: vec![Transform::Translation(Vec2::ZERO)],
          identity_model_transform_bind_group,
          model_transform_storage: BatchStorage::new(BatchStorageConfig {

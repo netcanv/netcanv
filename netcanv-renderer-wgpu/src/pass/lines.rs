@@ -6,7 +6,7 @@ use netcanv_renderer::paws::{Color, LineCap, Point};
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::FlushContext;
+use crate::rendering::FlushContext;
 
 use super::vertex::{vertex, Vertex};
 use super::PassCreationContext;

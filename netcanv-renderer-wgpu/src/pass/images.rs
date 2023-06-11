@@ -7,7 +7,8 @@ use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
 use crate::image::ImageStorage;
-use crate::{FlushContext, Image};
+use crate::rendering::FlushContext;
+use crate::Image;
 
 use super::vertex::{vertex, Vertex};
 use super::PassCreationContext;

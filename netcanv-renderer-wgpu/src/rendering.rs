@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use glam::Vec2;
 use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
@@ -6,7 +8,7 @@ use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
 use crate::image::Image;
 use crate::transform::Transform;
-use crate::WgpuBackend;
+use crate::{Font, WgpuBackend};
 
 pub(crate) struct ClearOps {
    pub color: wgpu::Operations<wgpu::Color>,
@@ -35,6 +37,7 @@ pub(crate) enum Pass {
    RoundedRects,
    Lines,
    Images,
+   Text,
 }
 
 pub(crate) struct FlushContext<'flush> {
@@ -48,6 +51,7 @@ impl WgpuBackend {
       self.rounded_rects.rewind();
       self.lines.rewind();
       self.images.rewind();
+      self.text.rewind();
    }
 
    fn switch_pass(&mut self, new_pass: Pass) {
@@ -96,6 +100,7 @@ impl WgpuBackend {
          self.rounded_rects.flush(&mut context, &mut render_pass);
          self.lines.flush(&mut context, &mut render_pass);
          self.images.flush(&mut context, &self.image_storage, &mut render_pass);
+         self.text.flush(&mut context, &mut self.text_renderer, &mut render_pass);
          self.last_pass = None;
       }
 
@@ -186,6 +191,25 @@ impl Renderer for WgpuBackend {
       color: Color,
       alignment: Alignment,
    ) -> f32 {
+      let rect = self.current_transform().translate_rect(rect);
+      self.switch_pass(Pass::Text);
+
+      let origin = rect.top_left();
+      let first = self.text.glyph_index();
+      self.text_renderer.render_text(
+         &self.gpu,
+         font,
+         text,
+         vector_to_vec2(origin),
+         |pen, glyph| {
+            self.text.add_glyph(pen, glyph, color);
+         },
+      );
+      let last = self.text.glyph_index();
+      self.text.add_font_span(first..last, font);
+      // NOTE: Text rendering doesn't flush if there isn't enough space in the buffer.
+      // We operate on an unbounded buffer to make dealing with many fonts simpler.
+
       32.0
    }
 }
@@ -200,7 +224,11 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn create_font_from_memory(&mut self, data: &[u8], default_size: f32) -> Self::Font {
-      Font
+      Font::new(
+         Rc::clone(&self.text_renderer.caches),
+         data.to_owned(),
+         default_size,
+      )
    }
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
@@ -249,24 +277,4 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
    fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]) {}
 
    fn set_scaling_filter(&mut self, filter: ScalingFilter) {}
-}
-
-pub struct Font;
-
-impl netcanv_renderer::Font for Font {
-   fn with_size(&self, new_size: f32) -> Self {
-      Font
-   }
-
-   fn size(&self) -> f32 {
-      14.0
-   }
-
-   fn height(&self) -> f32 {
-      14.0
-   }
-
-   fn text_width(&self, text: &str) -> f32 {
-      32.0
-   }
 }

@@ -70,6 +70,19 @@ impl BatchStorage {
       })
    }
 
+   pub fn next_many<'a>(
+      &'a mut self,
+      gpu: &Gpu,
+      count: usize,
+   ) -> impl Iterator<Item = (&'a wgpu::Buffer, &'a wgpu::BindGroup)> {
+      let start = self.current_batch;
+      for _ in 0..count {
+         let _ = self.next_batch(gpu);
+      }
+      let end = self.current_batch;
+      self.buffers[start..end].iter().zip(&self.bind_groups[start..end])
+   }
+
    pub fn rewind(&mut self) {
       self.current_batch = 0;
    }
