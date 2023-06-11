@@ -8,7 +8,7 @@ use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use rendering::Pass;
 use text::TextRenderer;
-use transform::Transform;
+use transform::{Transform, TransformState};
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
@@ -42,7 +42,7 @@ pub struct WgpuBackend {
 
    image_storage: ImageStorage,
    text_renderer: TextRenderer,
-   transform_stack: Vec<Transform>,
+   transform_stack: Vec<TransformState>,
    identity_model_transform_bind_group: wgpu::BindGroup,
    model_transform_storage: BatchStorage,
 
@@ -214,7 +214,10 @@ impl WgpuBackend {
 
          image_storage,
          text_renderer,
-         transform_stack: vec![Transform::Translation(Vec2::ZERO)],
+         transform_stack: vec![TransformState {
+            transform: Transform::Translation(Vec2::ZERO),
+            clip: None,
+         }],
          identity_model_transform_bind_group,
          model_transform_storage: BatchStorage::new(BatchStorageConfig {
             name: "Model Transforms",

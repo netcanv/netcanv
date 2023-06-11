@@ -4,6 +4,12 @@ use netcanv_renderer::paws::{vector, Rect, Vector};
 use crate::WgpuBackend;
 
 #[derive(Debug, Clone, Copy)]
+pub struct TransformState {
+   pub transform: Transform,
+   pub clip: Option<Rect>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Transform {
    // Translation is used whenever there isn't any scaling applied.
    // This is the fast path which doesn't involve sending anything to the GPU.
@@ -12,11 +18,11 @@ pub enum Transform {
 }
 
 impl WgpuBackend {
-   pub(crate) fn current_transform(&self) -> &Transform {
+   pub(crate) fn current_transform(&self) -> &TransformState {
       self.transform_stack.last().expect("transform stack is empty")
    }
 
-   pub(crate) fn current_transform_mut(&mut self) -> &mut Transform {
+   pub(crate) fn current_transform_mut(&mut self) -> &mut TransformState {
       self.transform_stack.last_mut().expect("transform stack is empty")
    }
 }

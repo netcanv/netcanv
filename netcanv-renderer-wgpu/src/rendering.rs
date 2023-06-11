@@ -9,7 +9,7 @@ use netcanv_renderer::{BlendMode, Font as _, RenderBackend, ScalingFilter};
 use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
 use crate::image::Image;
-use crate::transform::Transform;
+use crate::transform::{Transform, TransformState};
 use crate::{Font, WgpuBackend};
 
 pub(crate) struct ClearOps {
@@ -70,7 +70,8 @@ impl WgpuBackend {
       });
 
       let clear_ops = self.clear_ops().take();
-      let model_transform_bind_group = if let Transform::Matrix(matrix) = *self.current_transform()
+      let transform_state = *self.current_transform();
+      let model_transform_bind_group = if let Transform::Matrix(matrix) = transform_state.transform
       {
          let (buffer, bind_group) = self.model_transform_storage.next_batch(&self.gpu);
          self.gpu.queue.write_buffer(
@@ -93,6 +94,15 @@ impl WgpuBackend {
             })],
             depth_stencil_attachment: None,
          });
+
+         if let Some(clip_rect) = transform_state.clip {
+            render_pass.set_scissor_rect(
+               clip_rect.x() as u32,
+               clip_rect.y() as u32,
+               clip_rect.width() as u32,
+               clip_rect.height() as u32,
+            );
+         }
 
          let mut context = FlushContext {
             gpu: &self.gpu,
@@ -132,28 +142,45 @@ impl Renderer for WgpuBackend {
    }
 
    fn pop(&mut self) {
-      if let Transform::Matrix(_) = self.current_transform() {
+      let transform_state = self.current_transform();
+      if transform_state.transform.is_matrix() || transform_state.clip.is_some() {
          self.flush();
       }
       self.transform_stack.pop();
       if self.transform_stack.is_empty() {
-         self.transform_stack.push(Transform::Translation(Vec2::ZERO));
+         self.transform_stack.push(TransformState {
+            transform: Transform::Translation(Vec2::ZERO),
+            clip: None,
+         });
       }
    }
 
    fn translate(&mut self, vec: Vector) {
-      let transform = self.current_transform();
-      *self.current_transform_mut() = transform.translate(vector_to_vec2(vec));
-      if self.current_transform().is_matrix() {
+      let state = self.current_transform();
+      self.current_transform_mut().transform = state.transform.translate(vector_to_vec2(vec));
+      if self.current_transform().transform.is_matrix() {
          self.flush();
       }
    }
 
-   fn clip(&mut self, rect: Rect) {}
+   fn clip(&mut self, rect: Rect) {
+      self.flush();
+      let rect = self.current_transform().transform.translate_rect(rect.sort());
+      let clip = if let Some(existing_clip) = self.current_transform().clip {
+         let left = existing_clip.left().max(rect.left());
+         let top = existing_clip.top().max(rect.top());
+         let right = existing_clip.right().min(rect.right());
+         let bottom = existing_clip.bottom().min(rect.right());
+         Rect::new((left, top), (right - left, bottom - top))
+      } else {
+         rect
+      };
+      self.current_transform_mut().clip = Some(clip);
+   }
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
       if color.a > 0 {
-         let rect = self.current_transform().translate_rect(rect);
+         let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, -1.0);
          if self.rounded_rects.needs_flush() {
@@ -164,7 +191,7 @@ impl Renderer for WgpuBackend {
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
       if thickness > 0.0 && color.a > 0 {
-         let rect = self.current_transform().translate_rect(rect);
+         let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, thickness);
          if self.rounded_rects.needs_flush() {
@@ -175,8 +202,8 @@ impl Renderer for WgpuBackend {
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
       if color.a > 0 {
-         let a = self.current_transform().translate_vector(a);
-         let b = self.current_transform().translate_vector(b);
+         let a = self.current_transform().transform.translate_vector(a);
+         let b = self.current_transform().transform.translate_vector(b);
          self.switch_pass(Pass::Lines);
          self.lines.add(a, b, color, cap, thickness);
          if self.lines.needs_flush() {
@@ -193,7 +220,7 @@ impl Renderer for WgpuBackend {
       color: Color,
       alignment: Alignment,
    ) -> f32 {
-      let rect = self.current_transform().translate_rect(rect);
+      let rect = self.current_transform().transform.translate_rect(rect);
       self.switch_pass(Pass::Text);
 
       let origin = text_origin(&rect, font, text, alignment);
@@ -253,7 +280,7 @@ impl RenderBackend for WgpuBackend {
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {
       if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
-         let rect = self.current_transform().translate_rect(rect);
+         let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::Images);
          self.images.add(rect, image);
          if self.images.needs_flush() {
@@ -268,8 +295,8 @@ impl RenderBackend for WgpuBackend {
       // In case of scaling we always end up with a matrix so we need to flush whatever was about
       // to be rendered.
       self.flush();
-      let transform = self.current_transform();
-      *self.current_transform_mut() = transform.scale(vector_to_vec2(scale));
+      let state = self.current_transform();
+      self.current_transform_mut().transform = state.transform.scale(vector_to_vec2(scale));
    }
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
