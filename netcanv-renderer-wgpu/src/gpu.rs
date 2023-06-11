@@ -1,7 +1,9 @@
-use bytemuck::{Pod, Zeroable};
-use glam::{vec3a, Mat3A};
+mod scene_uniforms;
+
 use log::debug;
 use winit::dpi::PhysicalSize;
+
+pub use scene_uniforms::*;
 
 /// Common GPU state.
 pub struct Gpu {
@@ -11,14 +13,14 @@ pub struct Gpu {
    pub device: wgpu::Device,
    pub queue: wgpu::Queue,
 
-   pub scene_uniform_buffer: wgpu::Buffer,
+   pub image_sampler: wgpu::Sampler,
    pub scene_uniform_bind_group_layout: wgpu::BindGroupLayout,
-   pub scene_uniform_bind_group: wgpu::BindGroup,
 
    pub screen_texture: wgpu::Texture,
    pub screen_texture_bind_group_layout: wgpu::BindGroupLayout,
    pub screen_texture_bind_group: wgpu::BindGroup,
    pub current_render_target: Option<wgpu::TextureView>,
+   pub current_render_target_size: (u32, u32),
 }
 
 impl Gpu {
@@ -58,7 +60,6 @@ impl Gpu {
 
    pub fn handle_resize(&mut self, window_size: PhysicalSize<u32>) {
       self.configure_surface(window_size);
-      self.update_scene_uniforms(window_size);
 
       self.screen_texture.destroy();
       let (screen_texture, screen_texture_view, screen_texture_bind_group) =
@@ -70,6 +71,7 @@ impl Gpu {
       self.screen_texture = screen_texture;
       self.screen_texture_bind_group = screen_texture_bind_group;
       self.current_render_target = Some(screen_texture_view);
+      self.current_render_target_size = (window_size.width, window_size.height);
    }
 
    pub fn screen_format(&self) -> wgpu::TextureFormat {
@@ -106,23 +108,6 @@ impl Gpu {
       self.surface.configure(&self.device, &surface_configuration);
    }
 
-   fn update_scene_uniforms(&self, window_size: PhysicalSize<u32>) {
-      let width = window_size.width as f32;
-      let height = window_size.height as f32;
-
-      self.queue.write_buffer(
-         &self.scene_uniform_buffer,
-         0,
-         bytemuck::bytes_of(&SceneUniforms {
-            transform: Mat3A::from_cols(
-               vec3a(2.0 / width, 0.0, 0.0),
-               vec3a(0.0, -2.0 / height, 0.0),
-               vec3a(-1.0, 1.0, 0.0),
-            ),
-         }),
-      )
-   }
-
    pub fn render_target(&self) -> &wgpu::TextureView {
       self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
    }
@@ -138,12 +123,3 @@ impl Gpu {
       }
    }
 }
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct SceneUniforms {
-   pub transform: Mat3A,
-}
-
-unsafe impl Zeroable for SceneUniforms {}
-unsafe impl Pod for SceneUniforms {}

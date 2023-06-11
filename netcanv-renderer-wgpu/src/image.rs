@@ -61,6 +61,14 @@ impl ImageStorage {
       }
    }
 
+   /// Used to add framebuffers into the image storage so that they can share a render pass with
+   /// regular images.
+   pub(crate) fn add_external(&mut self, bind_group: wgpu::BindGroup) -> u32 {
+      let index = self.images.len() as u32;
+      self.images.push(GpuImage { bind_group });
+      index
+   }
+
    fn upload(&mut self, gpu: &Gpu, width: u32, height: u32, pixel_data: &[u8]) -> u32 {
       let index = self.images.len() as u32;
 

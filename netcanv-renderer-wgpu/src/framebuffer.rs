@@ -3,17 +3,20 @@ use std::cell::Cell;
 use netcanv_renderer::ScalingFilter;
 
 use crate::gpu::Gpu;
+use crate::image::ImageStorage;
 
 pub struct Framebuffer {
    width: u32,
    height: u32,
    texture: wgpu::Texture,
    pub(crate) texture_view: Cell<Option<wgpu::TextureView>>,
+   pub(crate) image_storage_index: u32,
 }
 
 impl Framebuffer {
-   pub(crate) fn new(gpu: &Gpu, width: u32, height: u32) -> Self {
+   pub(crate) fn new(gpu: &Gpu, image_storage: &mut ImageStorage, width: u32, height: u32) -> Self {
       let label = format!("Framebuffer {width}x{height}");
+
       let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
          label: Some(&format!("{label}: Texture")),
          size: wgpu::Extent3d {
@@ -36,11 +39,22 @@ impl Framebuffer {
          ..Default::default()
       });
 
+      let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+         label: Some(&format!("{label}: Bind Group")),
+         layout: &image_storage.bind_group_layout,
+         entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&texture_view),
+         }],
+      });
+      let image_storage_index = image_storage.add_external(bind_group);
+
       Self {
          width,
          height,
          texture,
          texture_view: Cell::new(Some(texture_view)),
+         image_storage_index,
       }
    }
 

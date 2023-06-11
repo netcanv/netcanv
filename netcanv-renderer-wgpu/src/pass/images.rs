@@ -8,7 +8,6 @@ use wgpu::util::DeviceExt;
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
 use crate::image::ImageStorage;
 use crate::rendering::FlushContext;
-use crate::Image;
 
 use super::vertex::{vertex, Vertex};
 use super::PassCreationContext;
@@ -103,7 +102,7 @@ impl Images {
       }
    }
 
-   pub fn add(&mut self, rect: Rect, image: &Image) {
+   pub fn add(&mut self, rect: Rect, color: Option<Color>, binding: u32) {
       assert!(
          self.image_rect_data.len() < self.image_rect_data.capacity(),
          "too many images without flushing"
@@ -111,10 +110,10 @@ impl Images {
 
       self.image_rect_data.push(ImageRectData {
          rect: vec4(rect.x(), rect.y(), rect.width(), rect.height()),
-         color: image.color.unwrap_or(Color::TRANSPARENT),
-         colorize: image.color.is_some() as u32,
+         color: color.unwrap_or(Color::TRANSPARENT),
+         colorize: color.is_some() as u32,
       });
-      self.image_bindings.push(image.index);
+      self.image_bindings.push(binding);
    }
 
    pub fn flush<'a>(
@@ -138,7 +137,7 @@ impl Images {
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.set_bind_group(1, bind_group, &[]);
       render_pass.set_bind_group(2, context.model_transform_bind_group, &[]);
-      render_pass.set_bind_group(3, &context.gpu.scene_uniform_bind_group, &[]);
+      render_pass.set_bind_group(3, &context.scene_uniform_bind_group, &[]);
       for (i, &image_index) in self.image_bindings.iter().enumerate() {
          let i = i as u32;
          render_pass.set_bind_group(

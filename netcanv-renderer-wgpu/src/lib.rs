@@ -3,7 +3,7 @@ use std::mem::size_of;
 use anyhow::Context;
 use cli::RendererCli;
 use glam::{Mat3A, Vec2};
-use gpu::{Gpu, SceneUniforms};
+use gpu::Gpu;
 use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use rendering::Pass;
@@ -32,6 +32,7 @@ pub use image::Image;
 pub use text::Font;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
+use crate::gpu::SceneUniformCache;
 use crate::pass::PassCreationContext;
 
 pub struct WgpuBackend {
@@ -44,6 +45,7 @@ pub struct WgpuBackend {
    image_storage: ImageStorage,
    text_renderer: TextRenderer,
    transform_stack: Vec<TransformState>,
+   scene_uniform_cache: SceneUniformCache,
    identity_model_transform_bind_group: wgpu::BindGroup,
    model_transform_storage: BatchStorage,
 
@@ -125,12 +127,6 @@ impl WgpuBackend {
             window.inner_size(),
          );
 
-      let scene_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-         label: Some("Scene Uniform Buffer"),
-         size: std::mem::size_of::<SceneUniforms>() as wgpu::BufferAddress,
-         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-         mapped_at_creation: false,
-      });
       let identity_mat3x3f = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
          label: Some("Identity mat3x3f"),
          contents: bytemuck::cast_slice(&[
@@ -170,20 +166,6 @@ impl WgpuBackend {
                },
             ],
          });
-      let scene_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-         label: Some("Scene Uniform Bind Group"),
-         layout: &scene_uniform_bind_group_layout,
-         entries: &[
-            wgpu::BindGroupEntry {
-               binding: 0,
-               resource: scene_uniform_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-               binding: 1,
-               resource: wgpu::BindingResource::Sampler(&image_sampler),
-            },
-         ],
-      });
 
       let model_transform_bind_group_layout =
          device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -216,14 +198,14 @@ impl WgpuBackend {
          device,
          queue,
 
-         scene_uniform_buffer,
+         image_sampler,
          scene_uniform_bind_group_layout,
-         scene_uniform_bind_group,
 
+         current_render_target: Some(screen_texture_view),
+         current_render_target_size: (screen_texture.width(), screen_texture.height()),
          screen_texture,
          screen_texture_bind_group_layout,
          screen_texture_bind_group,
-         current_render_target: Some(screen_texture_view),
       };
       gpu.handle_resize(window.inner_size());
 
@@ -249,6 +231,7 @@ impl WgpuBackend {
             transform: Transform::Translation(Vec2::ZERO),
             clip: None,
          }],
+         scene_uniform_cache: SceneUniformCache::new(30),
          identity_model_transform_bind_group,
          model_transform_storage: BatchStorage::new(BatchStorageConfig {
             name: "Model Transforms",

@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use glam::{vec2, Vec2};
 use netcanv_renderer::paws::{
-   AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+   vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, Font as _, RenderBackend, ScalingFilter};
+use netcanv_renderer::{BlendMode, Font as _, Framebuffer as _, RenderBackend};
 
 use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
@@ -45,15 +45,19 @@ pub(crate) enum Pass {
 pub(crate) struct FlushContext<'flush> {
    pub gpu: &'flush Gpu,
    pub model_transform_bind_group: &'flush wgpu::BindGroup,
+   pub scene_uniform_bind_group: &'flush wgpu::BindGroup,
 }
 
 impl WgpuBackend {
    pub(crate) fn rewind(&mut self) {
       self.last_pass = None;
+
       self.rounded_rects.rewind();
       self.lines.rewind();
       self.images.rewind();
       self.text.rewind();
+
+      self.scene_uniform_cache.tick_and_evict();
    }
 
    fn switch_pass(&mut self, new_pass: Pass) {
@@ -107,6 +111,9 @@ impl WgpuBackend {
          let mut context = FlushContext {
             gpu: &self.gpu,
             model_transform_bind_group,
+            scene_uniform_bind_group: self
+               .scene_uniform_cache
+               .bind_group(&self.gpu, self.gpu.current_render_target_size),
          };
 
          self.rounded_rects.flush(&mut context, &mut render_pass);
@@ -202,12 +209,29 @@ impl Renderer for WgpuBackend {
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
       if color.a > 0 {
-         let a = self.current_transform().transform.translate_vector(a);
-         let b = self.current_transform().transform.translate_vector(b);
-         self.switch_pass(Pass::Lines);
-         self.lines.add(a, b, color, cap, thickness);
-         if self.lines.needs_flush() {
-            self.flush();
+         if a != b {
+            let a = self.current_transform().transform.translate_vector(a);
+            let b = self.current_transform().transform.translate_vector(b);
+            self.switch_pass(Pass::Lines);
+            self.lines.add(a, b, color, cap, thickness);
+            if self.lines.needs_flush() {
+               self.flush();
+            }
+         } else {
+            match cap {
+               LineCap::Butt => (),
+               LineCap::Square => {
+                  self.fill(
+                     Rect::new(
+                        a - vector(thickness, thickness) * 0.5,
+                        vector(thickness, thickness),
+                     ),
+                     color,
+                     thickness,
+                  );
+               }
+               LineCap::Round => self.fill_circle(a, thickness * 0.5, color),
+            }
          }
       }
    }
@@ -269,22 +293,25 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
-      Framebuffer::new(&self.gpu, width, height)
+      Framebuffer::new(&self.gpu, &mut self.image_storage, width, height)
    }
 
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {
       self.flush();
       let target = self.gpu.current_render_target.take();
+      let previous_size = self.gpu.current_render_target_size;
       self.gpu.current_render_target = Some(
          framebuffer
             .texture_view
             .take()
             .expect("draw_to may not be called reentrantly on one framebuffer"),
       );
+      self.gpu.current_render_target_size = framebuffer.size();
       f(self);
       self.flush();
       framebuffer.texture_view.set(self.gpu.current_render_target.take());
       self.gpu.current_render_target = target;
+      self.gpu.current_render_target_size = previous_size;
    }
 
    fn clear(&mut self, color: Color) {
@@ -295,14 +322,21 @@ impl RenderBackend for WgpuBackend {
       if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::Images);
-         self.images.add(rect, image);
+         self.images.add(rect, image.color, image.index);
          if self.images.needs_flush() {
             self.flush();
          }
       }
    }
 
-   fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {}
+   fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {
+      let rect = self.current_transform().transform.translate_rect(rect);
+      self.switch_pass(Pass::Images);
+      self.images.add(rect, None, framebuffer.image_storage_index);
+      if self.images.needs_flush() {
+         self.flush();
+      }
+   }
 
    fn upload_framebuffer(
       &mut self,
