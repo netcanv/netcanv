@@ -51,11 +51,22 @@ impl netcanv_renderer::Font for Font {
    }
 
    fn height(&self) -> f32 {
-      14.0
+      let metrics = self.data.as_font_ref().metrics(&[]).scale(self.size);
+      metrics.ascent - metrics.descent
    }
 
    fn text_width(&self, text: &str) -> f32 {
-      32.0
+      let mut caches = self.caches.borrow_mut();
+      let mut shaper =
+         caches.shape_context.builder(self.data.as_font_ref()).size(self.size).build();
+
+      let mut pen_x = 0.0;
+      shaper.add_str(text);
+      shaper.shape_with(|glyph_cluster| {
+         pen_x += glyph_cluster.advance();
+      });
+
+      pen_x
    }
 }
 

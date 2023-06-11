@@ -25,7 +25,7 @@ fn main_vs(
 ) -> Vertex
 {
    let data = rect_data[rect_index];
-   let local_position = position * data.rect.zw + data.rect.xy;
+   let local_position = floor(position * data.rect.zw + data.rect.xy);
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;

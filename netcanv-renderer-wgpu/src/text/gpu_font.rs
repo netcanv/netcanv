@@ -3,6 +3,7 @@ use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{uvec4, UVec4};
+use swash::zeno::Placement;
 
 use crate::gpu::Gpu;
 
@@ -14,7 +15,7 @@ pub struct GpuFont {
    glyph_allocator: guillotiere::SimpleAtlasAllocator,
    glyph_count: u32,
 
-   glyph_cache: HashMap<(swash::GlyphId, u8), Option<u32>>,
+   glyph_cache: HashMap<(swash::GlyphId, u8), Option<(u32, Placement)>>,
 }
 
 impl GpuFont {
@@ -83,13 +84,16 @@ impl GpuFont {
       gpu: &Gpu,
       glyph_id: swash::GlyphId,
       subposition: u8,
-      glyph: impl FnOnce() -> Option<(u32, u32, Vec<u8>)>,
-   ) -> Option<u32> {
+      glyph: impl FnOnce() -> Option<(Placement, Vec<u8>)>,
+   ) -> Option<(u32, Placement)> {
       if let Some(cached) = self.glyph_cache.get(&(glyph_id, subposition)) {
          *cached
       } else {
-         let id =
-            glyph().and_then(|(width, height, data)| self.upload_glyph(gpu, width, height, &data));
+         let id = glyph().and_then(|(placement, data)| {
+            self
+               .upload_glyph(gpu, placement.width, placement.height, &data)
+               .map(|glyph_index| (glyph_index, placement))
+         });
          self.glyph_cache.insert((glyph_id, subposition), id);
          id
       }

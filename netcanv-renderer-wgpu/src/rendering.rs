@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
-use glam::Vec2;
-use netcanv_renderer::paws::{Alignment, Color, LineCap, Point, Rect, Renderer, Vector};
-use netcanv_renderer::{BlendMode, RenderBackend, ScalingFilter};
+use glam::{vec2, Vec2};
+use netcanv_renderer::paws::{
+   AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
+};
+use netcanv_renderer::{BlendMode, Font as _, RenderBackend, ScalingFilter};
 
 use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
@@ -194,17 +196,11 @@ impl Renderer for WgpuBackend {
       let rect = self.current_transform().translate_rect(rect);
       self.switch_pass(Pass::Text);
 
-      let origin = rect.top_left();
+      let origin = text_origin(&rect, font, text, alignment);
       let first = self.text.glyph_index();
-      self.text_renderer.render_text(
-         &self.gpu,
-         font,
-         text,
-         vector_to_vec2(origin),
-         |pen, glyph| {
-            self.text.add_glyph(pen, glyph, color);
-         },
-      );
+      self.text_renderer.render_text(&self.gpu, font, text, origin, |pen, glyph| {
+         self.text.add_glyph(pen, glyph, color);
+      });
       let last = self.text.glyph_index();
       self.text.add_font_span(first..last, font);
       // NOTE: Text rendering doesn't flush if there isn't enough space in the buffer.
@@ -212,6 +208,20 @@ impl Renderer for WgpuBackend {
 
       32.0
    }
+}
+
+fn text_origin(rect: &Rect, font: &Font, text: &str, alignment: Alignment) -> Vec2 {
+   let x = match alignment.0 {
+      AlignH::Left => rect.left(),
+      AlignH::Center => rect.center_x() - font.text_width(text) / 2.0,
+      AlignH::Right => rect.right() - font.text_width(text),
+   };
+   let y = match alignment.1 {
+      AlignV::Top => rect.top() + font.height(),
+      AlignV::Middle => rect.center_y() + font.height() / 2.0,
+      AlignV::Bottom => rect.bottom(),
+   };
+   vec2(x.floor(), y.floor())
 }
 
 impl RenderBackend for WgpuBackend {

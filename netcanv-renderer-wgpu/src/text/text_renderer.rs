@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use glam::Vec2;
+use glam::{vec2, Vec2};
 use swash::scale::{Render, Source, StrikeWith};
 
 use crate::gpu::Gpu;
@@ -95,7 +95,7 @@ impl TextRenderer {
             let x_subposition = (pen.x.fract() * X_SUBPOSITIONS) as u8;
             let x_offset = x_subposition as f32 / X_SUBPOSITIONS;
 
-            if let Some(gpu_index) =
+            if let Some((gpu_index, placement)) =
                gpu_font.get_or_upload_glyph(gpu, glyph.id, x_subposition, || {
                   let image = Render::new(&[Source::Outline, Source::Bitmap(StrikeWith::BestFit)])
                      .offset(swash::zeno::Vector {
@@ -103,10 +103,13 @@ impl TextRenderer {
                         y: 0.0,
                      })
                      .render(&mut scaler, glyph.id);
-                  image.map(|image| (image.placement.width, image.placement.height, image.data))
+                  image.map(|image| (image.placement, image.data))
                })
             {
-               next_glyph(pen, gpu_index);
+               next_glyph(
+                  pen + vec2(placement.left as f32, -placement.top as f32),
+                  gpu_index,
+               );
             }
 
             pen.x += glyph.advance;

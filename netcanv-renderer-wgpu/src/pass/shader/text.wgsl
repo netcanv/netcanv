@@ -33,7 +33,7 @@ fn main_vs(
 ) -> Vertex {
    let data = glyph_data[glyph_index];
    let atlas_rect = atlas_data[data.glyph].rect;
-   let local_position = data.position + position * vec2f(atlas_rect.zw);
+   let local_position = floor(data.position + position * vec2f(atlas_rect.zw));
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    let atlas_size = vec2f(textureDimensions(atlas_texture));
