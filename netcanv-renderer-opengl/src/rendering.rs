@@ -879,6 +879,26 @@ impl RenderBackend for OpenGlBackend {
       }
    }
 
+   fn upload_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      pixels: &[u8],
+   ) {
+      framebuffer.upload_rgba(position, size, pixels);
+   }
+
+   fn download_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   ) {
+      framebuffer.download_rgba(position, size, out_pixels);
+   }
+
    fn scale(&mut self, scale: Vector) {
       self.state.transform_mut().matrix *= Mat3A::from_scale(to_vec2(scale));
    }

@@ -93,14 +93,13 @@ impl Framebuffer {
    pub(crate) fn texture(&self) -> glow::Texture {
       self.texture
    }
-}
 
-impl netcanv_renderer::Framebuffer for Framebuffer {
-   fn size(&self) -> (u32, u32) {
-      (self.width, self.height)
-   }
-
-   fn upload_rgba(&mut self, (x, mut y): (u32, u32), (width, height): (u32, u32), pixels: &[u8]) {
+   pub(crate) fn upload_rgba(
+      &self,
+      (x, mut y): (u32, u32),
+      (width, height): (u32, u32),
+      pixels: &[u8],
+   ) {
       let mut flipped = pixels.to_owned();
       flip_vertically(width as usize, height as usize, 4, &mut flipped);
       y = self.height - y - height;
@@ -120,7 +119,12 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       }
    }
 
-   fn download_rgba(&self, (x, y): (u32, u32), (width, height): (u32, u32), dest: &mut [u8]) {
+   pub(crate) fn download_rgba(
+      &self,
+      (x, y): (u32, u32),
+      (width, height): (u32, u32),
+      dest: &mut [u8],
+   ) {
       assert!(
          dest.len() == width as usize * height as usize * 4,
          "destination buffer's size must match the framebuffer texture's size"
@@ -142,6 +146,12 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       }
       // Fleeeeeeeeeeep them 'round.
       flip_vertically(width as usize, height as usize, 4, dest);
+   }
+}
+
+impl netcanv_renderer::Framebuffer for Framebuffer {
+   fn size(&self) -> (u32, u32) {
+      (self.width, self.height)
    }
 
    fn set_scaling_filter(&mut self, filter: ScalingFilter) {

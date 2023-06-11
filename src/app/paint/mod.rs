@@ -689,6 +689,7 @@ impl State {
                   assets: &self.assets,
                   paint_canvas: &mut self.paint_canvas,
                   project_file: &mut self.project_file,
+                  renderer: ui,
                }) {
                   log!(
                      self.log,
@@ -735,9 +736,9 @@ impl State {
             self
                .peer
                .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
-            self
-               .toolbar
-               .with_current_tool(|tool| tool.network_peer_join(Net::new(&self.peer), peer_id))?;
+            self.toolbar.with_current_tool(|tool| {
+               tool.network_peer_join(ui, Net::new(&self.peer), peer_id)
+            })?;
          }
          MessageKind::Left {
             peer_id,
@@ -804,7 +805,7 @@ impl State {
             }
          }
          MessageKind::GetChunks(requester, positions) => {
-            self.enqueue_chunks_for_encoding(requester, &positions);
+            self.enqueue_chunks_for_encoding(ui, requester, &positions);
          }
          MessageKind::Tool(sender, name, payload) => {
             if let Some(tool_id) = self.toolbar.tool_by_name(&name) {
@@ -851,7 +852,12 @@ impl State {
       Ok(())
    }
 
-   fn enqueue_chunks_for_encoding(&mut self, requester: PeerId, positions: &[(i32, i32)]) {
+   fn enqueue_chunks_for_encoding(
+      &mut self,
+      renderer: &mut Backend,
+      requester: PeerId,
+      positions: &[(i32, i32)],
+   ) {
       let tx = &self
          .encoded_chunks
          .entry(requester)
@@ -869,7 +875,7 @@ impl State {
          if let Some(chunk) = self.cache_layer.chunk(chunk_position) {
             self.xcoder.send_encoded_chunk(chunk, tx.clone(), chunk_position);
          } else if let Some(chunk) = self.paint_canvas.chunk(chunk_position) {
-            self.xcoder.enqueue_chunk_encoding(chunk, tx.clone(), chunk_position);
+            self.xcoder.enqueue_chunk_encoding(renderer, chunk, tx.clone(), chunk_position);
          }
       }
    }
@@ -910,6 +916,7 @@ impl AppState for State {
             assets: &self.assets,
             paint_canvas: &mut self.paint_canvas,
             project_file: &mut self.project_file,
+            renderer: ui,
          }) {
             Ok(()) => (),
             Err(error) => log!(

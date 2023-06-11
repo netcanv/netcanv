@@ -10,7 +10,7 @@ use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
 use crate::image::Image;
 use crate::transform::{Transform, TransformState};
-use crate::{Font, WgpuBackend};
+use crate::{Font, Framebuffer, WgpuBackend};
 
 pub(crate) struct ClearOps {
    pub color: wgpu::Operations<wgpu::Color>,
@@ -269,7 +269,7 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn create_framebuffer(&mut self, width: u32, height: u32) -> Self::Framebuffer {
-      Framebuffer
+      Framebuffer::new(&self.gpu, width, height)
    }
 
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
@@ -291,6 +291,24 @@ impl RenderBackend for WgpuBackend {
 
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {}
 
+   fn upload_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      pixels: &[u8],
+   ) {
+   }
+
+   fn download_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   ) {
+   }
+
    fn scale(&mut self, scale: Vector) {
       // In case of scaling we always end up with a matrix so we need to flush whatever was about
       // to be rendered.
@@ -300,18 +318,4 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
-}
-
-pub struct Framebuffer;
-
-impl netcanv_renderer::Framebuffer for Framebuffer {
-   fn size(&self) -> (u32, u32) {
-      (256, 256)
-   }
-
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {}
-
-   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]) {}
-
-   fn set_scaling_filter(&mut self, filter: ScalingFilter) {}
 }

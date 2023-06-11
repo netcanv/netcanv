@@ -196,8 +196,8 @@ impl SelectionTool {
    }
 
    /// Copies the current selection to the system clipboard.
-   fn copy_to_clipboard(&self) {
-      if let Some(image) = self.selection.download_rgba() {
+   fn copy_to_clipboard(&self, renderer: &mut Backend) {
+      if let Some(image) = self.selection.download_rgba(renderer) {
          catch!(clipboard::copy_image(image));
       }
    }
@@ -321,7 +321,7 @@ impl Tool for SelectionTool {
    /// Processes key shortcuts when the selection is active.
    fn active_key_shortcuts(
       &mut self,
-      ToolArgs { input, net, .. }: ToolArgs,
+      ToolArgs { input, net, ui, .. }: ToolArgs,
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
@@ -337,12 +337,12 @@ impl Tool for SelectionTool {
       }
 
       if input.action(config().keymap.edit.copy) == (true, true) {
-         self.copy_to_clipboard();
+         self.copy_to_clipboard(ui);
          return KeyShortcutAction::Success;
       }
 
       if input.action(config().keymap.edit.cut) == (true, true) {
-         self.copy_to_clipboard();
+         self.copy_to_clipboard(ui);
          self.selection.cancel();
          return KeyShortcutAction::Success;
       }
@@ -686,8 +686,13 @@ impl Tool for SelectionTool {
    }
 
    /// Sends a capture packet to the peer that joined.
-   fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> netcanv::Result<()> {
-      if let Some(capture) = self.selection.download_rgba() {
+   fn network_peer_join(
+      &mut self,
+      renderer: &mut Backend,
+      net: Net,
+      peer_id: PeerId,
+   ) -> netcanv::Result<()> {
+      if let Some(capture) = self.selection.download_rgba(renderer) {
          self.send_rect_packet(&net)?;
          net.send(self, peer_id, Packet::Update(Self::encode_image(&capture)?))?;
       }
@@ -789,12 +794,12 @@ impl Selection {
    /// Downloads a captured selection off the graphics card, into an RGBA image.
    ///
    /// Returns `None` if there's no _captured_ selection.
-   fn download_rgba(&self) -> Option<RgbaImage> {
+   fn download_rgba(&self, renderer: &mut Backend) -> Option<RgbaImage> {
       if let Some(rect) = self.normalized_rect() {
          let rect = rect.sort();
          if let Some(capture) = self.capture.as_ref() {
             let mut image = RgbaImage::new(rect.width() as u32, rect.height() as u32);
-            capture.download_rgba((0, 0), capture.size(), &mut image);
+            renderer.download_framebuffer(capture, (0, 0), capture.size(), &mut image);
             return Some(image);
          }
       }
@@ -805,7 +810,7 @@ impl Selection {
    /// Does not do anything else with the selection; the rectangle must be initialized separately.
    fn upload_rgba(&mut self, renderer: &mut Backend, image: &RgbaImage) {
       let mut capture = renderer.create_framebuffer(image.width(), image.height());
-      capture.upload_rgba((0, 0), (image.width(), image.height()), image);
+      renderer.upload_framebuffer(&capture, (0, 0), (image.width(), image.height()), image);
       self.capture = Some(capture);
    }
 

@@ -145,7 +145,12 @@ pub trait Tool {
    ///
    /// This can be used to let the peer know what's happening at the moment they joined,
    /// eg. in the selection tool this is used to send them the current capture.
-   fn network_peer_join(&mut self, _net: Net, _peer_id: PeerId) -> netcanv::Result<()> {
+   fn network_peer_join(
+      &mut self,
+      _renderer: &mut Backend,
+      _net: Net,
+      _peer_id: PeerId,
+   ) -> netcanv::Result<()> {
       Ok(())
    }
 

@@ -7,6 +7,7 @@ use image::{DynamicImage, ImageEncoder};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
+use crate::backend::Backend;
 use crate::paint_canvas::cache_layer::CachedChunk;
 use crate::paint_canvas::chunk::Chunk;
 use crate::Error;
@@ -183,12 +184,13 @@ impl ImageCoder {
 
    pub fn enqueue_chunk_encoding(
       &self,
+      renderer: &mut Backend,
       chunk: &Chunk,
       output_channel: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
       chunk_position: (i32, i32),
    ) {
       // If the chunk's image is empty, there's no point in sending it.
-      let image = chunk.download_image();
+      let image = chunk.download_image(renderer);
       if Chunk::image_is_empty(&image) {
          return;
       }

@@ -85,14 +85,6 @@ pub trait Framebuffer {
       Rect::new(position, vector(self.width() as f32, self.height() as f32))
    }
 
-   /// Uploads RGBA pixels to the framebuffer.
-   ///
-   /// `pixels`'s length must be equal to `width * height * 4`.
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]);
-
-   /// Downloads RGBA pixels from the framebuffer into a buffer.
-   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]);
-
    /// Sets the filter used for upscaling and downscaling the framebuffer.
    fn set_scaling_filter(&mut self, filter: ScalingFilter);
 }
@@ -140,6 +132,26 @@ pub trait RenderBackend: Renderer {
    ///
    /// Drawing the framebuffer that is currently being rendered to is undefined behavior.
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer);
+
+   /// Uploads RGBA pixels to the framebuffer.
+   ///
+   /// `pixels`'s length must be equal to `width * height * 4`.
+   fn upload_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      pixels: &[u8],
+   );
+
+   /// Downloads RGBA pixels from the framebuffer into a buffer.
+   fn download_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   );
 
    /// Scales the transform matrix by the given factor.
    fn scale(&mut self, scale: Vector);

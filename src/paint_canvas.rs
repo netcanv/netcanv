@@ -90,7 +90,7 @@ impl PaintCanvas {
    }
 
    /// Downloads the color of the pixel at the provided position.
-   pub fn get_pixel(&self, position: (i64, i64)) -> Color {
+   pub fn get_pixel(&self, renderer: &mut Backend, position: (i64, i64)) -> Color {
       if let Some(chunk) = self.chunks.get(&(
          (position.0.div_euclid(Chunk::SIZE.0 as i64)) as i32,
          (position.1.div_euclid(Chunk::SIZE.1 as i64)) as i32,
@@ -100,7 +100,7 @@ impl PaintCanvas {
             (position.1.rem_euclid(Chunk::SIZE.1 as i64)) as u32,
          );
          let mut rgba = [0u8; 4];
-         chunk.framebuffer.download_rgba(position_in_chunk, (1, 1), &mut rgba);
+         renderer.download_framebuffer(&chunk.framebuffer, position_in_chunk, (1, 1), &mut rgba);
          let [r, g, b, a] = rgba;
          Color { r, g, b, a }
       } else {
@@ -128,7 +128,7 @@ impl PaintCanvas {
       image: RgbaImage,
    ) {
       let chunk = self.ensure_chunk(renderer, chunk_position);
-      chunk.upload_image(&image, (0, 0));
+      chunk.upload_image(renderer, &image, (0, 0));
    }
 
    pub fn chunks(&self) -> &HashMap<(i32, i32), Chunk> {

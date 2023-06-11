@@ -19,6 +19,7 @@ pub use winit;
 mod batch_storage;
 pub mod cli;
 mod common;
+mod framebuffer;
 mod gpu;
 mod image;
 mod pass;
@@ -26,8 +27,8 @@ mod rendering;
 mod text;
 mod transform;
 
+pub use framebuffer::Framebuffer;
 pub use image::Image;
-pub use rendering::Framebuffer;
 pub use text::Font;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
@@ -89,12 +90,14 @@ impl WgpuBackend {
       let capabilities = surface.get_capabilities(&adapter);
       log::info!("adapter capabilities: {capabilities:#?}");
       log::info!("adapter limits: {:#?}", adapter.limits());
+      let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
+      log::info!("using compatible set of limits: {limits:#?}");
 
       let (device, queue) = adapter.request_device(
          &wgpu::DeviceDescriptor {
             label: None,
             features: wgpu::Features::empty(),
-            limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            limits,
          },
          None,
       ).await.context("Failed to acquire graphics device. Try updating your graphics drivers. If that doesn't work, your hardware may be too old to run NetCanv.")?;

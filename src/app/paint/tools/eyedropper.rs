@@ -56,7 +56,7 @@ impl Tool for EyedropperTool {
    ) {
       if input.mouse_active() {
          let Point { x, y } = viewport.to_viewport_space(input.mouse_position(), ui.size());
-         self.color = paint_canvas.get_pixel((x as i64, y as i64));
+         self.color = paint_canvas.get_pixel(ui, (x as i64, y as i64));
 
          if input.mouse_button_is_down(MouseButton::Left) {
             if self.color.a == 0 {

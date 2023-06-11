@@ -5,7 +5,7 @@ mod save_to_file;
 pub use save_to_file::*;
 
 use crate::assets::Assets;
-use crate::backend::Image;
+use crate::backend::{Backend, Image};
 use crate::paint_canvas::PaintCanvas;
 use crate::project_file::ProjectFile;
 
@@ -30,6 +30,7 @@ pub struct ActionArgs<'a> {
    pub assets: &'a Assets,
    pub paint_canvas: &'a mut PaintCanvas,
    pub project_file: &'a mut ProjectFile,
+   pub renderer: &'a mut Backend,
 }
 
 fn _action_trait_must_be_object_safe(_action: Box<dyn Action>) {}

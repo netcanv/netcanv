@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use image::{GenericImage, GenericImageView, Rgba, RgbaImage};
+use netcanv_renderer::RenderBackend;
 use serde::{Deserialize, Serialize};
 
 use crate::backend::Backend;
@@ -31,7 +32,12 @@ impl ProjectFile {
    }
 
    /// Saves the entire paint canvas to a PNG file.
-   fn save_as_png(&self, path: &Path, canvas: &mut PaintCanvas) -> netcanv::Result<()> {
+   fn save_as_png(
+      &self,
+      renderer: &mut Backend,
+      path: &Path,
+      canvas: &mut PaintCanvas,
+   ) -> netcanv::Result<()> {
       log::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
       for chunk_position in canvas.chunks_mut().keys() {
@@ -62,7 +68,7 @@ impl ProjectFile {
          );
          log::debug!("   - pixel position: {:?}", pixel_position);
 
-         let chunk_image = chunk.download_image();
+         let chunk_image = chunk.download_image(renderer);
          let mut sub_image = image.sub_image(
             pixel_position.0,
             pixel_position.1,
@@ -109,6 +115,7 @@ impl ProjectFile {
    /// Saves the paint canvas as a `.netcanv` canvas.
    async fn save_as_netcanv(
       &mut self,
+      renderer: &mut Backend,
       path: &Path,
       canvas: &mut PaintCanvas,
    ) -> netcanv::Result<()> {
@@ -132,7 +139,7 @@ impl ProjectFile {
       log::info!("saving chunks");
       for (chunk_position, chunk) in canvas.chunks_mut() {
          log::debug!("chunk {:?}", chunk_position);
-         let image = chunk.download_image();
+         let image = chunk.download_image(renderer);
          let image_data = ImageCoder::encode_png_data(image).await?;
          let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
          let filepath = path.join(Path::new(&filename));
@@ -147,18 +154,23 @@ impl ProjectFile {
    /// Saves the canvas to a PNG file or a `.netcanv` directory.
    ///
    /// If `path` is `None`, this performs an autosave of an already saved `.netcanv` directory.
-   pub fn save(&mut self, path: Option<&Path>, canvas: &mut PaintCanvas) -> netcanv::Result<()> {
+   pub fn save(
+      &mut self,
+      renderer: &mut Backend,
+      path: Option<&Path>,
+      canvas: &mut PaintCanvas,
+   ) -> netcanv::Result<()> {
       let path = path
          .map(|p| p.to_path_buf())
          .or_else(|| self.filename.clone())
          .expect("no save path provided");
       if let Some(ext) = path.extension() {
          match ext.to_str() {
-            Some("png") => self.save_as_png(&path, canvas),
+            Some("png") => self.save_as_png(renderer, &path, canvas),
             Some("netcanv") | Some("toml") => {
                // TODO: Saving should be asynchronous.
                tokio::runtime::Handle::current()
-                  .block_on(async { self.save_as_netcanv(&path, canvas).await })
+                  .block_on(async { self.save_as_netcanv(renderer, &path, canvas).await })
             }
             _ => Err(Error::UnsupportedSaveFormat),
          }
@@ -218,7 +230,7 @@ impl ProjectFile {
                continue;
             }
             chunk.mark_dirty();
-            chunk.upload_image(&chunk_image, (0, 0));
+            chunk.upload_image(renderer, &chunk_image, (0, 0));
          }
       }
 
@@ -272,7 +284,7 @@ impl ProjectFile {
                   log::debug!("chunk {:?}", chunk_position);
                   let chunk = canvas.ensure_chunk(renderer, chunk_position);
                   let image_data = ImageCoder::decode_png_data(&std::fs::read(path)?)?;
-                  chunk.upload_image(&image_data, (0, 0));
+                  chunk.upload_image(renderer, &image_data, (0, 0));
                   chunk.mark_saved();
                }
             }
