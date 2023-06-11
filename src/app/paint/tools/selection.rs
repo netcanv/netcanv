@@ -809,7 +809,7 @@ impl Selection {
    /// Uploads the given image into the capture framebuffer.
    /// Does not do anything else with the selection; the rectangle must be initialized separately.
    fn upload_rgba(&mut self, renderer: &mut Backend, image: &RgbaImage) {
-      let mut capture = renderer.create_framebuffer(image.width(), image.height());
+      let capture = renderer.create_framebuffer(image.width(), image.height());
       renderer.upload_framebuffer(&capture, (0, 0), (image.width(), image.height()), image);
       self.capture = Some(capture);
    }

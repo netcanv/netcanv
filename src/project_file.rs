@@ -2,7 +2,6 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use image::{GenericImage, GenericImageView, Rgba, RgbaImage};
-use netcanv_renderer::RenderBackend;
 use serde::{Deserialize, Serialize};
 
 use crate::backend::Backend;

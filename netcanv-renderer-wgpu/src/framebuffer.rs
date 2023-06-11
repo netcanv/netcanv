@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use netcanv_renderer::ScalingFilter;
 
 use crate::gpu::Gpu;
@@ -6,7 +8,7 @@ pub struct Framebuffer {
    width: u32,
    height: u32,
    texture: wgpu::Texture,
-   texture_view: wgpu::TextureView,
+   pub(crate) texture_view: Cell<Option<wgpu::TextureView>>,
 }
 
 impl Framebuffer {
@@ -21,7 +23,7 @@ impl Framebuffer {
          },
          mip_level_count: 1,
          sample_count: 1,
-         dimension: wgpu::TextureDimension::D3,
+         dimension: wgpu::TextureDimension::D2,
          format: wgpu::TextureFormat::Rgba8Unorm,
          usage: wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::COPY_DST
@@ -38,8 +40,82 @@ impl Framebuffer {
          width,
          height,
          texture,
-         texture_view,
+         texture_view: Cell::new(Some(texture_view)),
       }
+   }
+
+   pub(crate) fn upload(&self, gpu: &Gpu, position: (u32, u32), size: (u32, u32), pixels: &[u8]) {
+      let (x, y) = position;
+      let (width, height) = size;
+      gpu.queue.write_texture(
+         wgpu::ImageCopyTextureBase {
+            texture: &self.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+         },
+         pixels,
+         wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: None,
+         },
+         wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+         },
+      )
+   }
+
+   pub(crate) fn sync_download(
+      &self,
+      gpu: &Gpu,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   ) {
+      // This is pretty disgusting, but I didn't wanna rewrite the entire rendering API for
+      // asynchronous download support. Someday this will become a truly asynchronous process,
+      // but today is not that day.
+      let (x, y) = position;
+      let (width, height) = size;
+      let download_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+         label: Some("(temporary) Framebuffer Pixel Download Buffer"),
+         size: (width * height * 4) as wgpu::BufferAddress,
+         usage: wgpu::BufferUsages::COPY_DST,
+         mapped_at_creation: true,
+      });
+      let mut command_encoder =
+         gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("(temporary) Framebuffer Pixel Download Command Encoder"),
+         });
+      command_encoder.copy_texture_to_buffer(
+         wgpu::ImageCopyTexture {
+            texture: &self.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+         },
+         wgpu::ImageCopyBuffer {
+            buffer: &download_buffer,
+            layout: wgpu::ImageDataLayout {
+               offset: 0,
+               bytes_per_row: Some(width * 4),
+               rows_per_image: None,
+            },
+         },
+         wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+         },
+      );
+      // And this is the terrible part.
+      let index = gpu.queue.submit([command_encoder.finish()]);
+      gpu.device.poll(wgpu::Maintain::WaitForSubmissionIndex(index));
+      out_pixels.copy_from_slice(&download_buffer.slice(..).get_mapped_range()[..]);
+      download_buffer.destroy();
    }
 }
 

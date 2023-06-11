@@ -272,7 +272,20 @@ impl RenderBackend for WgpuBackend {
       Framebuffer::new(&self.gpu, width, height)
    }
 
-   fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {}
+   fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {
+      self.flush();
+      let target = self.gpu.current_render_target.take();
+      self.gpu.current_render_target = Some(
+         framebuffer
+            .texture_view
+            .take()
+            .expect("draw_to may not be called reentrantly on one framebuffer"),
+      );
+      f(self);
+      self.flush();
+      framebuffer.texture_view.set(self.gpu.current_render_target.take());
+      self.gpu.current_render_target = target;
+   }
 
    fn clear(&mut self, color: Color) {
       self.clear = Some(color);
@@ -298,6 +311,7 @@ impl RenderBackend for WgpuBackend {
       size: (u32, u32),
       pixels: &[u8],
    ) {
+      framebuffer.upload(&self.gpu, position, size, pixels);
    }
 
    fn download_framebuffer(
@@ -307,6 +321,7 @@ impl RenderBackend for WgpuBackend {
       size: (u32, u32),
       out_pixels: &mut [u8],
    ) {
+      framebuffer.sync_download(&self.gpu, position, size, out_pixels);
    }
 
    fn scale(&mut self, scale: Vector) {

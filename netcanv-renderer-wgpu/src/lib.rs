@@ -55,6 +55,8 @@ pub struct WgpuBackend {
    images: pass::Images,
    text: pass::Text,
 
+   present: pass::Present,
+
    command_buffers: Vec<wgpu::CommandBuffer>,
 }
 
@@ -101,6 +103,27 @@ impl WgpuBackend {
          },
          None,
       ).await.context("Failed to acquire graphics device. Try updating your graphics drivers. If that doesn't work, your hardware may be too old to run NetCanv.")?;
+
+      let screen_texture_bind_group_layout =
+         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Screen Texture Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+               binding: 0,
+               visibility: wgpu::ShaderStages::FRAGMENT,
+               ty: wgpu::BindingType::Texture {
+                  sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                  view_dimension: wgpu::TextureViewDimension::D2,
+                  multisampled: false,
+               },
+               count: None,
+            }],
+         });
+      let (screen_texture, screen_texture_view, screen_texture_bind_group) =
+         Gpu::create_screen_texture_view_and_bind_group(
+            &device,
+            &screen_texture_bind_group_layout,
+            window.inner_size(),
+         );
 
       let scene_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
          label: Some("Scene Uniform Buffer"),
@@ -197,7 +220,10 @@ impl WgpuBackend {
          scene_uniform_bind_group_layout,
          scene_uniform_bind_group,
 
-         current_render_target: None,
+         screen_texture,
+         screen_texture_bind_group_layout,
+         screen_texture_bind_group,
+         current_render_target: Some(screen_texture_view),
       };
       gpu.handle_resize(window.inner_size());
 
@@ -214,6 +240,8 @@ impl WgpuBackend {
          lines: pass::Lines::new(&pass_creation_context),
          images: pass::Images::new(&pass_creation_context, &image_storage),
          text: pass::Text::new(&pass_creation_context, &text_renderer),
+
+         present: pass::Present::new(&gpu),
 
          image_storage,
          text_renderer,
@@ -260,18 +288,43 @@ impl UiRenderFrame for Ui<WgpuBackend> {
          .surface
          .get_current_texture()
          .context("Failed to acquire next swapchain texture")?;
-      let frame_texture = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-      self.gpu.current_render_target = Some(frame_texture);
+      let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+         label: Some("Frame View"),
+         ..Default::default()
+      });
 
       self.rewind();
       f(self);
       self.flush();
 
+      let mut present_commands =
+         self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Screen -> Frame Copy Commands"),
+         });
+      {
+         let mut render_pass = present_commands.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Present"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+               view: &frame_view,
+               resolve_target: None,
+               ops: wgpu::Operations {
+                  load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                  store: true,
+               },
+            })],
+            depth_stencil_attachment: None,
+         });
+         self.present.render(&self.gpu, &mut render_pass);
+      }
+
       {
          // Slight borrow checker hack here because borrowing out individual fields doesn't work
          // through Deref.
-         let backend = self.render();
-         backend.gpu.queue.submit(backend.command_buffers.drain(..));
+         let renderer = self.render();
+         renderer
+            .gpu
+            .queue
+            .submit(renderer.command_buffers.drain(..).chain([present_commands.finish()]));
       }
 
       frame.present();
