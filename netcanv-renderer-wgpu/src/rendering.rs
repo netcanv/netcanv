@@ -46,6 +46,7 @@ pub(crate) struct FlushContext<'flush> {
    pub gpu: &'flush Gpu,
    pub model_transform_bind_group: &'flush wgpu::BindGroup,
    pub scene_uniform_bind_group: &'flush wgpu::BindGroup,
+   pub blend_mode: BlendMode,
 }
 
 impl WgpuBackend {
@@ -64,13 +65,14 @@ impl WgpuBackend {
       let last_pass = self.last_pass;
       self.last_pass = Some(new_pass);
       if Some(new_pass) < last_pass {
-         self.flush();
+         self.flush("switch_pass");
       }
    }
 
-   pub(crate) fn flush(&mut self) {
+   pub(crate) fn flush(&mut self, cause: &str) {
+      let label = format!("Flush ({cause})");
       let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-         label: Some("Flush"),
+         label: Some(&label),
       });
 
       let clear_ops = self.clear_ops().take();
@@ -90,7 +92,7 @@ impl WgpuBackend {
 
       {
          let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Flush"),
+            label: Some(&label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                view: self.gpu.render_target(),
                resolve_target: None,
@@ -114,6 +116,7 @@ impl WgpuBackend {
             scene_uniform_bind_group: self
                .scene_uniform_cache
                .bind_group(&self.gpu, self.gpu.current_render_target_size),
+            blend_mode: transform_state.blend_mode,
          };
 
          self.rounded_rects.flush(&mut context, &mut render_pass);
@@ -150,15 +153,16 @@ impl Renderer for WgpuBackend {
 
    fn pop(&mut self) {
       let transform_state = self.current_transform();
-      if transform_state.transform.is_matrix() || transform_state.clip.is_some() {
-         self.flush();
+      let next_transform_state = self.transform_stack.get(self.transform_stack.len() - 2);
+      if transform_state.transform.is_matrix()
+         || transform_state.clip.is_some()
+         || next_transform_state.is_some_and(|ts| ts.blend_mode != transform_state.blend_mode)
+      {
+         self.flush("pop");
       }
       self.transform_stack.pop();
       if self.transform_stack.is_empty() {
-         self.transform_stack.push(TransformState {
-            transform: Transform::Translation(Vec2::ZERO),
-            clip: None,
-         });
+         self.transform_stack.push(TransformState::default());
       }
    }
 
@@ -166,12 +170,12 @@ impl Renderer for WgpuBackend {
       let state = self.current_transform();
       self.current_transform_mut().transform = state.transform.translate(vector_to_vec2(vec));
       if self.current_transform().transform.is_matrix() {
-         self.flush();
+         self.flush("translate");
       }
    }
 
    fn clip(&mut self, rect: Rect) {
-      self.flush();
+      self.flush("clip");
       let rect = self.current_transform().transform.translate_rect(rect.sort());
       let clip = if let Some(existing_clip) = self.current_transform().clip {
          let left = existing_clip.left().max(rect.left());
@@ -191,7 +195,7 @@ impl Renderer for WgpuBackend {
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, -1.0);
          if self.rounded_rects.needs_flush() {
-            self.flush();
+            self.flush("fill");
          }
       }
    }
@@ -202,7 +206,7 @@ impl Renderer for WgpuBackend {
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, thickness);
          if self.rounded_rects.needs_flush() {
-            self.flush();
+            self.flush("outline");
          }
       }
    }
@@ -215,7 +219,7 @@ impl Renderer for WgpuBackend {
             self.switch_pass(Pass::Lines);
             self.lines.add(a, b, color, cap, thickness);
             if self.lines.needs_flush() {
-               self.flush();
+               self.flush("line");
             }
          } else {
             match cap {
@@ -297,7 +301,7 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn draw_to(&mut self, framebuffer: &Self::Framebuffer, f: impl FnOnce(&mut Self)) {
-      self.flush();
+      self.flush("before draw_to");
       let target = self.gpu.current_render_target.take();
       let previous_size = self.gpu.current_render_target_size;
       self.gpu.current_render_target = Some(
@@ -308,7 +312,7 @@ impl RenderBackend for WgpuBackend {
       );
       self.gpu.current_render_target_size = framebuffer.size();
       f(self);
-      self.flush();
+      self.flush("after draw_to");
       framebuffer.texture_view.set(self.gpu.current_render_target.take());
       self.gpu.current_render_target = target;
       self.gpu.current_render_target_size = previous_size;
@@ -324,7 +328,7 @@ impl RenderBackend for WgpuBackend {
          self.switch_pass(Pass::Images);
          self.images.add(rect, image.color, image.index);
          if self.images.needs_flush() {
-            self.flush();
+            self.flush("image");
          }
       }
    }
@@ -334,7 +338,7 @@ impl RenderBackend for WgpuBackend {
       self.switch_pass(Pass::Images);
       self.images.add(rect, None, framebuffer.image_storage_index);
       if self.images.needs_flush() {
-         self.flush();
+         self.flush("framebuffer");
       }
    }
 
@@ -361,10 +365,15 @@ impl RenderBackend for WgpuBackend {
    fn scale(&mut self, scale: Vector) {
       // In case of scaling we always end up with a matrix so we need to flush whatever was about
       // to be rendered.
-      self.flush();
+      self.flush("scale");
       let state = self.current_transform();
       self.current_transform_mut().transform = state.transform.scale(vector_to_vec2(scale));
    }
 
-   fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {}
+   fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
+      if new_blend_mode != self.current_transform().blend_mode {
+         self.flush("set_blend_mode");
+         self.current_transform_mut().blend_mode = new_blend_mode;
+      }
+   }
 }

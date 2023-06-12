@@ -10,12 +10,12 @@ use crate::image::ImageStorage;
 use crate::rendering::FlushContext;
 
 use super::vertex::{vertex, Vertex};
-use super::PassCreationContext;
+use super::{PassCreationContext, RenderPipelinePermutations};
 
 pub(crate) struct Images {
    vertex_buffer: wgpu::Buffer,
    batch_storage: BatchStorage,
-   render_pipeline: wgpu::RenderPipeline,
+   render_pipelines: RenderPipelinePermutations,
 
    image_rect_data: Vec<ImageRectData>,
    image_bindings: Vec<u32>,
@@ -68,9 +68,9 @@ impl Images {
             ],
             push_constant_ranges: &[],
          });
-      let render_pipeline =
+      let render_pipelines = RenderPipelinePermutations::new(|label, blend_mode| {
          context.gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Images: Render Pipeline"),
+            label: Some(&format!("Images: Render Pipeline {label}")),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                module: &shader,
@@ -83,10 +83,11 @@ impl Images {
             fragment: Some(wgpu::FragmentState {
                module: &shader,
                entry_point: "main_fs",
-               targets: &[Some(context.gpu.color_target_state())],
+               targets: &[Some(context.gpu.color_target_state(blend_mode))],
             }),
             multiview: None,
-         });
+         })
+      });
 
       Self {
          vertex_buffer,
@@ -96,7 +97,7 @@ impl Images {
                as wgpu::BufferAddress,
             bind_group_layout: image_rect_data_bind_group_layout,
          }),
-         render_pipeline,
+         render_pipelines,
          image_rect_data: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
          image_bindings: Vec::with_capacity(Self::RESERVED_RECT_COUNT),
       }
@@ -133,7 +134,7 @@ impl Images {
       context.gpu.queue.write_buffer(image_rect_data_buffer, 0, image_rect_data_bytes);
 
       render_pass.push_debug_group("Images");
-      render_pass.set_pipeline(&self.render_pipeline);
+      render_pass.set_pipeline(&self.render_pipelines.get(context.blend_mode));
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.set_bind_group(1, bind_group, &[]);
       render_pass.set_bind_group(2, context.model_transform_bind_group, &[]);

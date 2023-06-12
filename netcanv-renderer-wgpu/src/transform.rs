@@ -1,5 +1,6 @@
 use glam::{Mat3A, Vec2};
 use netcanv_renderer::paws::{vector, Rect, Vector};
+use netcanv_renderer::BlendMode;
 
 use crate::WgpuBackend;
 
@@ -7,6 +8,17 @@ use crate::WgpuBackend;
 pub struct TransformState {
    pub transform: Transform,
    pub clip: Option<Rect>,
+   pub blend_mode: BlendMode,
+}
+
+impl Default for TransformState {
+   fn default() -> Self {
+      Self {
+         transform: Transform::Translation(Vec2::ZERO),
+         clip: None,
+         blend_mode: BlendMode::Alpha,
+      }
+   }
 }
 
 #[derive(Debug, Clone, Copy)]

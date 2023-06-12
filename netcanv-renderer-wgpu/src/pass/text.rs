@@ -13,12 +13,12 @@ use crate::text::TextRenderer;
 use crate::Font;
 
 use super::vertex::{vertex, Vertex};
-use super::PassCreationContext;
+use super::{PassCreationContext, RenderPipelinePermutations};
 
 pub(crate) struct Text {
    vertex_buffer: wgpu::Buffer,
    batch_storage: BatchStorage,
-   render_pipeline: wgpu::RenderPipeline,
+   render_pipelines: RenderPipelinePermutations,
 
    glyph_data: Vec<GlyphData>,
    font_spans: Vec<FontSpan>,
@@ -76,9 +76,9 @@ impl Text {
             ],
             push_constant_ranges: &[],
          });
-      let render_pipeline =
+      let render_pipelines = RenderPipelinePermutations::new(|label, blend_mode| {
          context.gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Text: Render Pipeline"),
+            label: Some(&format!("Text: Render Pipeline {label}")),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                module: &shader,
@@ -91,10 +91,11 @@ impl Text {
             fragment: Some(wgpu::FragmentState {
                module: &shader,
                entry_point: "main_fs",
-               targets: &[Some(context.gpu.color_target_state())],
+               targets: &[Some(context.gpu.color_target_state(blend_mode))],
             }),
             multiview: None,
-         });
+         })
+      });
 
       Self {
          vertex_buffer,
@@ -103,7 +104,7 @@ impl Text {
             buffer_size: (Self::BUFFER_GLYPH_COUNT * size_of::<GlyphData>()) as wgpu::BufferAddress,
             bind_group_layout: glyph_data_bind_group_layout,
          }),
-         render_pipeline,
+         render_pipelines,
          glyph_data: Vec::with_capacity(1024),
          font_spans: vec![],
       }
@@ -150,7 +151,7 @@ impl Text {
       }
 
       render_pass.push_debug_group("Text");
-      render_pass.set_pipeline(&self.render_pipeline);
+      render_pass.set_pipeline(&self.render_pipelines.get(context.blend_mode));
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.set_bind_group(2, context.model_transform_bind_group, &[]);
       render_pass.set_bind_group(3, &context.scene_uniform_bind_group, &[]);

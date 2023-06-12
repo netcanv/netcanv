@@ -2,13 +2,13 @@ use std::mem::size_of;
 
 use anyhow::Context;
 use cli::RendererCli;
-use glam::{Mat3A, Vec2};
+use glam::Mat3A;
 use gpu::Gpu;
 use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use rendering::Pass;
 use text::TextRenderer;
-use transform::{Transform, TransformState};
+use transform::TransformState;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
@@ -227,10 +227,7 @@ impl WgpuBackend {
 
          image_storage,
          text_renderer,
-         transform_stack: vec![TransformState {
-            transform: Transform::Translation(Vec2::ZERO),
-            clip: None,
-         }],
+         transform_stack: vec![TransformState::default()],
          scene_uniform_cache: SceneUniformCache::new(30),
          identity_model_transform_bind_group,
          model_transform_storage: BatchStorage::new(BatchStorageConfig {
@@ -278,7 +275,7 @@ impl UiRenderFrame for Ui<WgpuBackend> {
 
       self.rewind();
       f(self);
-      self.flush();
+      self.flush("render_frame");
 
       let mut present_commands =
          self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

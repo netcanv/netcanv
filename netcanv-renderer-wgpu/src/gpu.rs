@@ -1,6 +1,7 @@
 mod scene_uniforms;
 
 use log::debug;
+use netcanv_renderer::BlendMode;
 use winit::dpi::PhysicalSize;
 
 pub use scene_uniforms::*;
@@ -112,12 +113,36 @@ impl Gpu {
       self.current_render_target.as_ref().expect("attempt to render outside of render_frame")
    }
 
-   pub fn color_target_state(&self) -> wgpu::ColorTargetState {
+   pub fn color_target_state(&self, blend_mode: BlendMode) -> wgpu::ColorTargetState {
       wgpu::ColorTargetState {
          format: self.screen_format(),
-         blend: Some(wgpu::BlendState {
-            color: wgpu::BlendComponent::OVER,
-            alpha: wgpu::BlendComponent::OVER,
+         blend: Some(match blend_mode {
+            BlendMode::Replace => wgpu::BlendState::REPLACE,
+            BlendMode::Alpha => wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+            BlendMode::Add => wgpu::BlendState {
+               color: wgpu::BlendComponent {
+                  src_factor: wgpu::BlendFactor::SrcAlpha,
+                  operation: wgpu::BlendOperation::Add,
+                  dst_factor: wgpu::BlendFactor::One,
+               },
+               alpha: wgpu::BlendComponent {
+                  src_factor: wgpu::BlendFactor::SrcAlpha,
+                  operation: wgpu::BlendOperation::Add,
+                  dst_factor: wgpu::BlendFactor::One,
+               },
+            },
+            BlendMode::Invert => wgpu::BlendState {
+               color: wgpu::BlendComponent {
+                  src_factor: wgpu::BlendFactor::OneMinusDst,
+                  operation: wgpu::BlendOperation::Add,
+                  dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+               },
+               alpha: wgpu::BlendComponent {
+                  src_factor: wgpu::BlendFactor::Zero,
+                  operation: wgpu::BlendOperation::Add,
+                  dst_factor: wgpu::BlendFactor::One,
+               },
+            },
          }),
          write_mask: wgpu::ColorWrites::ALL,
       }
