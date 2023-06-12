@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3a, Mat3A};
