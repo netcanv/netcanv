@@ -118,7 +118,7 @@ impl Gpu {
          format: self.screen_format(),
          blend: Some(match blend_mode {
             BlendMode::Replace => wgpu::BlendState::REPLACE,
-            BlendMode::Alpha => wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+            BlendMode::Alpha => wgpu::BlendState::ALPHA_BLENDING,
             BlendMode::Add => wgpu::BlendState {
                color: wgpu::BlendComponent {
                   src_factor: wgpu::BlendFactor::SrcAlpha,

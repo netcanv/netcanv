@@ -59,6 +59,6 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    }
 
    var color = unpack4x8unorm(data.color);
-   color *= alpha * color.a;
+   color.a *= alpha;
    return color;
 }

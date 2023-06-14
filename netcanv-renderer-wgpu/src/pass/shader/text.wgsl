@@ -52,6 +52,5 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    var color = unpack4x8unorm(glyph_data[vertex.glyph_index].color);
    let alpha = textureSample(atlas_texture, image_sampler, vertex.uv).r;
    color.a *= alpha;
-   color *= vec4f(vec3f(color.a), 1.0);
    return color;
 }

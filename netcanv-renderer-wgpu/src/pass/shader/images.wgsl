@@ -44,6 +44,5 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
       let tint_color = unpack4x8unorm(data.color);
       color = vec4f(tint_color.r, tint_color.g, tint_color.b, tint_color.a * color.a);
    }
-   color = vec4f(color.rgb * color.a, color.a);
    return color;
 }
