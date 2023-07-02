@@ -8,7 +8,7 @@ use netcanv_renderer::paws::Color;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::rendering::FlushContext;
+use crate::rendering::{BlendFlags, FlushContext};
 use crate::text::TextRenderer;
 use crate::Font;
 
@@ -114,10 +114,10 @@ impl Text {
       self.glyph_data.len() as u32
    }
 
-   pub fn add_glyph(&mut self, position: Vec2, glyph: u32, color: Color) {
+   pub fn add_glyph(&mut self, position: Vec2, glyph: u32, color: Color, blend_flags: BlendFlags) {
       self.glyph_data.push(GlyphData {
          position,
-         glyph,
+         rendition: blend_flags.bits() << 30 | glyph,
          color,
       });
    }
@@ -196,7 +196,7 @@ impl Text {
 #[repr(C, align(16))]
 struct GlyphData {
    position: Vec2,
-   glyph: u32,
+   rendition: u32,
    color: Color,
 }
 

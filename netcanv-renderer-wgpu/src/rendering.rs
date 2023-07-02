@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use bitflags::bitflags;
 use glam::{vec2, Vec2};
 use netcanv_renderer::paws::{
    vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
@@ -30,6 +31,20 @@ impl Default for ClearOps {
             store: true,
          },
       }
+   }
+}
+
+bitflags! {
+   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+   pub(crate) struct BlendFlags: u32 {
+      const ANTIALIAS = 0x1;
+      const PREMULTIPLY_ALPHA = 0x2;
+   }
+}
+
+impl Default for BlendFlags {
+   fn default() -> Self {
+      Self::ANTIALIAS
    }
 }
 
@@ -141,6 +156,14 @@ impl WgpuBackend {
          ClearOps::default()
       }
    }
+
+   fn blend_flags(&self) -> BlendFlags {
+      match self.current_transform().blend_mode {
+         BlendMode::Replace => BlendFlags::empty(),
+         BlendMode::Invert => BlendFlags::ANTIALIAS | BlendFlags::PREMULTIPLY_ALPHA,
+         _ => BlendFlags::default(),
+      }
+   }
 }
 
 impl Renderer for WgpuBackend {
@@ -193,7 +216,7 @@ impl Renderer for WgpuBackend {
       if color.a > 0 {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
-         self.rounded_rects.add(rect, color, radius, -1.0);
+         self.rounded_rects.add(rect, color, radius, -1.0, self.blend_flags());
          if self.rounded_rects.needs_flush() {
             self.flush("fill");
          }
@@ -204,7 +227,7 @@ impl Renderer for WgpuBackend {
       if thickness > 0.0 && color.a > 0 {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
-         self.rounded_rects.add(rect, color, radius, thickness);
+         self.rounded_rects.add(rect, color, radius, thickness, self.blend_flags());
          if self.rounded_rects.needs_flush() {
             self.flush("outline");
          }
@@ -217,7 +240,7 @@ impl Renderer for WgpuBackend {
             let a = self.current_transform().transform.translate_vector(a);
             let b = self.current_transform().transform.translate_vector(b);
             self.switch_pass(Pass::Lines);
-            self.lines.add(a, b, color, cap, thickness);
+            self.lines.add(a, b, color, cap, thickness, self.blend_flags());
             if self.lines.needs_flush() {
                self.flush("line");
             }
@@ -253,8 +276,9 @@ impl Renderer for WgpuBackend {
 
       let origin = text_origin(&rect, font, text, alignment);
       let first = self.text.glyph_index();
+      let blend_flags = self.blend_flags();
       self.text_renderer.render_text(&self.gpu, font, text, origin, |pen, glyph| {
-         self.text.add_glyph(pen, glyph, color);
+         self.text.add_glyph(pen, glyph, color, blend_flags);
       });
       let last = self.text.glyph_index();
       self.text.add_font_span(first..last, font);

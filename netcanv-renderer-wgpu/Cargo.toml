@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.40"
+bitflags = "2.3.2"
 bytemuck = "1.13.1"
 clap = { workspace = true }
 glam = "0.24.0"

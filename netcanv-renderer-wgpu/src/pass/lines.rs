@@ -6,7 +6,7 @@ use netcanv_renderer::paws::{Color, LineCap, Point};
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::rendering::FlushContext;
+use crate::rendering::{BlendFlags, FlushContext};
 
 use super::vertex::{vertex, Vertex};
 use super::{PassCreationContext, RenderPipelinePermutations};
@@ -98,7 +98,15 @@ impl Lines {
       }
    }
 
-   pub fn add(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
+   pub fn add(
+      &mut self,
+      a: Point,
+      b: Point,
+      color: Color,
+      cap: LineCap,
+      thickness: f32,
+      blend_flags: BlendFlags,
+   ) {
       assert!(
          self.line_data.len() < self.line_data.capacity(),
          "too many lines without flushing"
@@ -107,11 +115,12 @@ impl Lines {
       self.line_data.push(LineData {
          line: vec4(a.x, a.y, b.x, b.y),
          thickness,
-         cap: match cap {
-            LineCap::Butt => LineData::BUTT,
-            LineCap::Square => LineData::SQUARE,
-            LineCap::Round => LineData::ROUND,
-         },
+         rendition: blend_flags.bits() << 2
+            | match cap {
+               LineCap::Butt => LineData::CAP_BUTT,
+               LineCap::Square => LineData::CAP_SQUARE,
+               LineCap::Round => LineData::CAP_ROUND,
+            },
          color,
       });
    }
@@ -157,7 +166,7 @@ impl Lines {
 struct LineData {
    line: Vec4,
    thickness: f32,
-   cap: u32,
+   rendition: u32,
    color: Color,
 }
 
@@ -165,7 +174,7 @@ unsafe impl Pod for LineData {}
 unsafe impl Zeroable for LineData {}
 
 impl LineData {
-   const BUTT: u32 = 0;
-   const SQUARE: u32 = 1;
-   const ROUND: u32 = 2;
+   const CAP_BUTT: u32 = 0;
+   const CAP_SQUARE: u32 = 1;
+   const CAP_ROUND: u32 = 2;
 }

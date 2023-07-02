@@ -10,9 +10,13 @@ struct Vertex {
 struct Glyph {
    @align(16)
    position: vec2f,
-   glyph: u32,
+   rendition: u32,
    color: u32,
 }
+
+const rendition_glyph             = 0x3FFFFFFFu;
+const rendition_antialias         = 0x40000000u;
+const rendition_premultiply_alpha = 0x80000000u;
 
 struct AtlasGlyph {
    @align(16)
@@ -32,7 +36,7 @@ fn main_vs(
    @location(0) position: vec2f,
 ) -> Vertex {
    let data = glyph_data[glyph_index];
-   let atlas_rect = atlas_data[data.glyph].rect;
+   let atlas_rect = atlas_data[data.rendition & rendition_glyph].rect;
    let local_position = floor(data.position + position * vec2f(atlas_rect.zw));
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
@@ -49,8 +53,21 @@ fn main_vs(
 
 @fragment
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
-   var color = unpack4x8unorm(glyph_data[vertex.glyph_index].color);
-   let alpha = textureSample(atlas_texture, image_sampler, vertex.uv).r;
+   let data = glyph_data[vertex.glyph_index];
+   var color = unpack4x8unorm(data.color);
+
+   var alpha = textureSample(atlas_texture, image_sampler, vertex.uv).r;
+   if (data.rendition & rendition_antialias) == 0u {
+      alpha = 1.0 - step(alpha, 0.5);
+   }
+   if alpha == 0.0 {
+      discard;
+   }
+
    color.a *= alpha;
+   if (data.rendition & rendition_premultiply_alpha) != 0u {
+      color = vec4f(color.rgb * color.a, color.a);
+   }
+
    return color;
 }

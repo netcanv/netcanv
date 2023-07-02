@@ -52,7 +52,7 @@ impl OpenGlBackend {
          let mut context = ContextBuilder::new()
             .with_gl(GlRequest::Latest)
             .with_gl_profile(GlProfile::Core)
-            .with_vsync(true)
+            .with_vsync(false)
             .with_multisampling(msaa);
          if msaa > 0 {
             msaa /= 2;

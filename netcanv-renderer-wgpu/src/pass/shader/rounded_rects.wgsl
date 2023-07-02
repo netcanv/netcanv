@@ -6,7 +6,11 @@ struct Rect {
    corner_radius: f32,
    color: u32,
    outline: f32,
+   rendition: u32,
 }
+
+const rendition_antialias         = 0x00000001u;
+const rendition_premultiply_alpha = 0x00000002u;
 
 struct Vertex {
    @builtin(position) position: vec4f,
@@ -58,7 +62,17 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
       alpha *= clamp(outline, 0.0, 1.0);
    }
 
+   if (data.rendition & rendition_antialias) == 0u {
+      alpha = 1.0 - step(alpha, 0.01);
+   }
+   if alpha == 0.0 {
+      discard;
+   }
+
    var color = unpack4x8unorm(data.color);
    color.a *= alpha;
+   if (data.rendition & rendition_premultiply_alpha) != 0u {
+      color = vec4f(color.rgb * color.a, color.a);
+   }
    return color;
 }

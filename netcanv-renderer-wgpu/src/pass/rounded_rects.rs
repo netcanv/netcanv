@@ -7,7 +7,7 @@ use wgpu::include_wgsl;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
-use crate::rendering::FlushContext;
+use crate::rendering::{BlendFlags, FlushContext};
 
 use super::vertex::{vertex, Vertex};
 use super::{PassCreationContext, RenderPipelinePermutations};
@@ -100,7 +100,14 @@ impl RoundedRects {
       }
    }
 
-   pub fn add(&mut self, rect: Rect, color: Color, corner_radius: f32, outline: f32) {
+   pub fn add(
+      &mut self,
+      rect: Rect,
+      color: Color,
+      corner_radius: f32,
+      outline: f32,
+      blend_flags: BlendFlags,
+   ) {
       assert!(
          self.rect_data.len() < self.rect_data.capacity(),
          "too many rectangles without flushing"
@@ -111,6 +118,7 @@ impl RoundedRects {
          rect: vec4(rect.left(), rect.top(), rect.width(), rect.height()),
          corner_radius,
          outline,
+         rendition: blend_flags.bits(),
       });
    }
 
@@ -158,6 +166,7 @@ struct RectData {
    color: Color,
    /// This being <= 0 means we should fill in the rectangle.
    outline: f32,
+   rendition: u32,
 }
 
 impl Default for RectData {
@@ -167,6 +176,7 @@ impl Default for RectData {
          corner_radius: Default::default(),
          color: Color::TRANSPARENT,
          outline: 0.0,
+         rendition: 0,
       }
    }
 }

@@ -4,7 +4,7 @@ struct Line {
    @align(16)
    line: vec4f, // xy = start point, zw = end point
    thickness: f32,
-   cap: u32,
+   rendition: u32,
    color: u32,
 }
 
@@ -17,6 +17,10 @@ struct Vertex {
 @group(0) @binding(0) var<uniform> line_data: array<Line, max_line_count>;
 @group(1) @binding(0) var<uniform> model_transform: mat3x3f;
 @group(2) @binding(0) var<uniform> scene_transform: mat3x3f;
+
+const rendition_cap               = 0x00000003u;
+const rendition_antialias         = 0x00000004u;
+const rendition_premultiply_alpha = 0x00000008u;
 
 const cap_butt = 0u;
 const cap_square = 1u;
@@ -46,7 +50,7 @@ fn main_vs(
    // coverage.
    var line = data.line + vec4f(0.5);
    let direction = normalize(line.zw - line.xy);
-   let square_cap = direction * data.thickness * should_extend_cap[data.cap] * 0.5;
+   let square_cap = direction * data.thickness * should_extend_cap[data.rendition & rendition_cap] * 0.5;
    line += vec4f(-square_cap, square_cap);
 
    // For lines that are less than 2px wide using the thickness for fragment coverage is not enough
@@ -88,19 +92,29 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    let center = (line.xy + line.zw) * 0.5;
    let tangent = normalize(line.zw - line.xy);
    let normal = vec2f(-tangent.y, tangent.x);
-   let half_length = length(center - line.xy) + thickness * should_draw_square_cap[data.cap];
+   let half_length = length(center - line.xy) + thickness * should_draw_square_cap[data.rendition & rendition_cap];
 
    let tangent_sdf = line_sdf(uv, origin, tangent, normal, half_thickness);
    let normal_sdf = line_sdf(uv, center, normal, tangent, half_length);
 
    var alpha = clamp(-tangent_sdf, 0.0, 1.0) * clamp(-normal_sdf, 0.0, 1.0);
-   if data.cap == cap_round {
+   if (data.rendition & rendition_cap) == cap_round {
       let start = circle_sdf_squared(uv, line.xy, half_thickness);
       let end = circle_sdf_squared(uv, line.zw, half_thickness);
       alpha = clamp(alpha + clamp(-start, 0.0, 1.0) + clamp(-end, 0.0, 1.0), 0.0, 1.0);
    }
 
+   if (data.rendition & rendition_antialias) == 0u {
+      alpha = 1.0 - step(alpha, 0.01);
+   }
+   if alpha == 0.0 {
+      discard;
+   }
+
    var color = unpack4x8unorm(data.color);
    color.a *= alpha;
+   if (data.rendition & rendition_premultiply_alpha) != 0u {
+      color = vec4f(color.rgb * color.a, color.a);
+   }
    return color;
 }
