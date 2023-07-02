@@ -1,8 +1,10 @@
 use std::mem::size_of;
 
+use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
 use glam::{vec4, Vec4};
 use netcanv_renderer::paws::{Color, Rect};
+use netcanv_renderer::ScalingFilter;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};
@@ -103,16 +105,20 @@ impl Images {
       }
    }
 
-   pub fn add(&mut self, rect: Rect, color: Option<Color>, binding: u32) {
+   pub fn add(&mut self, rect: Rect, color: Option<Color>, binding: u32, filter: ScalingFilter) {
       assert!(
          self.image_rect_data.len() < self.image_rect_data.capacity(),
          "too many images without flushing"
       );
 
+      let mut rendition = Rendition::empty();
+      rendition.set(Rendition::COLORIZE, color.is_some());
+      rendition.set(Rendition::NEAREST, filter == ScalingFilter::Nearest);
+
       self.image_rect_data.push(ImageRectData {
          rect: vec4(rect.x(), rect.y(), rect.width(), rect.height()),
          color: color.unwrap_or(Color::TRANSPARENT),
-         colorize: color.is_some() as u32,
+         rendition,
       });
       self.image_bindings.push(binding);
    }
@@ -168,7 +174,15 @@ impl Images {
 struct ImageRectData {
    rect: Vec4,
    color: Color,
-   colorize: u32,
+   rendition: Rendition,
+}
+
+bitflags! {
+   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+   struct Rendition: u32 {
+      const COLORIZE = 0x1;
+      const NEAREST  = 0x2;
+   }
 }
 
 unsafe impl Pod for ImageRectData {}

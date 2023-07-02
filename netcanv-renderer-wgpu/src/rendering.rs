@@ -5,7 +5,7 @@ use glam::{vec2, Vec2};
 use netcanv_renderer::paws::{
    vector, AlignH, AlignV, Alignment, Color, LineCap, Point, Rect, Renderer, Vector,
 };
-use netcanv_renderer::{BlendMode, Font as _, Framebuffer as _, RenderBackend};
+use netcanv_renderer::{BlendMode, Font as _, Framebuffer as _, RenderBackend, ScalingFilter};
 
 use crate::common::{paws_color_to_wgpu, vector_to_vec2};
 use crate::gpu::Gpu;
@@ -350,7 +350,7 @@ impl RenderBackend for WgpuBackend {
       if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::Images);
-         self.images.add(rect, image.color, image.index);
+         self.images.add(rect, image.color, image.index, ScalingFilter::default());
          if self.images.needs_flush() {
             self.flush("image");
          }
@@ -360,7 +360,12 @@ impl RenderBackend for WgpuBackend {
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer) {
       let rect = self.current_transform().transform.translate_rect(rect);
       self.switch_pass(Pass::Images);
-      self.images.add(rect, None, framebuffer.image_storage_index);
+      self.images.add(
+         rect,
+         None,
+         framebuffer.image_storage_index,
+         framebuffer.scaling_filter,
+      );
       if self.images.needs_flush() {
          self.flush("framebuffer");
       }

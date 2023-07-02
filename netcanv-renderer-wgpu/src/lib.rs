@@ -134,13 +134,22 @@ impl WgpuBackend {
          ]),
          usage: wgpu::BufferUsages::UNIFORM,
       });
-      let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-         label: Some("Image Sampler"),
+      let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+         label: Some("Linear Sampler"),
          address_mode_u: wgpu::AddressMode::ClampToEdge,
          address_mode_v: wgpu::AddressMode::ClampToEdge,
          address_mode_w: wgpu::AddressMode::ClampToEdge,
          mag_filter: wgpu::FilterMode::Linear,
          min_filter: wgpu::FilterMode::Linear,
+         ..Default::default()
+      });
+      let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+         label: Some("Nearest Sampler"),
+         address_mode_u: wgpu::AddressMode::ClampToEdge,
+         address_mode_v: wgpu::AddressMode::ClampToEdge,
+         address_mode_w: wgpu::AddressMode::ClampToEdge,
+         mag_filter: wgpu::FilterMode::Nearest,
+         min_filter: wgpu::FilterMode::Nearest,
          ..Default::default()
       });
 
@@ -162,6 +171,12 @@ impl WgpuBackend {
                   binding: 1,
                   visibility: wgpu::ShaderStages::FRAGMENT,
                   ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                  count: None,
+               },
+               wgpu::BindGroupLayoutEntry {
+                  binding: 2,
+                  visibility: wgpu::ShaderStages::FRAGMENT,
+                  ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                   count: None,
                },
             ],
@@ -198,7 +213,8 @@ impl WgpuBackend {
          device,
          queue,
 
-         image_sampler,
+         linear_sampler,
+         nearest_sampler,
          scene_uniform_bind_group_layout,
 
          current_render_target: Some(screen_texture_view),

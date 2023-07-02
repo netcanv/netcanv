@@ -74,7 +74,11 @@ impl SceneUniformCache {
                   },
                   wgpu::BindGroupEntry {
                      binding: 1,
-                     resource: wgpu::BindingResource::Sampler(&gpu.image_sampler),
+                     resource: wgpu::BindingResource::Sampler(&gpu.linear_sampler),
+                  },
+                  wgpu::BindGroupEntry {
+                     binding: 2,
+                     resource: wgpu::BindingResource::Sampler(&gpu.nearest_sampler),
                   },
                ],
             });

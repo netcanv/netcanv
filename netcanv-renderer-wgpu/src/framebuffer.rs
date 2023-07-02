@@ -11,6 +11,7 @@ pub struct Framebuffer {
    texture: wgpu::Texture,
    pub(crate) texture_view: Cell<Option<wgpu::TextureView>>,
    pub(crate) image_storage_index: u32,
+   pub(crate) scaling_filter: ScalingFilter,
 }
 
 impl Framebuffer {
@@ -55,6 +56,7 @@ impl Framebuffer {
          texture,
          texture_view: Cell::new(Some(texture_view)),
          image_storage_index,
+         scaling_filter: ScalingFilter::default(),
       }
    }
 
@@ -138,5 +140,7 @@ impl netcanv_renderer::Framebuffer for Framebuffer {
       (self.width, self.height)
    }
 
-   fn set_scaling_filter(&mut self, filter: ScalingFilter) {}
+   fn set_scaling_filter(&mut self, filter: ScalingFilter) {
+      self.scaling_filter = filter;
+   }
 }

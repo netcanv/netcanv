@@ -28,7 +28,7 @@ struct AtlasGlyph {
 @group(1) @binding(1) var<uniform> atlas_data: array<AtlasGlyph, max_atlas_glyph_count>;
 @group(2) @binding(0) var<uniform> model_transform: mat3x3f;
 @group(3) @binding(0) var<uniform> scene_transform: mat3x3f;
-@group(3) @binding(1) var image_sampler: sampler;
+@group(3) @binding(1) var linear_sampler: sampler;
 
 @vertex
 fn main_vs(
@@ -56,7 +56,7 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    let data = glyph_data[vertex.glyph_index];
    var color = unpack4x8unorm(data.color);
 
-   var alpha = textureSample(atlas_texture, image_sampler, vertex.uv).r;
+   var alpha = textureSample(atlas_texture, linear_sampler, vertex.uv).r;
    if (data.rendition & rendition_antialias) == 0u {
       alpha = 1.0 - step(alpha, 0.5);
    }

@@ -14,7 +14,8 @@ pub struct Gpu {
    pub device: wgpu::Device,
    pub queue: wgpu::Queue,
 
-   pub image_sampler: wgpu::Sampler,
+   pub linear_sampler: wgpu::Sampler,
+   pub nearest_sampler: wgpu::Sampler,
    pub scene_uniform_bind_group_layout: wgpu::BindGroupLayout,
 
    pub screen_texture: wgpu::Texture,
