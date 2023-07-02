@@ -29,7 +29,7 @@ fn main_vs(
 ) -> Vertex
 {
    let data = rect_data[rect_index];
-   let local_position = floor(position * data.rect.zw + data.rect.xy);
+   let local_position = position * data.rect.zw + data.rect.xy;
    let scene_position = scene_transform * model_transform * vec3f(local_position, 1.0);
 
    var vertex: Vertex;
@@ -50,7 +50,6 @@ fn rectangle_sdf(uv: vec2f, half_extents: vec2f) -> f32 {
 fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    var data = rect_data[vertex.rect_index];
    // Prevent wonkiness around the edges by flooring the rect's coordinates.
-   data.rect = floor(data.rect);
 
    let center = data.rect.xy + data.rect.zw * 0.5;
    let half_extents = data.rect.zw * 0.5 - vec2f(data.corner_radius);
@@ -63,7 +62,7 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    }
 
    if (data.rendition & rendition_antialias) == 0u {
-      alpha = 1.0 - step(alpha, 0.01);
+      alpha = 1.0 - step(alpha, 0.5);
    }
    if alpha == 0.0 {
       discard;

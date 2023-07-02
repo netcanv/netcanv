@@ -113,9 +113,17 @@ impl RoundedRects {
          "too many rectangles without flushing"
       );
 
+      // A slightly janky way of ensuring that UI rects look laser-sharp while single point
+      // brush strokes on the paint canvas are placed as-is. Not the most ideal way of accomplishing
+      // this, but it works and is pretty fast.
+      let mut rect = vec4(rect.left(), rect.top(), rect.width(), rect.height());
+      if blend_flags.contains(BlendFlags::ANTIALIAS) {
+         rect = rect.floor();
+      }
+
       self.rect_data.push(RectData {
          color,
-         rect: vec4(rect.left(), rect.top(), rect.width(), rect.height()),
+         rect,
          corner_radius,
          outline,
          rendition: blend_flags.bits(),

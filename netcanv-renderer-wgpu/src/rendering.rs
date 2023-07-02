@@ -164,6 +164,14 @@ impl WgpuBackend {
          _ => BlendFlags::default(),
       }
    }
+
+   fn color_will_be_visible(&self, color: Color) -> bool {
+      if self.current_transform().blend_mode == BlendMode::Replace {
+         true
+      } else {
+         color.a != 0
+      }
+   }
 }
 
 impl Renderer for WgpuBackend {
@@ -213,7 +221,7 @@ impl Renderer for WgpuBackend {
    }
 
    fn fill(&mut self, rect: Rect, color: Color, radius: f32) {
-      if color.a > 0 {
+      if self.color_will_be_visible(color) {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, -1.0, self.blend_flags());
@@ -224,7 +232,7 @@ impl Renderer for WgpuBackend {
    }
 
    fn outline(&mut self, rect: Rect, color: Color, radius: f32, thickness: f32) {
-      if thickness > 0.0 && color.a > 0 {
+      if thickness > 0.0 && self.color_will_be_visible(color) {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::RoundedRects);
          self.rounded_rects.add(rect, color, radius, thickness, self.blend_flags());
@@ -235,7 +243,7 @@ impl Renderer for WgpuBackend {
    }
 
    fn line(&mut self, a: Point, b: Point, color: Color, cap: LineCap, thickness: f32) {
-      if color.a > 0 {
+      if self.color_will_be_visible(color) {
          if a != b {
             let a = self.current_transform().transform.translate_vector(a);
             let b = self.current_transform().transform.translate_vector(b);
@@ -347,7 +355,8 @@ impl RenderBackend for WgpuBackend {
    }
 
    fn image(&mut self, rect: Rect, image: &Self::Image) {
-      if image.color.is_none() || image.color.is_some_and(|color| color.a > 0) {
+      if image.color.is_none() || image.color.is_some_and(|color| self.color_will_be_visible(color))
+      {
          let rect = self.current_transform().transform.translate_rect(rect);
          self.switch_pass(Pass::Images);
          self.images.add(rect, image.color, image.index, ScalingFilter::default());

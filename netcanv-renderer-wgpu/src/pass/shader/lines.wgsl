@@ -105,7 +105,7 @@ fn main_fs(vertex: Vertex) -> @location(0) vec4f {
    }
 
    if (data.rendition & rendition_antialias) == 0u {
-      alpha = 1.0 - step(alpha, 0.01);
+      alpha = 1.0 - step(alpha, 0.5);
    }
    if alpha == 0.0 {
       discard;
