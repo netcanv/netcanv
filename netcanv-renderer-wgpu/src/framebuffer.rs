@@ -1,5 +1,7 @@
 use std::cell::Cell;
+use std::sync::{Arc, OnceLock};
 
+use log::warn;
 use netcanv_renderer::ScalingFilter;
 
 use crate::gpu::Gpu;
@@ -96,11 +98,17 @@ impl Framebuffer {
       // but today is not that day.
       let (x, y) = position;
       let (width, height) = size;
+
+      let packed_bytes_per_row = width * 4;
+      const ALIGNMENT: u32 = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+      // This gets optimized down to bit twiddling, so don't worry about the division.
+      let aligned_bytes_per_row = (packed_bytes_per_row + ALIGNMENT - 1) / ALIGNMENT * ALIGNMENT;
+
       let download_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
          label: Some("(temporary) Framebuffer Pixel Download Buffer"),
-         size: (width * height * 4) as wgpu::BufferAddress,
-         usage: wgpu::BufferUsages::COPY_DST,
-         mapped_at_creation: true,
+         size: (aligned_bytes_per_row * height) as wgpu::BufferAddress,
+         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+         mapped_at_creation: false,
       });
       let mut command_encoder =
          gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -117,7 +125,7 @@ impl Framebuffer {
             buffer: &download_buffer,
             layout: wgpu::ImageDataLayout {
                offset: 0,
-               bytes_per_row: Some(width * 4),
+               bytes_per_row: Some(aligned_bytes_per_row),
                rows_per_image: None,
             },
          },
@@ -127,10 +135,39 @@ impl Framebuffer {
             depth_or_array_layers: 1,
          },
       );
-      // And this is the terrible part.
       let index = gpu.queue.submit([command_encoder.finish()]);
+
+      // And this is the terrible part.
+      let cell = Arc::new(OnceLock::new());
+      let slice = download_buffer.slice(..);
+      slice.map_async(wgpu::MapMode::Read, {
+         let cell = Arc::clone(&cell);
+         move |result| cell.set(result).expect("cell must only be set once")
+      });
+      // Blocking here won't work on web, which is why this process has to become async.
       gpu.device.poll(wgpu::Maintain::WaitForSubmissionIndex(index));
-      out_pixels.copy_from_slice(&download_buffer.slice(..).get_mapped_range()[..]);
+      match cell.get() {
+         Some(Ok(_)) => {
+            let pixels = &slice.get_mapped_range()[..];
+            if packed_bytes_per_row == aligned_bytes_per_row {
+               // Fast path: we don't need to account for spacing between rows, we can just copy
+               // all the pixels in one go.
+               out_pixels.copy_from_slice(pixels);
+            } else {
+               // Slow path: the downloaded buffer has padding between rows and we have to account
+               // for that by copying the result row by row.
+               for y in 0..height {
+                  let src_start = (y * aligned_bytes_per_row) as usize;
+                  let src_end = src_start + packed_bytes_per_row as usize;
+                  let dst_start = (y  * packed_bytes_per_row) as usize;
+                  let dst_end = dst_start + packed_bytes_per_row as usize;
+                  out_pixels[dst_start..dst_end].copy_from_slice(&pixels[src_start..src_end]);
+               }
+            }
+         }
+         Some(Err(error)) => warn!("could not copy pixels from the CPU to the GPU: {error}"),
+         None => warn!("could not copy pixels from the CPU to the GPU: did not receive a signal that the pixels are ready"),
+      }
       download_buffer.destroy();
    }
 }
