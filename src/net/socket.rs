@@ -80,7 +80,7 @@ impl SocketSystem {
          if let Err(error) =
             Socket::receiver_loop(stream, recv_tx, recv_quit_tx, recv_quit_rx).await
          {
-            log::error!("receiver loop erro: {:?}", error);
+            log::error!("receiver loop error: {:?}", error);
          }
       });
 
