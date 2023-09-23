@@ -25,40 +25,40 @@ renderer-opengl = ["netcanv-renderer-opengl"]
 [dependencies]
 
 # Common things
-heapless = { version = "0.7.7", default-features = false }
-once_cell = "1.8.0"
-phf = { version = "0.10.1", features = ["macros"] }
-strum = { version = "0.23.0", features = ["derive"] }
+heapless = { version = "0.7.16", default-features = false }
+once_cell = "1.18.0"
+phf = { version = "0.11.2", features = ["macros"] }
+strum = { version = "0.25.0", features = ["derive"] }
 
 # Logging
-log = "0.4.14"
-simple_logger = { version = "2.1.0", default-features = false, features = ["colors"] }
+log = "0.4.20"
+simple_logger = { version = "4.2.0", default-features = false, features = ["colors"] }
 
 # Windowing and graphics
 native-dialog = "0.5.5"
-webbrowser = "0.5.5"
-image = { version = "0.24.5", default-features = false, features = ["png", "jpeg", "webp", "webp-encoder"] }
+webbrowser = "0.8.11"
+image = { version = "0.24.7", default-features = false, features = ["png", "jpeg", "webp", "webp-encoder"] }
 usvg = { version = "0.14.0", default-features = false }
 resvg = { version = "0.14.0", default-features = false }
 tiny-skia = { version = "0.5.0", default-features = false, features = ["std", "simd"] }
 
 # Internationalization
-sys-locale = "0.1.0"
+sys-locale = "0.3.1"
 
 # Networking
-serde = { version = "1.0.123", features = ["derive"] }
+serde = { version = "1.0.188", features = ["derive"] }
 bincode = "1.3.2"
-tokio = { version = "1.28.1", features = ["full"] }
-tokio-tungstenite = { version = "0.19.0", features = ["rustls-tls-native-roots"] }
+tokio = { version = "1.32.0", features = ["full"] }
+tokio-tungstenite = { version = "0.20.1", features = ["rustls-tls-native-roots"] }
 
 # Multithreading
 nysa = "0.2.2"
 
 # Utilities
-directories = "3.0.2"
-tempfile = "3.3.0"
-toml = "0.5.8"
-url = "2.2.2"
+directories = "5.0.1"
+tempfile = "3.8.0"
+toml = "0.8.0"
+url = "2.4.1"
 instant = "0.1.12"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
