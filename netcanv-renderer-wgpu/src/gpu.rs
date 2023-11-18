@@ -1,7 +1,7 @@
 mod scene_uniforms;
 
 use netcanv_renderer::BlendMode;
-use tracing::debug;
+use tracing::{debug, info_span};
 use winit::dpi::PhysicalSize;
 
 pub use scene_uniforms::*;
@@ -61,6 +61,8 @@ impl Gpu {
    }
 
    pub fn handle_resize(&mut self, window_size: PhysicalSize<u32>) {
+      let _span = info_span!("handle_resize").entered();
+
       self.configure_surface(window_size);
 
       self.screen_texture.destroy();

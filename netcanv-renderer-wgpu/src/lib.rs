@@ -297,40 +297,48 @@ impl UiRenderFrame for Ui<WgpuBackend> {
       });
 
       self.rewind();
-      f(self);
+      {
+         let _span = info_span!("main_render_pass").entered();
+         f(self);
+      }
       self.flush("render_frame");
 
-      let mut present_commands =
-         self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Screen -> Frame Copy Commands"),
-         });
       {
-         let mut render_pass = present_commands.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Present"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-               view: &frame_view,
-               resolve_target: None,
-               ops: wgpu::Operations {
-                  load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                  store: true,
-               },
-            })],
-            depth_stencil_attachment: None,
-         });
-         self.present.render(&self.gpu, &mut render_pass);
+         let _span = info_span!("present_render_pass").entered();
+         let mut present_commands =
+            self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+               label: Some("Screen -> Frame Copy Commands"),
+            });
+         {
+            let mut render_pass = present_commands.begin_render_pass(&wgpu::RenderPassDescriptor {
+               label: Some("Present"),
+               color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                  view: &frame_view,
+                  resolve_target: None,
+                  ops: wgpu::Operations {
+                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                     store: true,
+                  },
+               })],
+               depth_stencil_attachment: None,
+            });
+            self.present.render(&self.gpu, &mut render_pass);
+         }
+         {
+            // Slight borrow checker hack here because borrowing out individual fields doesn't work
+            // through Deref.
+            let renderer = self.render();
+            renderer
+               .gpu
+               .queue
+               .submit(renderer.command_buffers.drain(..).chain([present_commands.finish()]));
+         }
       }
 
       {
-         // Slight borrow checker hack here because borrowing out individual fields doesn't work
-         // through Deref.
-         let renderer = self.render();
-         renderer
-            .gpu
-            .queue
-            .submit(renderer.command_buffers.drain(..).chain([present_commands.finish()]));
+         let _span = info_span!("swap").entered();
+         frame.present();
       }
-
-      frame.present();
 
       self.frame_counter += 1;
 
