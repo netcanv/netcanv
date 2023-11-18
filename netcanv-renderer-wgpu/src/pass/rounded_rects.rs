@@ -149,7 +149,7 @@ impl RoundedRects {
       render_pass.set_pipeline(self.render_pipelines.get(context.blend_mode));
       render_pass.set_bind_group(0, bind_group, &[]);
       render_pass.set_bind_group(1, context.model_transform_bind_group, &[]);
-      render_pass.set_bind_group(2, &context.scene_uniform_bind_group, &[]);
+      render_pass.set_bind_group(2, context.scene_uniform_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.draw(0..6, 0..self.rect_data.len() as u32);
       render_pass.pop_debug_group();

@@ -319,7 +319,7 @@ impl RenderState {
 
    unsafe fn to_u8_slice<T>(slice: &[T]) -> &[u8] {
       let ptr = slice.as_ptr() as *const u8;
-      std::slice::from_raw_parts(ptr, size_of::<T>() * slice.len())
+      std::slice::from_raw_parts(ptr, std::mem::size_of_val(slice))
    }
 
    fn bind_null_texture(&mut self) {

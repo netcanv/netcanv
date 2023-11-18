@@ -121,13 +121,12 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
          .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
          .with_title("NetCanv")
          .with_resizable(true);
-      let b = if let Some(window) = &config().window {
+
+      if let Some(window) = &config().window {
          b.with_inner_size(PhysicalSize::new(window.width, window.height))
       } else {
          b
-      };
-
-      b
+      }
    };
 
    // Load color scheme.
@@ -179,7 +178,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
          (size, pos)
       } else {
          let size = ui.window().inner_size();
-         let pos = ui.window().outer_position().unwrap_or(PhysicalPosition::default());
+         let pos = ui.window().outer_position().unwrap_or_default();
          (size, pos)
       }
    };

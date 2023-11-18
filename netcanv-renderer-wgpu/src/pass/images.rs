@@ -140,11 +140,11 @@ impl Images {
       context.gpu.queue.write_buffer(image_rect_data_buffer, 0, image_rect_data_bytes);
 
       render_pass.push_debug_group("Images");
-      render_pass.set_pipeline(&self.render_pipelines.get(context.blend_mode));
+      render_pass.set_pipeline(self.render_pipelines.get(context.blend_mode));
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.set_bind_group(1, bind_group, &[]);
       render_pass.set_bind_group(2, context.model_transform_bind_group, &[]);
-      render_pass.set_bind_group(3, &context.scene_uniform_bind_group, &[]);
+      render_pass.set_bind_group(3, context.scene_uniform_bind_group, &[]);
       for (i, &image_index) in self.image_bindings.iter().enumerate() {
          let i = i as u32;
          render_pass.set_bind_group(

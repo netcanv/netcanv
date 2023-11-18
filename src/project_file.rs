@@ -267,7 +267,7 @@ impl ProjectFile {
       // load canvas.toml
       log::debug!("loading canvas.toml");
       let canvas_toml_path = path.join(Path::new("canvas.toml"));
-      let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(&canvas_toml_path)?)?;
+      let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(canvas_toml_path)?)?;
       if canvas_toml.version > CANVAS_TOML_VERSION {
          return Err(Error::CanvasTomlVersionMismatch);
       }

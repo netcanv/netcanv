@@ -203,7 +203,6 @@ impl Assets {
    pub fn load_language(language_code: Option<&str>) -> netcanv::Result<Language> {
       let language_code =
          language_code.map(|x| x.to_owned()).unwrap_or_else(|| config().language.clone());
-      let language_code = language_code;
       let language = Language::load(
          &language_code,
          LANGUAGES_FTL.get(&language_code).ok_or_else(|| Error::TranslationsDoNotExist {

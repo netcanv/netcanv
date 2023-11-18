@@ -79,7 +79,7 @@ impl GpuFont {
       }
    }
 
-   pub fn get_or_upload_glyph<'a>(
+   pub fn get_or_upload_glyph(
       &mut self,
       gpu: &Gpu,
       glyph_id: swash::GlyphId,

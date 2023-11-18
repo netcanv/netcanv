@@ -738,15 +738,10 @@ impl PickerWindow {
       let color = Srgb::from(data.color).to_color(1.0);
 
       // Make sure the color canvas shows the correct hue.
-      Self::update_canvas(
-         renderer,
-         &mut self.canvas_image,
-         data.color,
-         data.color_space,
-      );
+      Self::update_canvas(renderer, &self.canvas_image, data.color, data.color_space);
       // And, make sure that the slider is in the correct color space.
       if self.previous_color_space != data.color_space {
-         Self::update_slider(renderer, &mut self.slider_image, data.color_space);
+         Self::update_slider(renderer, &self.slider_image, data.color_space);
       }
 
       // Update the hex code in the text field.

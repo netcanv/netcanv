@@ -1,4 +1,3 @@
-///! Client communication packets.
 use serde::{Deserialize, Serialize};
 
 /// The version constant. Increased by 100 every minor client version, and by 10000 every major
