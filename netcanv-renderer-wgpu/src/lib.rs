@@ -8,6 +8,7 @@ use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use rendering::Pass;
 use text::TextRenderer;
+use tracing::{info, info_span};
 use transform::TransformState;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -60,6 +61,8 @@ pub struct WgpuBackend {
    present: pass::Present,
 
    command_buffers: Vec<wgpu::CommandBuffer>,
+
+   frame_counter: usize,
 }
 
 impl WgpuBackend {
@@ -92,10 +95,10 @@ impl WgpuBackend {
          )?;
 
       let capabilities = surface.get_capabilities(&adapter);
-      log::info!("adapter capabilities: {capabilities:#?}");
-      log::info!("adapter limits: {:#?}", adapter.limits());
+      info!("adapter capabilities: {capabilities:#?}");
+      info!("adapter limits: {:#?}", adapter.limits());
       let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
-      log::info!("using compatible set of limits: {limits:#?}");
+      info!("using compatible set of limits: {limits:#?}");
 
       let (device, queue) = adapter.request_device(
          &wgpu::DeviceDescriptor {
@@ -259,6 +262,8 @@ impl WgpuBackend {
          last_pass: None,
          context_size,
          command_buffers: vec![],
+
+         frame_counter: 0,
       })
    }
 
@@ -273,6 +278,8 @@ pub trait UiRenderFrame {
 
 impl UiRenderFrame for Ui<WgpuBackend> {
    fn render_frame(&mut self, f: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
+      let _span = info_span!("render_frame", frame = self.frame_counter).entered();
+
       let window_size = self.window.inner_size();
       if self.context_size != window_size {
          self.gpu.handle_resize(window_size);
@@ -324,6 +331,8 @@ impl UiRenderFrame for Ui<WgpuBackend> {
       }
 
       frame.present();
+
+      self.frame_counter += 1;
 
       Ok(())
    }

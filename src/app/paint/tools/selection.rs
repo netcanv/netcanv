@@ -208,11 +208,11 @@ impl SelectionTool {
       let (bytes_tx, bytes_rx) = oneshot::channel();
       self.paste = Some((position, image_rx, bytes_rx));
       tokio::task::spawn_blocking(|| {
-         log::debug!("reading image from clipboard");
+         tracing::debug!("reading image from clipboard");
          let image = catch!(clipboard::paste_image());
          let image = if image.width() > Selection::MAX_SIZE || image.height() > Selection::MAX_SIZE
          {
-            log::debug!("image is too big! scaling down");
+            tracing::debug!("image is too big! scaling down");
             let scale = Selection::MAX_SIZE as f32 / image.width().max(image.height()) as f32;
             let new_width = (image.width() as f32 * scale) as u32;
             let new_height = (image.height() as f32 * scale) as u32;
@@ -223,9 +223,9 @@ impl SelectionTool {
          // The result here doesn't matter. If the image doesn't arrive, we're out of the
          // paint state.
          let _ = image_tx.send(image.clone());
-         log::debug!("encoding image for transmission");
+         tracing::debug!("encoding image for transmission");
          let bytes = catch!(Self::encode_image(&image));
-         log::debug!("paste job done; encoded {} bytes", bytes.len());
+         tracing::debug!("paste job done; encoded {} bytes", bytes.len());
          let _ = bytes_tx.send(bytes);
       });
    }
@@ -270,10 +270,10 @@ impl SelectionTool {
          if let Some(image) = image {
             // We don't update the rectangle here because a data race could happen.
             // The peer sends a rect packet immediately after the paste packet anyways.
-            log::debug!("finishing peer paste");
+            tracing::debug!("finishing peer paste");
             peer.selection.paste(renderer, None, &image);
             if deselected_before_decoding_finished {
-               log::debug!("the peer deselected before decoding had a chance to finish");
+               tracing::debug!("the peer deselected before decoding had a chance to finish");
                peer.selection.rect = peer.selection.deselected_at;
                peer.selection.deselect(renderer, paint_canvas);
             }
@@ -358,7 +358,7 @@ impl Tool for SelectionTool {
       viewport: &Viewport,
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.paste) == (true, true) {
-         log::info!("pasting image from clipboard");
+         tracing::info!("pasting image from clipboard");
          self.enqueue_paste_from_clipboard(viewport.pan());
       }
 
@@ -667,7 +667,7 @@ impl Tool for SelectionTool {
          Packet::Paste((_x, _y), data) => {
             // ↑ (x, y) is only here for compatibility with 0.7.0 and is no longer used
             // because it caused a data race
-            log::debug!("{} pasted image ({} bytes of data)", sender, data.len());
+            tracing::debug!("{} pasted image ({} bytes of data)", sender, data.len());
             let tx = self.peer_pastes_tx.clone();
             self.ongoing_paste_jobs.insert(sender);
             tokio::task::spawn_blocking(move || match Self::decode_image(&data) {
@@ -675,7 +675,7 @@ impl Tool for SelectionTool {
                   let _ = tx.send((sender, Some(image)));
                }
                Err(error) => {
-                  log::error!("could not decode selection image: {:?}", error);
+                  tracing::error!("could not decode selection image: {:?}", error);
                   let _ = tx.send((sender, None));
                }
             });
@@ -713,7 +713,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       peer_id: PeerId,
    ) -> netcanv::Result<()> {
-      log::debug!("selection {:?} deactivated", peer_id);
+      tracing::debug!("selection {:?} deactivated", peer_id);
       if let Some(peer) = self.peer_selections.get_mut(&peer_id) {
          peer.selection.deselect(renderer, paint_canvas);
       }

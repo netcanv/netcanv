@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::sync::{Arc, OnceLock};
 
-use log::warn;
 use netcanv_renderer::ScalingFilter;
+use tracing::warn;
 
 use crate::gpu::Gpu;
 use crate::image::ImageStorage;

@@ -1,7 +1,7 @@
 mod scene_uniforms;
 
-use log::debug;
 use netcanv_renderer::BlendMode;
+use tracing::debug;
 use winit::dpi::PhysicalSize;
 
 pub use scene_uniforms::*;

@@ -786,7 +786,7 @@ impl State {
             self.chunk_downloads.clear();
          }
          MessageKind::ChunkPositions(positions) => {
-            log::debug!("received {} chunk positions", positions.len());
+            tracing::debug!("received {} chunk positions", positions.len());
             for chunk_position in positions {
                self.chunk_downloads.insert(chunk_position, ChunkDownload::NotDownloaded);
             }
@@ -798,7 +798,7 @@ impl State {
                .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
          }
          MessageKind::Chunks(chunks) => {
-            log::debug!("received {} chunks", chunks.len());
+            tracing::debug!("received {} chunks", chunks.len());
             for (chunk_position, image_data) in chunks {
                self.decode_canvas_data(chunk_position, image_data);
                self.chunk_downloads.insert(chunk_position, ChunkDownload::Downloaded);
@@ -825,7 +825,7 @@ impl State {
             previous_tool,
             tool,
          } => {
-            log::debug!("{:?} selected tool {}", address, tool);
+            tracing::debug!("{:?} selected tool {}", address, tool);
             // Deselect the old tool.
             if let Some(tool) = previous_tool {
                if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
@@ -842,7 +842,7 @@ impl State {
             }
             // Select the new tool.
             if let Some(tool_id) = self.toolbar.tool_by_name(&tool) {
-               log::debug!(" - valid tool - {:?}", tool_id);
+               tracing::debug!(" - valid tool - {:?}", tool_id);
                self.toolbar.with_tool(tool_id, |tool| {
                   tool.network_peer_activate(Net::new(&self.peer), address)
                })?;
@@ -867,7 +867,7 @@ impl State {
          })
          .tx;
       for &chunk_position in positions {
-         log::info!(
+         tracing::info!(
             "fetching data for networking transmission of chunk {:?}",
             chunk_position
          );

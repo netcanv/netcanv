@@ -3,8 +3,8 @@ use std::ops::Range;
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
-use log::warn;
 use netcanv_renderer::paws::Color;
+use tracing::warn;
 use wgpu::util::DeviceExt;
 
 use crate::batch_storage::{BatchStorage, BatchStorageConfig};

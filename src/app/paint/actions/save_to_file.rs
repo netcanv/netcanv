@@ -67,9 +67,9 @@ impl Action for SaveToFileAction {
    ) -> netcanv::Result<()> {
       if project_file.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
       {
-         log::info!("autosaving chunks");
+         tracing::info!("autosaving chunks");
          project_file.save(renderer, None, paint_canvas)?;
-         log::info!("autosave complete");
+         tracing::info!("autosave complete");
          self.last_autosave = Instant::now();
       }
       Ok(())

@@ -37,7 +37,7 @@ impl ProjectFile {
       path: &Path,
       canvas: &mut PaintCanvas,
    ) -> netcanv::Result<()> {
-      log::info!("saving png {:?}", path);
+      tracing::info!("saving png {:?}", path);
       let (mut left, mut top, mut right, mut bottom) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
       for chunk_position in canvas.chunks_mut().keys() {
          left = left.min(chunk_position.0);
@@ -45,7 +45,7 @@ impl ProjectFile {
          right = right.max(chunk_position.0);
          bottom = bottom.max(chunk_position.1);
       }
-      log::debug!(
+      tracing::debug!(
          "left={}, top={}, right={}, bottom={}",
          left,
          top,
@@ -57,15 +57,15 @@ impl ProjectFile {
       }
       let width = ((right - left + 1) * Chunk::SIZE.0 as i32) as u32;
       let height = ((bottom - top + 1) * Chunk::SIZE.1 as i32) as u32;
-      log::debug!("size: {:?}", (width, height));
+      tracing::debug!("size: {:?}", (width, height));
       let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
       for (chunk_position, chunk) in canvas.chunks() {
-         log::debug!("writing chunk {:?}", chunk_position);
+         tracing::debug!("writing chunk {:?}", chunk_position);
          let pixel_position = (
             (Chunk::SIZE.0 as i32 * (chunk_position.0 - left)) as u32,
             (Chunk::SIZE.1 as i32 * (chunk_position.1 - top)) as u32,
          );
-         log::debug!("   - pixel position: {:?}", pixel_position);
+         tracing::debug!("   - pixel position: {:?}", pixel_position);
 
          let chunk_image = chunk.download_image(renderer);
          let mut sub_image = image.sub_image(
@@ -77,7 +77,7 @@ impl ProjectFile {
          sub_image.copy_from(&chunk_image, 0, 0)?;
       }
       image.save(path)?;
-      log::debug!("image {:?} saved successfully", path);
+      tracing::debug!("image {:?} saved successfully", path);
       Ok(())
    }
 
@@ -98,7 +98,7 @@ impl ProjectFile {
 
    /// Clears the existing `.netcanv` save at the given path.
    fn clear_netcanv_save(path: &Path) -> netcanv::Result<()> {
-      log::info!("clearing older netcanv save {:?}", path);
+      tracing::info!("clearing older netcanv save {:?}", path);
       for entry in std::fs::read_dir(path)? {
          let path = entry?.path();
          if path.is_file()
@@ -119,14 +119,14 @@ impl ProjectFile {
       canvas: &mut PaintCanvas,
    ) -> netcanv::Result<()> {
       // create the directory
-      log::info!("creating or reusing existing directory ({:?})", path);
+      tracing::info!("creating or reusing existing directory ({:?})", path);
       let path = Self::validate_netcanv_save_path(path)?;
       std::fs::create_dir_all(path.clone())?; // use create_dir_all to not fail if the dir already exists
       if self.filename != Some(path.clone()) {
          Self::clear_netcanv_save(&path)?;
       }
       // save the canvas.toml manifest
-      log::info!("saving canvas.toml");
+      tracing::info!("saving canvas.toml");
       let canvas_toml = CanvasToml {
          version: CANVAS_TOML_VERSION,
       };
@@ -135,14 +135,14 @@ impl ProjectFile {
          toml::to_string(&canvas_toml)?,
       )?;
       // save all the chunks
-      log::info!("saving chunks");
+      tracing::info!("saving chunks");
       for (chunk_position, chunk) in canvas.chunks_mut() {
-         log::debug!("chunk {:?}", chunk_position);
+         tracing::debug!("chunk {:?}", chunk_position);
          let image = chunk.download_image(renderer);
          let image_data = ImageCoder::encode_png_data(image).await?;
          let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
          let filepath = path.join(Path::new(&filename));
-         log::debug!("saving to {:?}", filepath);
+         tracing::debug!("saving to {:?}", filepath);
          std::fs::write(filepath, image_data)?;
          chunk.mark_saved();
       }
@@ -197,10 +197,10 @@ impl ProjectFile {
       use ::image::io::Reader as ImageReader;
 
       let image = ImageReader::open(path)?.decode()?.into_rgba8();
-      log::debug!("image size: {:?}", image.dimensions());
+      tracing::debug!("image size: {:?}", image.dimensions());
       let chunks_x = (image.width() as f32 / Chunk::SIZE.0 as f32).ceil() as i32;
       let chunks_y = (image.height() as f32 / Chunk::SIZE.1 as f32).ceil() as i32;
-      log::debug!("n. chunks: x={}, y={}", chunks_x, chunks_y);
+      tracing::debug!("n. chunks: x={}, y={}", chunks_x, chunks_y);
       let (origin_x, origin_y) = Self::extract_chunk_origin_from_filename(path).unwrap_or((0, 0));
 
       for y in 0..chunks_y {
@@ -212,7 +212,7 @@ impl ProjectFile {
                Chunk::SIZE.0 * chunk_position.0 as u32,
                Chunk::SIZE.1 * chunk_position.1 as u32,
             );
-            log::debug!(
+            tracing::debug!(
                "plopping chunk at {:?} (pxp {:?})",
                offset_chunk_position,
                pixel_position
@@ -263,16 +263,16 @@ impl ProjectFile {
       canvas: &mut PaintCanvas,
    ) -> netcanv::Result<()> {
       let path = Self::validate_netcanv_save_path(path)?;
-      log::info!("loading canvas from {:?}", path);
+      tracing::info!("loading canvas from {:?}", path);
       // load canvas.toml
-      log::debug!("loading canvas.toml");
+      tracing::debug!("loading canvas.toml");
       let canvas_toml_path = path.join(Path::new("canvas.toml"));
       let canvas_toml: CanvasToml = toml::from_str(&std::fs::read_to_string(canvas_toml_path)?)?;
       if canvas_toml.version > CANVAS_TOML_VERSION {
          return Err(Error::CanvasTomlVersionMismatch);
       }
       // load chunks
-      log::debug!("loading chunks");
+      tracing::debug!("loading chunks");
       for entry in std::fs::read_dir(path.clone())? {
          let path = entry?.path();
          // Please let me have if let chains.
@@ -280,7 +280,7 @@ impl ProjectFile {
             if let Some(position_osstr) = path.file_stem() {
                if let Some(position_str) = position_osstr.to_str() {
                   let chunk_position = Self::parse_chunk_position(position_str)?;
-                  log::debug!("chunk {:?}", chunk_position);
+                  tracing::debug!("chunk {:?}", chunk_position);
                   let chunk = canvas.ensure_chunk(renderer, chunk_position);
                   let image_data = ImageCoder::decode_png_data(&std::fs::read(path)?)?;
                   chunk.upload_image(renderer, &image_data, (0, 0));

@@ -52,18 +52,20 @@ use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
 use crate::cli::Cli;
 use crate::config::WindowConfig;
-use crate::logger::Logger;
 use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use clap::Parser;
 use instant::{Duration, Instant};
-use log::{debug, info, warn};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
+use tracing::{error, info, info_span, warn};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::backend::UiRenderFrame;
 
@@ -81,7 +83,6 @@ mod color;
 mod config;
 mod image_coder;
 mod keymap;
-mod logger;
 mod net;
 mod paint_canvas;
 mod project_file;
@@ -105,41 +106,38 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let cli = Cli::parse();
 
    // Set up logging.
-   Logger::init(cli.log.as_deref()).map_err(|e| Error::CouldNotInitializeLogger {
-      error: e.to_string(),
-   })?;
-   info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
+   let mut log_guards = Some(init_logging(&cli)?);
+   info!("NetCanv {}", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
    config::load_or_create()?;
 
    // Set up the winit event loop and open the window.
-   debug!("opening window");
-   let event_loop = EventLoop::new();
-   let window_builder = {
-      let b = WindowBuilder::new()
-         .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
-         .with_title("NetCanv")
-         .with_resizable(true);
+   let (renderer, event_loop) = {
+      let _span = info_span!("init_renderer").entered();
 
-      if let Some(window) = &config().window {
-         b.with_inner_size(PhysicalSize::new(window.width, window.height))
-      } else {
-         b
-      }
+      let event_loop = EventLoop::new();
+      let window_builder = {
+         let b = WindowBuilder::new()
+            .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
+            .with_title("NetCanv")
+            .with_resizable(true);
+         if let Some(window) = &config().window {
+            b.with_inner_size(PhysicalSize::new(window.width, window.height))
+         } else {
+            b
+         }
+      };
+
+      // Build the render backend.
+      let renderer = Backend::new(window_builder, &event_loop, &cli.render).await.map_err(|e| {
+         Error::CouldNotInitializeBackend {
+            error: e.to_string(),
+         }
+      })?;
+
+      (renderer, event_loop)
    };
-
-   // Load color scheme.
-   // TODO: User-definable color schemes, anyone?
-   let color_scheme = ColorScheme::from(config().ui.color_scheme);
-
-   // Build the render backend.
-   debug!("initializing render backend");
-   let renderer = Backend::new(window_builder, &event_loop, &cli.render).await.map_err(|e| {
-      Error::CouldNotInitializeBackend {
-         error: e.to_string(),
-      }
-   })?;
    // Position and maximize the window.
    // NOTE: winit is a bit buggy and WindowBuilder::with_maximized does not
    // make window maximized, but Window::set_maximized does.
@@ -148,11 +146,14 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       renderer.window().set_maximized(window.maximized);
    }
 
+   // Load color scheme.
+   // TODO: User-definable color schemes, anyone?
+   let color_scheme = ColorScheme::from(config().ui.color_scheme);
+
    // Build the UI.
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
-   debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
@@ -164,12 +165,10 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    match clipboard::init() {
       Ok(_) => (),
       Err(error) => {
-         log::error!("failed to initialize clipboard: {:?}", error);
+         error!("failed to initialize clipboard: {:?}", error);
          bus::push(common::Error(error));
       }
    }
-
-   debug!("init done! starting event loop");
 
    let (mut last_window_size, mut last_window_position) = {
       if let Some(window) = &config().window {
@@ -224,7 +223,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                });
                app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
-               log::error!("render error: {}", error)
+               error!("render error: {}", error)
             }
             input.finish_frame(ui.window());
          }
@@ -246,6 +245,8 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                   maximized,
                });
             });
+
+            let _ = log_guards.take();
          }
 
          _ => (),
@@ -270,7 +271,7 @@ async fn async_main() {
                .with("message", payload.translate(&language))
                .done(),
          );
-         log::error!(
+         error!(
             "inner_main() returned with an Err:\n{}",
             payload.translate(&language)
          );
@@ -316,4 +317,43 @@ fn main() {
    if shutdown_elapsed > Duration::from_millis(100) {
       warn!("background tasks took a long time to shut down ({shutdown_elapsed:?}) - perhaps a missing or incomplete Drop?");
    }
+}
+
+struct LogGuards {
+   _chrome: Option<tracing_chrome::FlushGuard>,
+}
+
+fn init_logging(cli: &Cli) -> errors::Result<LogGuards> {
+   let mut chrome_trace = cli.trace.as_ref().map(|trace_path| {
+      let (chrome_trace, guard) =
+         tracing_chrome::ChromeLayerBuilder::new().file(trace_path).include_args(true).build();
+      let chrome_trace = chrome_trace.with_filter(
+         EnvFilter::builder()
+            .with_default_directive(LevelFilter::DEBUG.into())
+            .with_env_var("NETCANV_TRACE")
+            .from_env_lossy(),
+      );
+      (Some(chrome_trace), guard)
+   });
+
+   let subscriber = tracing_subscriber::registry()
+      .with(
+         tracing_subscriber::fmt::layer().without_time().with_writer(std::io::stderr).with_filter(
+            EnvFilter::builder()
+               .with_default_directive(LevelFilter::INFO.into())
+               .with_env_var("NETCANV_LOG")
+               .from_env_lossy(),
+         ),
+      )
+      .with(chrome_trace.as_mut().and_then(|(ct, _)| ct.take()));
+
+   tracing::subscriber::set_global_default(subscriber).map_err(|e| {
+      Error::CouldNotInitializeLogger {
+         error: e.to_string(),
+      }
+   })?;
+
+   Ok(LogGuards {
+      _chrome: chrome_trace.map(|(_, guard)| guard),
+   })
 }

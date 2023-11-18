@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use arboard::{Clipboard, ImageData};
 use image::RgbaImage;
 use once_cell::sync::Lazy;
+use tracing::info_span;
 
 use crate::Error;
 
@@ -14,6 +15,8 @@ static CLIPBOARD: Lazy<Mutex<Option<Clipboard>>> = Lazy::new(|| Mutex::new(None)
 /// Initializes the clipboard in a platform-specific way.
 #[allow(unused)]
 pub fn init() -> netcanv::Result<()> {
+   let _span = info_span!("init_clipboard").entered();
+
    let mut clipboard = CLIPBOARD.lock().unwrap();
    *clipboard = Some(Clipboard::new()?);
    Ok(())
