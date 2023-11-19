@@ -1,6 +1,7 @@
 //! Simplified input handling facility.
 
 use instant::Instant;
+use std::borrow::Cow;
 use std::ops::{BitAnd, BitOr};
 
 use crate::backend::winit::dpi::PhysicalPosition;
@@ -534,8 +535,8 @@ impl<'de> Deserialize<'de> for Modifier {
             A: serde::de::SeqAccess<'de>,
          {
             let mut modifier = Modifier::NONE;
-            while let Some(element) = seq.next_element::<&str>()? {
-               match element {
+            while let Some(element) = seq.next_element::<Cow<'_, str>>()? {
+               match &*element {
                   Modifier::SHIFT_STR => modifier = modifier | Modifier::SHIFT,
                   Modifier::CTRL_STR => modifier = modifier | Modifier::CTRL,
                   _ => return Err(serde::de::Error::custom("invalid modifier")),
