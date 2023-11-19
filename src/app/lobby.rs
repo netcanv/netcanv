@@ -44,7 +44,7 @@ impl<T: Display> From<T> for Status {
 
 /// The lobby app state.
 pub struct State {
-   assets: Assets,
+   assets: Box<Assets>,
 
    // Subsystems
    socket_system: Arc<SocketSystem>,
@@ -77,7 +77,7 @@ impl State {
    const VIEW_BOX_HEIGHT: f32 = Self::MENU_HEIGHT + Self::VIEW_BOX_PADDING * 2.0;
 
    /// Creates and initializes the lobby state.
-   pub fn new(assets: Assets, socket_system: Arc<SocketSystem>) -> Self {
+   pub fn new(assets: Box<Assets>, socket_system: Arc<SocketSystem>) -> Self {
       let nickname_field = TextField::new(Some(&config().lobby.nickname));
       let relay_field = TextField::new(Some(&config().lobby.relay));
       let mut this = Self {
@@ -732,4 +732,6 @@ impl AppState for State {
          self
       }
    }
+
+   fn exit(self: Box<Self>) {}
 }

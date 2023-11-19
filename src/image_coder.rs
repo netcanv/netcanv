@@ -234,14 +234,10 @@ impl ImageCoder {
       let _ = self.encoded_chunks_tx.send((position, chunk.to_owned()));
       let _ = output_channel.send((position, chunk.to_owned()));
    }
-}
 
-impl Drop for ImageCoder {
-   fn drop(&mut self) {
+   pub async fn shutdown(mut self) {
       let (channel, join_handle) = self.decoder_quitter.take().unwrap();
       let _ = channel.send(());
-      tokio::runtime::Handle::current().block_on(async {
-         let _ = join_handle.await;
-      })
+      let _ = join_handle.await;
    }
 }

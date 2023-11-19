@@ -154,7 +154,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
-   let assets = Assets::new(ui.render(), color_scheme)?;
+   let assets = Box::new(Assets::new(ui.render(), color_scheme)?);
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
    let mut app: Option<Box<dyn AppState>> =
@@ -247,6 +247,9 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                   maximized,
                });
             });
+
+            let app = app.take().unwrap();
+            app.exit();
 
             let _ = log_guards.take();
          }

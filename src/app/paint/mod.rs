@@ -82,7 +82,7 @@ struct EncodeChannels {
 
 /// The paint app state.
 pub struct State {
-   assets: Assets,
+   assets: Box<Assets>,
    socket_system: Arc<SocketSystem>,
    project_file: ProjectFile,
 
@@ -146,12 +146,12 @@ impl State {
 
    /// Creates a new paint state.
    pub fn new(
-      assets: Assets,
+      assets: Box<Assets>,
       socket_system: Arc<SocketSystem>,
       peer: Peer,
       image_path: Option<PathBuf>,
       renderer: &mut Backend,
-   ) -> Result<Self, (netcanv::Error, Assets)> {
+   ) -> Result<Self, (netcanv::Error, Box<Assets>)> {
       // Set up decoding supervisor thread.
       let (xcoder, channels) = ImageCoder::new();
 
@@ -1004,5 +1004,9 @@ impl AppState for State {
       } else {
          self
       }
+   }
+
+   fn exit(self: Box<Self>) {
+      tokio::spawn(self.xcoder.shutdown());
    }
 }

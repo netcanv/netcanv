@@ -25,4 +25,7 @@ pub trait AppState {
    /// If no state transitions should occur, this should simply return `self`. Otherwise, another
    /// app state may be constructed, boxed, and returned.
    fn next_state(self: Box<Self>, renderer: &mut Backend) -> Box<dyn AppState>;
+
+   /// Dismantles the state before exiting the app.
+   fn exit(self: Box<Self>);
 }
