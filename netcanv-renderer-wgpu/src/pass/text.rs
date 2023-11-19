@@ -146,6 +146,8 @@ impl Text {
       text_renderer: &'a mut TextRenderer,
       render_pass: &mut wgpu::RenderPass<'a>,
    ) {
+      profiling::scope!("Text::flush");
+
       if self.glyph_data.is_empty() {
          return;
       }

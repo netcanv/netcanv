@@ -9,7 +9,6 @@ use netcanv_renderer::paws::Color;
 use netcanv_renderer::{Image as ImageTrait, RenderBackend};
 use serde::de::Visitor;
 use serde::Deserialize;
-use tracing::info_span;
 use url::Url;
 
 use crate::app::lobby::LobbyColors;
@@ -225,7 +224,7 @@ impl Assets {
 
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(renderer: &mut Backend, colors: ColorScheme) -> netcanv::Result<Self> {
-      let _span = info_span!("init_assets").entered();
+      profiling::scope!("Assets::new");
 
       let language = Self::load_language(None)?;
       let tr = Strings::from_language(&language);

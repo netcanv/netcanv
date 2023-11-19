@@ -12,7 +12,6 @@ use directories::ProjectDirs;
 use netcanv_i18n::unic_langid::LanguageIdentifier;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::info_span;
 
 use crate::assets::Assets;
 use crate::keymap::Keymap;
@@ -182,7 +181,7 @@ static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
 
 /// Loads or creates the user config.
 pub fn load_or_create() -> netcanv::Result<()> {
-   let _span = info_span!("load_or_create_config").entered();
+   profiling::scope!("config::load_or_create");
 
    let config = UserConfig::load_or_create()?;
    if CONFIG.set(RwLock::new(config)).is_err() {
@@ -193,7 +192,7 @@ pub fn load_or_create() -> netcanv::Result<()> {
 
 /// Saves the user config.
 pub fn save() -> netcanv::Result<()> {
-   let _span = info_span!("save_config").entered();
+   profiling::scope!("config::save");
    config().save()
 }
 

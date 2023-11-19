@@ -30,6 +30,11 @@ impl BatchStorage {
       gpu: &Gpu,
       make_bind_group: impl FnOnce(&wgpu::Buffer) -> [BindGroupEntry; N],
    ) -> (&wgpu::Buffer, &wgpu::BindGroup) {
+      profiling::scope!(
+         "BatchStorage::next_batch_with_bind_group",
+         &format!("batch {}", self.current_batch)
+      );
+
       if self.buffers.get(self.current_batch).is_none() {
          let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!(

@@ -130,6 +130,8 @@ impl Lines {
       context: &mut FlushContext<'a>,
       render_pass: &mut wgpu::RenderPass<'a>,
    ) {
+      profiling::scope!("Lines::flush");
+
       // TODO: This should interact with clearing, probably.
       if self.line_data.is_empty() {
          return;

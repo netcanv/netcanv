@@ -8,7 +8,7 @@ use image::ImageStorage;
 use netcanv_renderer::paws::{Color, Ui};
 use rendering::Pass;
 use text::TextRenderer;
-use tracing::{info, info_span};
+use tracing::info;
 use transform::TransformState;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -278,8 +278,6 @@ pub trait UiRenderFrame {
 
 impl UiRenderFrame for Ui<WgpuBackend> {
    fn render_frame(&mut self, f: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
-      let _span = info_span!("render_frame", frame = self.frame_counter).entered();
-
       let window_size = self.window.inner_size();
       if self.context_size != window_size {
          self.gpu.handle_resize(window_size);
@@ -298,13 +296,13 @@ impl UiRenderFrame for Ui<WgpuBackend> {
 
       self.rewind();
       {
-         let _span = info_span!("main_render_pass").entered();
+         profiling::scope!("main_render_pass");
          f(self);
       }
       self.flush("render_frame");
 
       {
-         let _span = info_span!("present_render_pass").entered();
+         profiling::scope!("present_render_pass");
          let mut present_commands =
             self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                label: Some("Screen -> Frame Copy Commands"),
@@ -317,10 +315,12 @@ impl UiRenderFrame for Ui<WgpuBackend> {
                   resolve_target: None,
                   ops: wgpu::Operations {
                      load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                     store: true,
+                     store: wgpu::StoreOp::Store,
                   },
                })],
                depth_stencil_attachment: None,
+               timestamp_writes: None,
+               occlusion_query_set: None,
             });
             self.present.render(&self.gpu, &mut render_pass);
          }
@@ -336,11 +336,12 @@ impl UiRenderFrame for Ui<WgpuBackend> {
       }
 
       {
-         let _span = info_span!("swap").entered();
+         profiling::scope!("present");
          frame.present();
       }
 
       self.frame_counter += 1;
+      profiling::finish_frame!();
 
       Ok(())
    }

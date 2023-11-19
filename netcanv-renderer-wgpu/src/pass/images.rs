@@ -129,6 +129,8 @@ impl Images {
       image_storage: &'a ImageStorage,
       render_pass: &mut wgpu::RenderPass<'a>,
    ) {
+      profiling::scope!("Images::flush");
+
       // TODO: This should interact with clearing, probably.
       if self.image_rect_data.is_empty() {
          return;

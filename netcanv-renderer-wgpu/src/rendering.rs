@@ -28,7 +28,7 @@ impl Default for ClearOps {
       Self {
          color: wgpu::Operations {
             load: wgpu::LoadOp::Load,
-            store: true,
+            store: wgpu::StoreOp::Store,
          },
       }
    }
@@ -73,6 +73,8 @@ impl WgpuBackend {
       self.images.rewind();
       self.text.rewind();
 
+      self.model_transform_storage.rewind();
+
       self.scene_uniform_cache.tick_and_evict();
    }
 
@@ -85,6 +87,8 @@ impl WgpuBackend {
    }
 
    pub(crate) fn flush(&mut self, cause: &str) {
+      profiling::scope!("WgpuBackend::flush", cause);
+
       let label = format!("Flush ({cause})");
       let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
          label: Some(&label),
@@ -106,6 +110,8 @@ impl WgpuBackend {
       };
 
       {
+         profiling::scope!("WgpuBackend::flush::encode_render_pass");
+
          let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(&label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -114,6 +120,8 @@ impl WgpuBackend {
                ops: clear_ops.color,
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
          });
 
          if let Some(clip_rect) = transform_state.clip {
@@ -139,9 +147,19 @@ impl WgpuBackend {
          self.images.flush(&mut context, &self.image_storage, &mut render_pass);
          self.text.flush(&mut context, &mut self.text_renderer, &mut render_pass);
          self.last_pass = None;
+
+         profiling::scope!("WgpuBackend::flush::drop_render_pass");
+         drop(render_pass);
       }
 
-      self.command_buffers.push(encoder.finish());
+      let command_buffer = {
+         profiling::scope!("WgpuBackend::flush::finish_command_buffer");
+         encoder.finish()
+      };
+      {
+         profiling::scope!("WgpuBackend::flush::push_command_buffer");
+         self.command_buffers.push(command_buffer);
+      }
    }
 
    fn clear_ops(&mut self) -> ClearOps {
@@ -149,7 +167,7 @@ impl WgpuBackend {
          ClearOps {
             color: wgpu::Operations {
                load: wgpu::LoadOp::Clear(paws_color_to_wgpu(color)),
-               store: true,
+               store: wgpu::StoreOp::Store,
             },
          }
       } else {

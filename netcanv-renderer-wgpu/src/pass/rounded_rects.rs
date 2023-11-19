@@ -135,6 +135,8 @@ impl RoundedRects {
       context: &mut FlushContext<'a>,
       render_pass: &mut wgpu::RenderPass<'a>,
    ) {
+      profiling::scope!("RoundedRects::flush");
+
       // TODO: This should interact with clearing, probably.
       if self.rect_data.is_empty() {
          return;

@@ -62,7 +62,7 @@ use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
-use tracing::{error, info, info_span, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -114,7 +114,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    // Set up the winit event loop and open the window.
    let (renderer, event_loop) = {
-      let _span = info_span!("init_renderer").entered();
+      profiling::scope!("init_renderer");
 
       let event_loop = EventLoop::new();
       let window_builder = {
@@ -181,6 +181,8 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
          (size, pos)
       }
    };
+
+   profiling::finish_frame!();
 
    event_loop.run(move |event, _, control_flow| {
       *control_flow = ControlFlow::Poll;
@@ -285,6 +287,11 @@ async fn async_main() {
    }
 }
 
+#[cfg(feature = "tracy-profiling")]
+#[global_allocator]
+static ALLOCATOR: profiling::tracy_client::ProfiledAllocator<std::alloc::System> =
+   profiling::tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
 fn main() {
    let default_panic_hook = std::panic::take_hook();
    std::panic::set_hook(Box::new(move |panic_info| {
@@ -302,6 +309,9 @@ fn main() {
       }
       default_panic_hook(panic_info);
    }));
+
+   #[cfg(feature = "tracy-profiling")]
+   let _tracy_client = profiling::tracy_client::Client::start();
 
    let runtime = tokio::runtime::Builder::new_multi_thread()
       .enable_all()

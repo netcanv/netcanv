@@ -24,6 +24,8 @@ default = ["renderer-wgpu"]
 renderer-opengl = ["netcanv-renderer-opengl"]
 renderer-wgpu = ["netcanv-renderer-wgpu"]
 
+tracy-profiling = ["profiling/profile-with-tracy"]
+
 [dependencies]
 
 # Common things
@@ -36,6 +38,7 @@ strum = { version = "0.23.0", features = ["derive"] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-chrome = "0.7.1"
+profiling.workspace = true
 
 # CLI
 clap = { workspace = true }
@@ -91,6 +94,7 @@ netcanv-i18n = { path = "netcanv-i18n" }
 
 [workspace.dependencies]
 clap = { version = "4.3.0", features = ["derive"] }
+profiling = "1.0.11"
 tracing = "0.1.40"
 
 [profile.release]
