@@ -21,7 +21,6 @@ use crate::Error;
 
 /// Runtime for managing active connections.
 pub struct SocketSystem {
-   runtime: tokio::runtime::Runtime,
    quitters: Mutex<Vec<SocketQuitter>>,
 }
 
@@ -29,13 +28,11 @@ impl SocketSystem {
    /// Starts the socket system.
    pub fn new() -> Arc<Self> {
       Arc::new(Self {
-         runtime: tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap(),
          quitters: Mutex::new(Vec::new()),
       })
    }
 
-   /// Resolves the socket addresses the given hostname could refer to.
-   fn resolve_address_with_default_port(url: &str) -> netcanv::Result<Url> {
+   fn parse_url(url: &str) -> netcanv::Result<Url> {
       let url = if !url.starts_with("ws://") && !url.starts_with("wss://") {
          format!("wss://{}", url)
       } else {
@@ -48,10 +45,10 @@ impl SocketSystem {
    }
 
    async fn connect_inner(self: Arc<Self>, url: String) -> netcanv::Result<Socket> {
-      let address = Self::resolve_address_with_default_port(&url)?;
+      let address = Self::parse_url(&url)?;
       let (stream, _) = connect_async(address).await?;
       let (sink, mut stream) = stream.split();
-      log::info!("connection established");
+      tracing::info!("connection established");
 
       let version = stream.next().await.ok_or(Error::NoVersionPacket)?;
 
@@ -69,31 +66,31 @@ impl SocketSystem {
          Ordering::Greater => return Err(Error::RelayIsTooNew),
       }
 
-      log::debug!("version ok");
+      tracing::debug!("version ok");
 
       let (quit_tx, _) = broadcast::channel(1);
 
-      log::debug!("starting receiver loop");
+      tracing::debug!("starting receiver loop");
       let (recv_tx, recv_rx) = mpsc::unbounded_channel();
       let (recv_quit_tx, recv_quit_rx) = (quit_tx.clone(), quit_tx.subscribe());
-      let recv_join_handle = self.runtime.spawn(async move {
+      let recv_join_handle = tokio::spawn(async move {
          if let Err(error) =
             Socket::receiver_loop(stream, recv_tx, recv_quit_tx, recv_quit_rx).await
          {
-            log::error!("receiver loop error: {:?}", error);
+            tracing::error!("receiver loop error: {:?}", error);
          }
       });
 
-      log::debug!("starting sender loop");
+      tracing::debug!("starting sender loop");
       let (send_tx, send_rx) = mpsc::unbounded_channel();
       let send_quit_rx = quit_tx.subscribe();
-      let send_join_handle = self.runtime.spawn(async move {
+      let send_join_handle = tokio::spawn(async move {
          if let Err(error) = Socket::sender_loop(sink, send_rx, send_quit_rx).await {
-            log::error!("sender loop error: {:?}", error);
+            tracing::error!("sender loop error: {:?}", error);
          }
       });
 
-      log::debug!("registering quitters");
+      tracing::debug!("registering quitters");
       let mut quitters = self.quitters.lock().await;
       quitters.push(SocketQuitter {
          quit: quit_tx,
@@ -109,28 +106,32 @@ impl SocketSystem {
 
    /// Initiates a new connection to the relay at the given hostname (IP address or DNS domain).
    pub fn connect(self: Arc<Self>, hostname: String) -> oneshot::Receiver<netcanv::Result<Socket>> {
-      log::info!("connecting to {}", hostname);
+      tracing::info!("connecting to {}", hostname);
       let (socket_tx, socket_rx) = oneshot::channel();
       let self2 = Arc::clone(&self);
-      self.runtime.spawn(async move {
+      tokio::spawn(async move {
          if socket_tx.send(self2.connect_inner(hostname).await).is_err() {
             panic!("Could not send ready socket to receiver");
          }
       });
       socket_rx
    }
+
+   pub fn shutdown(self: Arc<Self>) {
+      tracing::info!("shutting down socket system");
+      tokio::spawn(async move {
+         let mut handles = self.quitters.lock().await;
+         for handle in handles.drain(..) {
+            tokio::spawn(async move {
+               handle.quit().await;
+            });
+         }
+      });
+   }
 }
 
 impl Drop for SocketSystem {
-   fn drop(&mut self) {
-      log::info!("cleaning up remaining sockets");
-      self.runtime.block_on(async {
-         let mut handles = self.quitters.lock().await;
-         for handle in handles.drain(..) {
-            handle.quit().await;
-         }
-      })
-   }
+   fn drop(&mut self) {}
 }
 
 pub struct Socket {
@@ -160,13 +161,13 @@ impl Socket {
             bus::push(Fatal(Error::RelayHasDisconnected));
 
             if let Some(frame) = frame {
-               log::warn!(
+               tracing::warn!(
                   "the relay has disconnected: {:?}, code: {}",
                   frame.reason,
                   frame.code
                );
             } else {
-               log::warn!("the relay has disconnected (reason unknown)");
+               tracing::warn!("the relay has disconnected (reason unknown)");
             }
 
             signal.send(Signal::Quit)?;
@@ -185,7 +186,7 @@ impl Socket {
                // If we do not get it, it means that relay has been closed and we have to close the session.
                WsError::AlreadyClosed
                | WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake) => {
-                  log::error!("the connection was closed without a closing handshake (relay probably crashed)");
+                  tracing::error!("the connection was closed without a closing handshake (relay probably crashed)");
                   bus::push(Fatal(Error::RelayHasDisconnected));
                   return Ok(true);
                }
@@ -196,7 +197,7 @@ impl Socket {
                }
             }
          }
-         _ => log::info!("got unused message"),
+         _ => tracing::info!("got unused message"),
       }
 
       Ok(false)
@@ -213,7 +214,7 @@ impl Socket {
             biased;
             Ok(signal) = signal_rx.recv() => {
                if let Signal::Quit = signal {
-                  log::info!("receiver: received quit signal");
+                  tracing::info!("receiver: received quit signal");
                   break;
                }
             },
@@ -225,7 +226,7 @@ impl Socket {
             else => (),
          }
       }
-      log::info!("receiver loop done");
+      tracing::info!("receiver loop done");
       Ok(())
    }
 
@@ -254,7 +255,7 @@ impl Socket {
             Ok(signal) = signal.recv() => {
                match signal {
                   Signal::Quit => {
-                     log::info!("sender: received quit signal");
+                     tracing::info!("sender: received quit signal");
                      break;
                   }
                   Signal::SendPong(ping) => {
@@ -272,7 +273,7 @@ impl Socket {
             else => (),
          }
       }
-      log::info!("sender loop done");
+      tracing::info!("sender loop done");
       Ok(())
    }
 

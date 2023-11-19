@@ -17,7 +17,7 @@ pub struct Language {
 impl Language {
    /// Loads a language with the given locale code, from the provided FTL source.
    pub fn load(language_code: &str, ftl_source: &str) -> Result<Self, Error> {
-      log::info!("loading language {}", language_code);
+      tracing::info!("loading language {}", language_code);
 
       let identifier: LanguageIdentifier =
          language_code.parse().map_err(|_| Error::InvalidLanguageCode)?;
@@ -44,9 +44,9 @@ impl Language {
       T: Display,
    {
       if !errors.is_empty() {
-         log::error!("errors occured in language {}", language_code);
+         tracing::error!("errors occured in language {}", language_code);
          for error in errors {
-            log::error!("{}", error);
+            tracing::error!("{}", error);
          }
       }
    }
@@ -55,7 +55,7 @@ impl Language {
       Some(match self.bundle.get_message(key) {
          Some(message) => message,
          None => {
-            log::error!("message {:?} is missing", key);
+            tracing::error!("message {:?} is missing", key);
             return None;
          }
       })
@@ -74,7 +74,7 @@ impl Language {
          let attribute = match message.get_attribute(attribute_name) {
             Some(attribute) => attribute,
             None => {
-               log::error!(
+               tracing::error!(
                   "message {:?} does not have the attribute {:?}",
                   &key[dot_index..],
                   attribute_name
@@ -88,7 +88,7 @@ impl Language {
          Some(match message.value() {
             Some(value) => value,
             None => {
-               log::error!("message {:?} doesn't have a value", key);
+               tracing::error!("message {:?} doesn't have a value", key);
                return None;
             }
          })

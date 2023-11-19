@@ -4,10 +4,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::backend::winit::event::MouseButton;
 use netcanv_renderer::paws::{
    point, vector, AlignH, AlignV, Alignment, Color, Layout, LineCap, Point, Rect, Renderer,
 };
-use netcanv_renderer_opengl::winit::event::MouseButton;
 
 use crate::common::{ControlFlow, RectMath};
 use crate::config::{self, config, ToolbarPosition};

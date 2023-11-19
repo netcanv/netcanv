@@ -31,18 +31,23 @@ impl Chunk {
    }
 
    /// Downloads the image of the chunk from the graphics card.
-   pub fn download_image(&self) -> RgbaImage {
+   pub fn download_image(&self, renderer: &mut Backend) -> RgbaImage {
       let mut image_buffer =
          ImageBuffer::from_pixel(Self::SIZE.0, Self::SIZE.1, Rgba([0, 0, 0, 0]));
-      self.framebuffer.download_rgba((0, 0), self.framebuffer.size(), &mut image_buffer);
+      renderer.download_framebuffer(
+         &self.framebuffer,
+         (0, 0),
+         self.framebuffer.size(),
+         &mut image_buffer,
+      );
       image_buffer
    }
 
    /// Uploads the image of the chunk to the graphics card, at the given offset in the master
    /// chunk.
-   pub fn upload_image(&mut self, image: &RgbaImage, offset: (u32, u32)) {
+   pub fn upload_image(&mut self, renderer: &mut Backend, image: &RgbaImage, offset: (u32, u32)) {
       self.mark_dirty();
-      self.framebuffer.upload_rgba(offset, Self::SIZE, image);
+      renderer.upload_framebuffer(&self.framebuffer, offset, Self::SIZE, image);
    }
 
    /// Marks the chunk as dirty - that is, invalidates any cached PNG and WebP data,

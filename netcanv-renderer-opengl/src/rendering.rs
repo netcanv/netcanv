@@ -319,7 +319,7 @@ impl RenderState {
 
    unsafe fn to_u8_slice<T>(slice: &[T]) -> &[u8] {
       let ptr = slice.as_ptr() as *const u8;
-      std::slice::from_raw_parts(ptr, size_of::<T>() * slice.len())
+      std::slice::from_raw_parts(ptr, std::mem::size_of_val(slice))
    }
 
    fn bind_null_texture(&mut self) {
@@ -877,6 +877,26 @@ impl RenderBackend for OpenGlBackend {
          self.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
          self.state.draw();
       }
+   }
+
+   fn upload_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      pixels: &[u8],
+   ) {
+      framebuffer.upload_rgba(position, size, pixels);
+   }
+
+   fn download_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   ) {
+      framebuffer.download_rgba(position, size, out_pixels);
    }
 
    fn scale(&mut self, scale: Vector) {

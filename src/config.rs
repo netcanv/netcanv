@@ -101,7 +101,7 @@ impl UserConfig {
    fn load_or_create() -> netcanv::Result<Self> {
       let config_dir = Self::config_dir();
       let config_file = Self::path();
-      log::info!("loading config from {:?}", config_file);
+      tracing::info!("loading config from {:?}", config_file);
       std::fs::create_dir_all(config_dir)?;
       if !config_file.is_file() {
          let config = Self::default();
@@ -112,8 +112,8 @@ impl UserConfig {
          let config: Self = match toml::from_str(&file) {
             Ok(config) => config,
             Err(error) => {
-               log::error!("error while deserializing config file: {}", error);
-               log::error!("falling back to default config");
+               tracing::error!("error while deserializing config file: {}", error);
+               tracing::error!("falling back to default config");
                return Ok(Self::default());
             }
          };
@@ -153,25 +153,25 @@ impl Default for UserConfig {
 
 fn default_language() -> String {
    fn inner() -> Option<String> {
-      log::info!("language not yet determined, checking locale");
+      tracing::info!("language not yet determined, checking locale");
       let locale = sys_locale::get_locale()?;
-      log::info!("got locale identifier: {}", locale);
+      tracing::info!("got locale identifier: {}", locale);
       let mut identifier: LanguageIdentifier = locale.parse().ok()?;
-      log::info!("trying full identifier: {}", identifier);
+      tracing::info!("trying full identifier: {}", identifier);
       if Assets::load_language(Some(&identifier.to_string())).is_ok() {
          return Some(identifier.to_string());
       }
       identifier.region = None;
-      log::info!("trying without region: {}", identifier);
+      tracing::info!("trying without region: {}", identifier);
       if Assets::load_language(Some(&identifier.to_string())).is_ok() {
          return Some(identifier.to_string());
       }
       identifier.script = None;
-      log::info!("trying without script: {}", identifier);
+      tracing::info!("trying without script: {}", identifier);
       if Assets::load_language(Some(&identifier.to_string())).is_ok() {
          return Some(identifier.to_string());
       }
-      log::error!("system language not available, falling back to en-US");
+      tracing::error!("system language not available, falling back to en-US");
       None
    }
    inner().unwrap_or_else(|| "en-US".to_string())
@@ -181,6 +181,8 @@ static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
 
 /// Loads or creates the user config.
 pub fn load_or_create() -> netcanv::Result<()> {
+   profiling::scope!("config::load_or_create");
+
    let config = UserConfig::load_or_create()?;
    if CONFIG.set(RwLock::new(config)).is_err() {
       return Err(Error::ConfigIsAlreadyLoaded);
@@ -190,6 +192,7 @@ pub fn load_or_create() -> netcanv::Result<()> {
 
 /// Saves the user config.
 pub fn save() -> netcanv::Result<()> {
+   profiling::scope!("config::save");
    config().save()
 }
 

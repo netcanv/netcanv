@@ -44,28 +44,30 @@
 pub extern crate self as netcanv;
 
 use std::fmt::Write;
+use std::sync::Arc;
 
+use crate::backend::winit::dpi::{PhysicalPosition, PhysicalSize};
 use crate::backend::winit::event::{Event, WindowEvent};
 use crate::backend::winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_family = "unix")]
-use crate::backend::winit::platform::unix::*;
 use crate::backend::winit::window::{CursorIcon, WindowBuilder};
+use crate::cli::Cli;
 use crate::config::WindowConfig;
+use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
-use log::LevelFilter;
+use clap::Parser;
+use instant::{Duration, Instant};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
-use netcanv_renderer_opengl::winit::dpi::{PhysicalPosition, PhysicalSize};
 use nysa::global as bus;
-use simple_logger::SimpleLogger;
+use tracing::{error, info, warn};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, Layer};
 
-#[cfg(feature = "renderer-opengl")]
-use netcanv_renderer_opengl::UiRenderFrame;
-#[cfg(feature = "renderer-skia")]
-use netcanv_renderer_skia::UiRenderFrame;
+use crate::backend::UiRenderFrame;
 
 #[macro_use]
 mod common;
@@ -75,6 +77,7 @@ mod errors;
 mod app;
 mod assets;
 mod backend;
+mod cli;
 mod clipboard;
 mod color;
 mod config;
@@ -99,49 +102,42 @@ pub use errors::*;
 ///
 /// `language` is populated with the user's language once that's loaded. The language is then used
 /// for displaying crash messages.
-fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
+async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
+   let cli = Cli::parse();
+
    // Set up logging.
-   SimpleLogger::new().with_level(LevelFilter::Debug).env().init().map_err(|e| {
-      Error::CouldNotInitializeLogger {
-         error: e.to_string(),
-      }
-   })?;
-   log::info!("NetCanv {} - welcome!", env!("CARGO_PKG_VERSION"));
+   let mut log_guards = Some(init_logging(&cli)?);
+   info!("NetCanv {}", env!("CARGO_PKG_VERSION"));
 
    // Load user configuration.
    config::load_or_create()?;
 
    // Set up the winit event loop and open the window.
-   log::debug!("opening window");
-   let event_loop = EventLoop::new();
-   let window_builder = {
-      let b = WindowBuilder::new()
-         .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
-         .with_title("NetCanv")
-         .with_resizable(true);
-      let b = if let Some(window) = &config().window {
-         b.with_inner_size(PhysicalSize::new(window.width, window.height))
-      } else {
-         b
+   let (renderer, event_loop) = {
+      profiling::scope!("init_renderer");
+
+      let event_loop = EventLoop::new();
+      let window_builder = {
+         let b = WindowBuilder::new()
+            .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
+            .with_title("NetCanv")
+            .with_resizable(true);
+         if let Some(window) = &config().window {
+            b.with_inner_size(PhysicalSize::new(window.width, window.height))
+         } else {
+            b
+         }
       };
-      // On Linux, winit doesn't seem to set the app ID properly so Wayland compositors can't tell
-      // our window apart from others.
-      #[cfg(target_os = "linux")]
-      let b = b.with_name("netcanv", "netcanv");
 
-      b
-   };
-
-   // Load color scheme.
-   // TODO: User-definable color schemes, anyone?
-   let color_scheme = ColorScheme::from(config().ui.color_scheme);
-
-   // Build the render backend.
-   log::debug!("initializing render backend");
-   let renderer =
-      Backend::new(window_builder, &event_loop).map_err(|e| Error::CouldNotInitializeBackend {
-         error: e.to_string(),
+      // Build the render backend.
+      let renderer = Backend::new(window_builder, &event_loop, &cli.render).await.map_err(|e| {
+         Error::CouldNotInitializeBackend {
+            error: e.to_string(),
+         }
       })?;
+
+      (renderer, event_loop)
+   };
    // Position and maximize the window.
    // NOTE: winit is a bit buggy and WindowBuilder::with_maximized does not
    // make window maximized, but Window::set_maximized does.
@@ -150,26 +146,29 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       renderer.window().set_maximized(window.maximized);
    }
 
+   // Load color scheme.
+   // TODO: User-definable color schemes, anyone?
+   let color_scheme = ColorScheme::from(config().ui.color_scheme);
+
    // Build the UI.
    let mut ui = Ui::new(renderer);
 
    // Load all the assets, and start the first app state.
-   log::debug!("loading assets");
    let assets = Assets::new(ui.render(), color_scheme)?;
+   let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
-   let mut app: Option<Box<dyn AppState>> = Some(Box::new(lobby::State::new(assets)) as _);
+   let mut app: Option<Box<dyn AppState>> =
+      Some(Box::new(lobby::State::new(assets, Arc::clone(&socket_system))) as _);
    let mut input = Input::new();
 
    // Initialize the clipboard because we now have a window handle and translation strings.
    match clipboard::init() {
       Ok(_) => (),
       Err(error) => {
-         log::error!("failed to initialize clipboard: {:?}", error);
+         error!("failed to initialize clipboard: {:?}", error);
          bus::push(common::Error(error));
       }
    }
-
-   log::debug!("init done! starting event loop");
 
    let (mut last_window_size, mut last_window_position) = {
       if let Some(window) = &config().window {
@@ -178,10 +177,12 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
          (size, pos)
       } else {
          let size = ui.window().inner_size();
-         let pos = ui.window().outer_position().unwrap_or(PhysicalPosition::default());
+         let pos = ui.window().outer_position().unwrap_or_default();
          (size, pos)
       }
    };
+
+   profiling::finish_frame!();
 
    event_loop.run(move |event, _, control_flow| {
       *control_flow = ControlFlow::Poll;
@@ -224,12 +225,15 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                });
                app = Some(app.take().unwrap().next_state(ui.render()));
             }) {
-               log::error!("render error: {}", error)
+               error!("render error: {}", error)
             }
             input.finish_frame(ui.window());
          }
 
          Event::LoopDestroyed => {
+            // This is a bit cursed, but works.
+            Arc::clone(&socket_system).shutdown();
+
             let window = ui.window();
             let position = last_window_position;
             let size = last_window_size;
@@ -243,12 +247,50 @@ fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                   maximized,
                });
             });
+
+            let _ = log_guards.take();
          }
 
          _ => (),
       }
    });
 }
+
+async fn async_main() {
+   let mut language = None;
+   match inner_main(&mut language).await {
+      Ok(()) => (),
+      Err(payload) => {
+         let mut message = String::new();
+         let language = language.unwrap_or_else(|| {
+            Assets::load_language(Some("en-US")).expect("English language must be present")
+         });
+         let _ = write!(
+            message,
+            "{}",
+            Formatted::new(language.clone(), "failure")
+               .format()
+               .with("message", payload.translate(&language))
+               .done(),
+         );
+         error!(
+            "inner_main() returned with an Err:\n{}",
+            payload.translate(&language)
+         );
+         MessageDialog::new()
+            .set_title("NetCanv - Error")
+            .set_text(&message)
+            .set_type(MessageType::Error)
+            .show_alert()
+            .unwrap();
+      }
+   }
+}
+
+#[cfg(feature = "tracy-profiling")]
+#[global_allocator]
+static ALLOCATOR: profiling::tracy_client::ProfiledAllocator<std::alloc::System> =
+   profiling::tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
 
 fn main() {
    let default_panic_hook = std::panic::take_hook();
@@ -268,32 +310,60 @@ fn main() {
       default_panic_hook(panic_info);
    }));
 
-   let mut language = None;
-   match inner_main(&mut language) {
-      Ok(()) => (),
-      Err(payload) => {
-         let mut message = String::new();
-         let language = language.unwrap_or_else(|| {
-            Assets::load_language(Some("en-US")).expect("English language must be present")
-         });
-         let _ = write!(
-            message,
-            "{}",
-            Formatted::new(language.clone(), "failure")
-               .format()
-               .with("message", payload.translate(&language))
-               .done(),
-         );
-         log::error!(
-            "inner_main() returned with an Err:\n{}",
-            payload.translate(&language)
-         );
-         MessageDialog::new()
-            .set_title("NetCanv - Error")
-            .set_text(&message)
-            .set_type(MessageType::Error)
-            .show_alert()
-            .unwrap();
-      }
+   #[cfg(feature = "tracy-profiling")]
+   let _tracy_client = profiling::tracy_client::Client::start();
+
+   let runtime = tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()
+      .expect("cannot start async runtime");
+
+   runtime.block_on(async_main());
+
+   // Don't want the app to hang forever if any background threads don't manage to shut down quickly.
+   let shutdown_start = Instant::now();
+   runtime.shutdown_timeout(Duration::from_secs(2));
+   let shutdown_elapsed = shutdown_start.elapsed();
+   if shutdown_elapsed > Duration::from_millis(100) {
+      warn!("background tasks took a long time to shut down ({shutdown_elapsed:?}) - perhaps a missing or incomplete Drop?");
    }
+}
+
+struct LogGuards {
+   _chrome: Option<tracing_chrome::FlushGuard>,
+}
+
+fn init_logging(cli: &Cli) -> errors::Result<LogGuards> {
+   let mut chrome_trace = cli.trace.as_ref().map(|trace_path| {
+      let (chrome_trace, guard) =
+         tracing_chrome::ChromeLayerBuilder::new().file(trace_path).include_args(true).build();
+      let chrome_trace = chrome_trace.with_filter(
+         EnvFilter::builder()
+            .with_default_directive(LevelFilter::DEBUG.into())
+            .with_env_var("NETCANV_TRACE")
+            .from_env_lossy(),
+      );
+      (Some(chrome_trace), guard)
+   });
+
+   let subscriber = tracing_subscriber::registry()
+      .with(
+         tracing_subscriber::fmt::layer().without_time().with_writer(std::io::stderr).with_filter(
+            EnvFilter::builder()
+               .with_default_directive(LevelFilter::INFO.into())
+               .with_env_var("NETCANV_LOG")
+               .from_env_lossy(),
+         ),
+      )
+      .with(chrome_trace.as_mut().and_then(|(ct, _)| ct.take()));
+
+   tracing::subscriber::set_global_default(subscriber).map_err(|e| {
+      Error::CouldNotInitializeLogger {
+         error: e.to_string(),
+      }
+   })?;
+
+   Ok(LogGuards {
+      _chrome: chrome_trace.map(|(_, guard)| guard),
+   })
 }

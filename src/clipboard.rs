@@ -14,6 +14,8 @@ static CLIPBOARD: Lazy<Mutex<Option<Clipboard>>> = Lazy::new(|| Mutex::new(None)
 /// Initializes the clipboard in a platform-specific way.
 #[allow(unused)]
 pub fn init() -> netcanv::Result<()> {
+   profiling::scope!("clipboard::init");
+
    let mut clipboard = CLIPBOARD.lock().unwrap();
    *clipboard = Some(Clipboard::new()?);
    Ok(())

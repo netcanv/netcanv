@@ -14,13 +14,17 @@ members = [
    "netcanv-i18n-macros",
    "netcanv-renderer",
    "netcanv-renderer-opengl",
+   "netcanv-renderer-wgpu",
    "netcanv-relay",
    "netcanv-protocol",
 ]
 
 [features]
-default = ["renderer-opengl"]
+default = ["renderer-wgpu"]
 renderer-opengl = ["netcanv-renderer-opengl"]
+renderer-wgpu = ["netcanv-renderer-wgpu"]
+
+tracy-profiling = ["profiling/profile-with-tracy"]
 
 [dependencies]
 
@@ -31,16 +35,29 @@ phf = { version = "0.11.2", features = ["macros"] }
 strum = { version = "0.25.0", features = ["derive"] }
 
 # Logging
-log = "0.4.20"
-simple_logger = { version = "4.2.0", default-features = false, features = ["colors"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-chrome = "0.7.1"
+profiling.workspace = true
+
+# CLI
+clap = { workspace = true }
 
 # Windowing and graphics
 native-dialog = "0.5.5"
 webbrowser = "0.8.11"
-image = { version = "0.24.7", default-features = false, features = ["png", "jpeg", "webp", "webp-encoder"] }
+image = { version = "0.24.7", default-features = false, features = [
+   "png",
+   "jpeg",
+   "webp",
+   "webp-encoder",
+] }
 usvg = { version = "0.14.0", default-features = false }
 resvg = { version = "0.14.0", default-features = false }
-tiny-skia = { version = "0.5.0", default-features = false, features = ["std", "simd"] }
+tiny-skia = { version = "0.5.0", default-features = false, features = [
+   "std",
+   "simd",
+] }
 
 # Internationalization
 sys-locale = "0.3.1"
@@ -49,7 +66,9 @@ sys-locale = "0.3.1"
 serde = { version = "1.0.188", features = ["derive"] }
 bincode = "1.3.2"
 tokio = { version = "1.32.0", features = ["full"] }
-tokio-tungstenite = { version = "0.20.1", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.20.1", features = [
+   "rustls-tls-native-roots",
+] }
 
 # Multithreading
 nysa = "0.2.2"
@@ -68,9 +87,15 @@ arboard = "2.0.1"
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
 netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
+netcanv-renderer-wgpu = { path = "netcanv-renderer-wgpu", optional = true }
 netcanv-protocol = { path = "netcanv-protocol", features = ["i18n"] }
 
 netcanv-i18n = { path = "netcanv-i18n" }
+
+[workspace.dependencies]
+clap = { version = "4.3.0", features = ["derive"] }
+profiling = "1.0.11"
+tracing = "0.1.40"
 
 [profile.release]
 lto = "fat"

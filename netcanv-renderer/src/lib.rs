@@ -85,29 +85,32 @@ pub trait Framebuffer {
       Rect::new(position, vector(self.width() as f32, self.height() as f32))
    }
 
-   /// Uploads RGBA pixels to the framebuffer.
-   ///
-   /// `pixels`'s length must be equal to `width * height * 4`.
-   fn upload_rgba(&mut self, position: (u32, u32), size: (u32, u32), pixels: &[u8]);
-
-   /// Downloads RGBA pixels from the framebuffer into a buffer.
-   fn download_rgba(&self, position: (u32, u32), size: (u32, u32), dest: &mut [u8]);
-
    /// Sets the filter used for upscaling and downscaling the framebuffer.
    fn set_scaling_filter(&mut self, filter: ScalingFilter);
 }
 
 /// Blending modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum BlendMode {
    /// Does not blend colors.
-   Replace,
+   Replace = 0,
    /// Blends colors using the alpha channel of the destination.
-   Alpha,
+   Alpha = 1,
    /// Adds colors together.
-   Add,
+   Add = 2,
    /// Inverts colors.
-   Invert,
+   Invert = 3,
+}
+
+impl BlendMode {
+   // NOTE: Indices here must match those of the enum.
+   pub const VARIANTS: [BlendMode; 4] = [
+      BlendMode::Replace,
+      BlendMode::Alpha,
+      BlendMode::Add,
+      BlendMode::Invert,
+   ];
 }
 
 /// A render backend.
@@ -141,10 +144,30 @@ pub trait RenderBackend: Renderer {
    /// Drawing the framebuffer that is currently being rendered to is undefined behavior.
    fn framebuffer(&mut self, rect: Rect, framebuffer: &Self::Framebuffer);
 
+   /// Uploads RGBA pixels to the framebuffer.
+   ///
+   /// `pixels`'s length must be equal to `width * height * 4`.
+   fn upload_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      pixels: &[u8],
+   );
+
+   /// Downloads RGBA pixels from the framebuffer into a buffer.
+   fn download_framebuffer(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   );
+
    /// Scales the transform matrix by the given factor.
    fn scale(&mut self, scale: Vector);
 
-   /// Sets the current blend mode. Returns the old blend mode.
+   /// Sets the current blend mode.
    ///
    /// Blend modes are part of the transformation stack. If used inside `push()` and `pop()`,
    /// the change is completely transparent to outside code.

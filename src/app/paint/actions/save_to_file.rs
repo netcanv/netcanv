@@ -40,6 +40,7 @@ impl Action for SaveToFileAction {
          assets,
          paint_canvas,
          project_file,
+         renderer,
          ..
       }: ActionArgs,
    ) -> netcanv::Result<()> {
@@ -48,7 +49,7 @@ impl Action for SaveToFileAction {
          .add_filter(&assets.tr.fd_netcanv_canvas, &["netcanv", "toml"])
          .show_save_single_file()
       {
-         Ok(Some(path)) => project_file.save(Some(&path), paint_canvas)?,
+         Ok(Some(path)) => project_file.save(renderer, Some(&path), paint_canvas)?,
          Ok(None) => (),
          Err(error) => return Err(error.into()),
       }
@@ -60,14 +61,15 @@ impl Action for SaveToFileAction {
       ActionArgs {
          paint_canvas,
          project_file,
+         renderer,
          ..
       }: ActionArgs,
    ) -> netcanv::Result<()> {
       if project_file.filename().is_some() && self.last_autosave.elapsed() > Self::AUTOSAVE_INTERVAL
       {
-         log::info!("autosaving chunks");
-         project_file.save(None, paint_canvas)?;
-         log::info!("autosave complete");
+         tracing::info!("autosaving chunks");
+         project_file.save(renderer, None, paint_canvas)?;
+         tracing::info!("autosave complete");
          self.last_autosave = Instant::now();
       }
       Ok(())

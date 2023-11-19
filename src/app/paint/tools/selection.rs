@@ -2,8 +2,6 @@ use image::imageops::FilterType;
 use instant::Instant;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
-use std::sync::Arc;
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
@@ -12,7 +10,7 @@ use crate::config::config;
 use crate::keymap::KeyBinding;
 use image::codecs::png::PngEncoder;
 use image::io::Reader;
-use image::{ColorType, ImageFormat, RgbaImage, ImageEncoder};
+use image::{ColorType, ImageEncoder, ImageFormat, RgbaImage};
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
 use netcanv_renderer::{
@@ -81,7 +79,6 @@ pub struct SelectionTool {
    selection: Selection,
    peer_selections: HashMap<PeerId, PeerSelection>,
 
-   runtime: Arc<Runtime>,
    paste: Option<(
       Point,
       oneshot::Receiver<RgbaImage>,
@@ -98,7 +95,7 @@ impl SelectionTool {
    /// The radius of handles for resizing the selection contents.
    const HANDLE_RADIUS: f32 = 4.0;
 
-   pub fn new(renderer: &mut Backend, runtime: Arc<Runtime>) -> Self {
+   pub fn new(renderer: &mut Backend) -> Self {
       let (peer_pastes_tx, peer_pastes_rx) = mpsc::unbounded_channel();
       Self {
          icons: Icons {
@@ -125,7 +122,6 @@ impl SelectionTool {
          selection: Selection::new(),
          peer_selections: HashMap::new(),
 
-         runtime,
          paste: None,
          peer_pastes_tx,
          peer_pastes_rx,
@@ -200,8 +196,8 @@ impl SelectionTool {
    }
 
    /// Copies the current selection to the system clipboard.
-   fn copy_to_clipboard(&self) {
-      if let Some(image) = self.selection.download_rgba() {
+   fn copy_to_clipboard(&self, renderer: &mut Backend) {
+      if let Some(image) = self.selection.download_rgba(renderer) {
          catch!(clipboard::copy_image(image));
       }
    }
@@ -211,12 +207,12 @@ impl SelectionTool {
       let (image_tx, image_rx) = oneshot::channel();
       let (bytes_tx, bytes_rx) = oneshot::channel();
       self.paste = Some((position, image_rx, bytes_rx));
-      self.runtime.spawn_blocking(|| {
-         log::debug!("reading image from clipboard");
+      tokio::task::spawn_blocking(|| {
+         tracing::debug!("reading image from clipboard");
          let image = catch!(clipboard::paste_image());
          let image = if image.width() > Selection::MAX_SIZE || image.height() > Selection::MAX_SIZE
          {
-            log::debug!("image is too big! scaling down");
+            tracing::debug!("image is too big! scaling down");
             let scale = Selection::MAX_SIZE as f32 / image.width().max(image.height()) as f32;
             let new_width = (image.width() as f32 * scale) as u32;
             let new_height = (image.height() as f32 * scale) as u32;
@@ -227,9 +223,9 @@ impl SelectionTool {
          // The result here doesn't matter. If the image doesn't arrive, we're out of the
          // paint state.
          let _ = image_tx.send(image.clone());
-         log::debug!("encoding image for transmission");
+         tracing::debug!("encoding image for transmission");
          let bytes = catch!(Self::encode_image(&image));
-         log::debug!("paste job done; encoded {} bytes", bytes.len());
+         tracing::debug!("paste job done; encoded {} bytes", bytes.len());
          let _ = bytes_tx.send(bytes);
       });
    }
@@ -274,10 +270,10 @@ impl SelectionTool {
          if let Some(image) = image {
             // We don't update the rectangle here because a data race could happen.
             // The peer sends a rect packet immediately after the paste packet anyways.
-            log::debug!("finishing peer paste");
+            tracing::debug!("finishing peer paste");
             peer.selection.paste(renderer, None, &image);
             if deselected_before_decoding_finished {
-               log::debug!("the peer deselected before decoding had a chance to finish");
+               tracing::debug!("the peer deselected before decoding had a chance to finish");
                peer.selection.rect = peer.selection.deselected_at;
                peer.selection.deselect(renderer, paint_canvas);
             }
@@ -325,7 +321,7 @@ impl Tool for SelectionTool {
    /// Processes key shortcuts when the selection is active.
    fn active_key_shortcuts(
       &mut self,
-      ToolArgs { input, net, .. }: ToolArgs,
+      ToolArgs { input, net, ui, .. }: ToolArgs,
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
@@ -341,12 +337,12 @@ impl Tool for SelectionTool {
       }
 
       if input.action(config().keymap.edit.copy) == (true, true) {
-         self.copy_to_clipboard();
+         self.copy_to_clipboard(ui);
          return KeyShortcutAction::Success;
       }
 
       if input.action(config().keymap.edit.cut) == (true, true) {
-         self.copy_to_clipboard();
+         self.copy_to_clipboard(ui);
          self.selection.cancel();
          return KeyShortcutAction::Success;
       }
@@ -362,7 +358,7 @@ impl Tool for SelectionTool {
       viewport: &Viewport,
    ) -> KeyShortcutAction {
       if input.action(config().keymap.edit.paste) == (true, true) {
-         log::info!("pasting image from clipboard");
+         tracing::info!("pasting image from clipboard");
          self.enqueue_paste_from_clipboard(viewport.pan());
       }
 
@@ -671,15 +667,15 @@ impl Tool for SelectionTool {
          Packet::Paste((_x, _y), data) => {
             // ↑ (x, y) is only here for compatibility with 0.7.0 and is no longer used
             // because it caused a data race
-            log::debug!("{} pasted image ({} bytes of data)", sender, data.len());
+            tracing::debug!("{} pasted image ({} bytes of data)", sender, data.len());
             let tx = self.peer_pastes_tx.clone();
             self.ongoing_paste_jobs.insert(sender);
-            self.runtime.spawn_blocking(move || match Self::decode_image(&data) {
+            tokio::task::spawn_blocking(move || match Self::decode_image(&data) {
                Ok(image) => {
                   let _ = tx.send((sender, Some(image)));
                }
                Err(error) => {
-                  log::error!("could not decode selection image: {:?}", error);
+                  tracing::error!("could not decode selection image: {:?}", error);
                   let _ = tx.send((sender, None));
                }
             });
@@ -690,8 +686,13 @@ impl Tool for SelectionTool {
    }
 
    /// Sends a capture packet to the peer that joined.
-   fn network_peer_join(&mut self, net: Net, peer_id: PeerId) -> netcanv::Result<()> {
-      if let Some(capture) = self.selection.download_rgba() {
+   fn network_peer_join(
+      &mut self,
+      renderer: &mut Backend,
+      net: Net,
+      peer_id: PeerId,
+   ) -> netcanv::Result<()> {
+      if let Some(capture) = self.selection.download_rgba(renderer) {
          self.send_rect_packet(&net)?;
          net.send(self, peer_id, Packet::Update(Self::encode_image(&capture)?))?;
       }
@@ -712,7 +713,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       peer_id: PeerId,
    ) -> netcanv::Result<()> {
-      log::debug!("selection {:?} deactivated", peer_id);
+      tracing::debug!("selection {:?} deactivated", peer_id);
       if let Some(peer) = self.peer_selections.get_mut(&peer_id) {
          peer.selection.deselect(renderer, paint_canvas);
       }
@@ -793,12 +794,12 @@ impl Selection {
    /// Downloads a captured selection off the graphics card, into an RGBA image.
    ///
    /// Returns `None` if there's no _captured_ selection.
-   fn download_rgba(&self) -> Option<RgbaImage> {
+   fn download_rgba(&self, renderer: &mut Backend) -> Option<RgbaImage> {
       if let Some(rect) = self.normalized_rect() {
          let rect = rect.sort();
          if let Some(capture) = self.capture.as_ref() {
             let mut image = RgbaImage::new(rect.width() as u32, rect.height() as u32);
-            capture.download_rgba((0, 0), capture.size(), &mut image);
+            renderer.download_framebuffer(capture, (0, 0), capture.size(), &mut image);
             return Some(image);
          }
       }
@@ -808,8 +809,8 @@ impl Selection {
    /// Uploads the given image into the capture framebuffer.
    /// Does not do anything else with the selection; the rectangle must be initialized separately.
    fn upload_rgba(&mut self, renderer: &mut Backend, image: &RgbaImage) {
-      let mut capture = renderer.create_framebuffer(image.width(), image.height());
-      capture.upload_rgba((0, 0), (image.width(), image.height()), image);
+      let capture = renderer.create_framebuffer(image.width(), image.height());
+      renderer.upload_framebuffer(&capture, (0, 0), (image.width(), image.height()), image);
       self.capture = Some(capture);
    }
 

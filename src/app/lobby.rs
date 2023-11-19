@@ -77,11 +77,11 @@ impl State {
    const VIEW_BOX_HEIGHT: f32 = Self::MENU_HEIGHT + Self::VIEW_BOX_PADDING * 2.0;
 
    /// Creates and initializes the lobby state.
-   pub fn new(assets: Assets) -> Self {
+   pub fn new(assets: Assets, socket_system: Arc<SocketSystem>) -> Self {
       let nickname_field = TextField::new(Some(&config().lobby.nickname));
       let relay_field = TextField::new(Some(&config().lobby.relay));
       let mut this = Self {
-         socket_system: SocketSystem::new(),
+         socket_system,
 
          nickname_field,
          relay_field,
@@ -681,12 +681,12 @@ impl AppState for State {
 
       for message in &bus::retrieve_all::<Error>() {
          let error = message.consume().0;
-         log::error!("error: {:?}", error);
+         tracing::error!("error: {:?}", error);
          self.status = Status::Error(error.translate(&self.assets.language));
       }
       for message in &bus::retrieve_all::<Fatal>() {
          let fatal = message.consume().0;
-         log::error!("fatal: {:?}", fatal);
+         tracing::error!("fatal: {:?}", fatal);
          self.status = Status::Error(
             self
                .assets
@@ -703,7 +703,7 @@ impl AppState for State {
       let mut connected = false;
       if let Some(peer) = &self.peer {
          for message in &bus::retrieve_all::<peer::Connected>() {
-            log::info!("connection established");
+            tracing::info!("connection established");
             if message.peer == peer.token() {
                message.consume();
                connected = true;
@@ -713,6 +713,7 @@ impl AppState for State {
 
       if connected {
          let mut this = *self;
+         let socket_system = Arc::clone(&this.socket_system);
          this.save_config();
          match paint::State::new(
             this.assets,
@@ -724,7 +725,7 @@ impl AppState for State {
             Ok(state) => Box::new(state),
             Err((error, assets)) => {
                bus::push(Fatal(error));
-               Box::new(Self::new(assets))
+               Box::new(Self::new(assets, socket_system))
             }
          }
       } else {

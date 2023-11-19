@@ -320,9 +320,9 @@ impl PickerWindow {
       };
       this.slider_image.set_scaling_filter(ScalingFilter::Linear);
       this.canvas_image.set_scaling_filter(ScalingFilter::Linear);
-      Self::update_slider(&mut this.slider_image, data.color_space);
-      Self::update_canvas(&mut this.canvas_image, data.color, data.color_space);
-      this.update_widgets(data);
+      Self::update_slider(renderer, &this.slider_image, data.color_space);
+      Self::update_canvas(renderer, &this.canvas_image, data.color, data.color_space);
+      this.update_widgets(renderer, data);
       this
    }
 
@@ -354,7 +354,7 @@ impl PickerWindow {
    }
 
    /// Renders the slider for the given color space, to the given framebuffer.
-   fn update_slider(framebuffer: &mut Framebuffer, color_space: ColorSpace) {
+   fn update_slider(renderer: &mut Backend, framebuffer: &Framebuffer, color_space: ColorSpace) {
       let (width, height) = framebuffer.size();
       let image = match color_space {
          ColorSpace::Rgb => RgbaImage::from_fn(width, height, |_x, y| {
@@ -378,11 +378,16 @@ impl PickerWindow {
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
-      framebuffer.upload_rgba((0, 0), (width, height), &image);
+      renderer.upload_framebuffer(framebuffer, (0, 0), (width, height), &image);
    }
 
    /// Renders the canvas for the given color and color space, to the given framebuffer.
-   fn update_canvas(framebuffer: &mut Framebuffer, color: AnyColor, color_space: ColorSpace) {
+   fn update_canvas(
+      renderer: &mut Backend,
+      framebuffer: &Framebuffer,
+      color: AnyColor,
+      color_space: ColorSpace,
+   ) {
       let (width, height) = framebuffer.size();
       let hue = match color_space {
          ColorSpace::Rgb => Hsv::from(color).h,
@@ -412,7 +417,7 @@ impl PickerWindow {
             Rgba([color.r, color.g, color.b, color.a])
          }),
       };
-      framebuffer.upload_rgba((0, 0), (width, height), &image);
+      renderer.upload_framebuffer(framebuffer, (0, 0), (width, height), &image);
    }
 
    /// Processes the hue slider.
@@ -564,7 +569,7 @@ impl PickerWindow {
             let color = AnyColor::from(Srgb::from_color(color));
             data.color = color;
          }
-         self.update_widgets(data);
+         self.update_widgets(ui, data);
       }
       ui.space(12.0);
 
@@ -616,7 +621,7 @@ impl PickerWindow {
       }
 
       if sliders_changed.iter().any(|&changed| changed) {
-         self.update_widgets(data);
+         self.update_widgets(ui, data);
       }
 
       ui.pop();
@@ -729,14 +734,14 @@ impl PickerWindow {
    }
 
    /// Updates the widgets to reflect the currently picked color.
-   fn update_widgets(&mut self, data: &PickerWindowData) {
+   fn update_widgets(&mut self, renderer: &mut Backend, data: &PickerWindowData) {
       let color = Srgb::from(data.color).to_color(1.0);
 
       // Make sure the color canvas shows the correct hue.
-      Self::update_canvas(&mut self.canvas_image, data.color, data.color_space);
+      Self::update_canvas(renderer, &self.canvas_image, data.color, data.color_space);
       // And, make sure that the slider is in the correct color space.
       if self.previous_color_space != data.color_space {
-         Self::update_slider(&mut self.slider_image, data.color_space);
+         Self::update_slider(renderer, &self.slider_image, data.color_space);
       }
 
       // Update the hex code in the text field.
@@ -803,7 +808,7 @@ impl WindowContent for PickerWindow {
 
       data.color_changed = false;
       if data.color != self.previous_color || data.color_space != self.previous_color_space {
-         self.update_widgets(data);
+         self.update_widgets(ui, data);
          data.color_changed = true;
       }
       self.previous_color = data.color;

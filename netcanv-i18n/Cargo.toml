@@ -3,12 +3,10 @@ name = "netcanv-i18n"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 fluent = "0.16.0"
 fluent-syntax = "0.11.0"
-log = "0.4.20"
+tracing.workspace = true
 unic-langid = "0.9.0"
 
 netcanv-i18n-macros = { path = "../netcanv-i18n-macros" }

@@ -203,7 +203,6 @@ impl Assets {
    pub fn load_language(language_code: Option<&str>) -> netcanv::Result<Language> {
       let language_code =
          language_code.map(|x| x.to_owned()).unwrap_or_else(|| config().language.clone());
-      let language_code = language_code;
       let language = Language::load(
          &language_code,
          LANGUAGES_FTL.get(&language_code).ok_or_else(|| Error::TranslationsDoNotExist {
@@ -213,8 +212,8 @@ impl Assets {
       let language = match language {
          Ok(language) => language,
          Err(error) => {
-            log::error!("error while loading language:");
-            log::error!("{}", error);
+            tracing::error!("error while loading language:");
+            tracing::error!("{}", error);
             return Err(Error::CouldNotLoadLanguage {
                language: language_code,
             });
@@ -225,6 +224,8 @@ impl Assets {
 
    /// Creates a new instance of Assets with the provided color scheme.
    pub fn new(renderer: &mut Backend, colors: ColorScheme) -> netcanv::Result<Self> {
+      profiling::scope!("Assets::new");
+
       let language = Self::load_language(None)?;
       let tr = Strings::from_language(&language);
       Ok(Self {

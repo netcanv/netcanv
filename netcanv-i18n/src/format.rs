@@ -57,14 +57,14 @@ impl<'f> Formatter<'f> {
       let message = match self.language.bundle.get_message(self.key) {
          Some(message) => message,
          None => {
-            log::error!("message {:?} is missing", self.key);
+            tracing::error!("message {:?} is missing", self.key);
             return self.key.to_owned();
          }
       };
       let pattern = match message.value() {
          Some(value) => value,
          None => {
-            log::error!("message {:?} doesn't have a value", self.key);
+            tracing::error!("message {:?} doesn't have a value", self.key);
             return self.key.to_owned();
          }
       };

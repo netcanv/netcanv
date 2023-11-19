@@ -1,14 +1,13 @@
 use std::io::Cursor;
-use std::sync::Arc;
 
 use ::image::codecs::png::{PngDecoder, PngEncoder};
 use ::image::codecs::webp::{WebPDecoder, WebPEncoder, WebPQuality};
 use ::image::{ColorType, ImageDecoder, Rgba, RgbaImage};
 use image::{DynamicImage, ImageEncoder};
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
+use crate::backend::Backend;
 use crate::paint_canvas::cache_layer::CachedChunk;
 use crate::paint_canvas::chunk::Chunk;
 use crate::Error;
@@ -19,7 +18,6 @@ pub struct ImageCoderChannels {
 }
 
 pub struct ImageCoder {
-   runtime: Arc<Runtime>,
    decoder_quitter: Option<(oneshot::Sender<()>, JoinHandle<()>)>,
 
    chunks_to_decode_tx: mpsc::UnboundedSender<((i32, i32), Vec<u8>)>,
@@ -31,17 +29,15 @@ impl ImageCoder {
    /// transmission.
    const MAX_PNG_SIZE: usize = 32 * 1024;
 
-   pub fn new(runtime: Arc<Runtime>) -> (Self, ImageCoderChannels) {
+   pub fn new() -> (Self, ImageCoderChannels) {
       let (chunks_to_decode_tx, chunks_to_decode_rx) = mpsc::unbounded_channel();
       let (decoded_chunks_tx, decoded_chunks_rx) = mpsc::unbounded_channel();
       let (encoded_chunks_tx, encoded_chunks_rx) = mpsc::unbounded_channel();
       let (decoder_quit_tx, decoder_quit_rx) = oneshot::channel();
 
-      let decode_join_handle = runtime.spawn({
-         let runtime = Arc::clone(&runtime);
+      let decode_join_handle = tokio::spawn({
          async move {
             ImageCoder::chunk_decoding_loop(
-               runtime,
                chunks_to_decode_rx,
                decoded_chunks_tx,
                decoder_quit_rx,
@@ -52,7 +48,6 @@ impl ImageCoder {
 
       (
          Self {
-            runtime,
             decoder_quitter: Some((decoder_quit_tx, decode_join_handle)),
 
             chunks_to_decode_tx,
@@ -78,7 +73,7 @@ impl ImageCoder {
          ) {
             Ok(()) => (),
             Err(error) => {
-               log::error!("error while encoding: {}", error);
+               tracing::error!("error while encoding: {}", error);
                return Err(error.into());
             }
          }
@@ -99,7 +94,7 @@ impl ImageCoder {
          {
             Ok(()) => (),
             Err(error) => {
-               log::error!("error while encoding: {}", error);
+               tracing::error!("error while encoding: {}", error);
                return Err(error.into());
             }
          }
@@ -124,7 +119,7 @@ impl ImageCoder {
    pub fn decode_png_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       let decoder = PngDecoder::new(Cursor::new(data))?;
       if decoder.color_type() != ColorType::Rgba8 {
-         log::warn!("received non-RGBA image data, ignoring");
+         tracing::warn!("received non-RGBA image data, ignoring");
          return Err(Error::NonRgbaChunkImage);
       }
       let mut image = RgbaImage::from_pixel(Chunk::SIZE.0, Chunk::SIZE.1, Rgba([0, 0, 0, 0]));
@@ -145,7 +140,7 @@ impl ImageCoder {
       // Try WebP first.
       let image = Self::decode_webp_data(data).or_else(|_| Self::decode_png_data(data))?;
       if image.dimensions() != Chunk::SIZE {
-         log::error!(
+         tracing::error!(
             "received chunk with invalid size. got: {:?}, expected {:?}",
             image.dimensions(),
             Chunk::SIZE
@@ -158,12 +153,11 @@ impl ImageCoder {
 
    /// The decoding supervisor thread.
    async fn chunk_decoding_loop(
-      runtime: Arc<Runtime>,
       mut input: mpsc::UnboundedReceiver<((i32, i32), Vec<u8>)>,
       output: mpsc::UnboundedSender<((i32, i32), RgbaImage)>,
       mut quit: oneshot::Receiver<()>,
    ) {
-      log::info!("starting chunk decoding supervisor thread");
+      tracing::info!("starting chunk decoding supervisor thread");
       loop {
          tokio::select! {
             biased;
@@ -171,49 +165,50 @@ impl ImageCoder {
             data = input.recv() => {
                if let Some((chunk_position, image_data)) = data {
                   let output = output.clone();
-                  runtime.spawn_blocking(move || match ImageCoder::decode_network_data(&image_data) {
+                  tokio::task::spawn_blocking(move || match ImageCoder::decode_network_data(&image_data) {
                      Ok(image) => {
                         // Doesn't matter if the receiving half is closed.
                         let _ = output.send((chunk_position, image));
                      }
-                     Err(error) => log::error!("image decoding failed: {:?}", error),
+                     Err(error) => tracing::error!("image decoding failed: {:?}", error),
                   });
                } else {
-                  log::info!("decoding supervisor: chunk data sender was dropped, quitting");
+                  tracing::info!("decoding supervisor: chunk data sender was dropped, quitting");
                   break;
                }
             },
          }
       }
-      log::info!("exiting chunk decoding supervisor thread");
+      tracing::info!("exiting chunk decoding supervisor thread");
    }
 
    pub fn enqueue_chunk_encoding(
       &self,
+      renderer: &mut Backend,
       chunk: &Chunk,
       output_channel: mpsc::UnboundedSender<((i32, i32), CachedChunk)>,
       chunk_position: (i32, i32),
    ) {
       // If the chunk's image is empty, there's no point in sending it.
-      let image = chunk.download_image();
+      let image = chunk.download_image(renderer);
       if Chunk::image_is_empty(&image) {
          return;
       }
       // Otherwise, we can start encoding the chunk image.
       let encoded_chunks_tx = self.encoded_chunks_tx.clone();
 
-      self.runtime.spawn(async move {
-         log::debug!("encoding image data for chunk {:?}", chunk_position);
+      tokio::spawn(async move {
+         tracing::debug!("encoding image data for chunk {:?}", chunk_position);
          let image_data = ImageCoder::encode_network_data(image).await;
-         log::debug!("encoding done for chunk {:?}", chunk_position);
+         tracing::debug!("encoding done for chunk {:?}", chunk_position);
          match image_data {
             Ok(data) => {
-               log::debug!("sending image data back to main thread");
+               tracing::debug!("sending image data back to main thread");
                let _ = encoded_chunks_tx.send((chunk_position, data.clone()));
                let _ = output_channel.send((chunk_position, data));
             }
             Err(error) => {
-               log::error!(
+               tracing::error!(
                   "error while encoding image for chunk {:?}: {:?}",
                   chunk_position,
                   error
@@ -243,10 +238,10 @@ impl ImageCoder {
 
 impl Drop for ImageCoder {
    fn drop(&mut self) {
-      self.runtime.block_on(async {
-         let (channel, join_handle) = self.decoder_quitter.take().unwrap();
-         let _ = channel.send(());
+      let (channel, join_handle) = self.decoder_quitter.take().unwrap();
+      let _ = channel.send(());
+      tokio::runtime::Handle::current().block_on(async {
          let _ = join_handle.await;
-      });
+      })
    }
 }

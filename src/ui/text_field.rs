@@ -2,8 +2,8 @@
 
 use std::ops::Range;
 
+use crate::backend::winit::window::CursorIcon;
 use netcanv_renderer::Font as FontTrait;
-use netcanv_renderer_opengl::winit::window::CursorIcon;
 use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
 use crate::backend::Font;
