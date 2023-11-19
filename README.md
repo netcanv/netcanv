@@ -1,6 +1,6 @@
 # NetCanv
 
-A lightweight app for drawing with other people over the Internets.
+A lightweight app for drawing with other people over the Internet.
 
 ![screenshot](contrib/screenshots.png)
 
