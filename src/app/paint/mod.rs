@@ -176,8 +176,14 @@ impl State {
          update_timer: Timer::new(Self::TIME_PER_UPDATE),
          chunk_downloads: HashMap::new(),
          encoded_chunks: HashMap::new(),
-         encode_channels: EncodeChannels { tx: encoded_tx, rx: encoded_rx },
-         decode_channels: DecodeChannels { tx: decoded_tx, rx: decoded_rx },
+         encode_channels: EncodeChannels {
+            tx: encoded_tx,
+            rx: encoded_rx,
+         },
+         decode_channels: DecodeChannels {
+            tx: decoded_tx,
+            rx: decoded_rx,
+         },
 
          fatal_error: false,
          log: Log::new(),
@@ -288,11 +294,9 @@ impl State {
          match ImageCoder::decode_network_data(&image_data) {
             Ok(image) => {
                // Doesn't matter if the receiving half is closed.
-               tx
-                  .send((chunk_position, image))
-                  .expect("Unbounded send failed");
+               tx.send((chunk_position, image)).expect("Unbounded send failed");
             }
-            Err(error) => tracing::error!("image decoding failed: {:?}", error)
+            Err(error) => tracing::error!("image decoding failed: {:?}", error),
          }
       });
    }
@@ -418,7 +422,7 @@ impl State {
       // Rendering
       //
 
-      while let Ok((chunk_position ,image)) = self.decode_channels.rx.try_recv() {
+      while let Ok((chunk_position, image)) = self.decode_channels.rx.try_recv() {
          self.paint_canvas.set_chunk(ui, chunk_position, image);
       }
       while let Ok((chunk_position, image)) = self.encode_channels.rx.try_recv() {
