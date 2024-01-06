@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use nysa::global as bus;
 
-use crate::app::{lobby, paint, AppState};
+use crate::app::{lobby, paint, AppState, StateArgs};
 use crate::assets::Assets;
+use crate::backend::Backend;
 use crate::cli;
 use crate::common::{Error, Fatal};
 use crate::config::config;
@@ -58,7 +59,7 @@ impl State {
 }
 
 impl AppState for State {
-   fn process(&mut self, _: super::StateArgs) {
+   fn process(&mut self, _: StateArgs) {
       if let Some(peer) = &mut self.peer {
          catch!(peer.communicate());
       }
@@ -73,7 +74,7 @@ impl AppState for State {
       }
    }
 
-   fn next_state(self: Box<Self>, renderer: &mut crate::backend::Backend) -> Box<dyn AppState> {
+   fn next_state(self: Box<Self>, renderer: &mut Backend) -> Box<dyn AppState> {
       let mut connected = false;
       if let Some(peer) = &self.peer {
          for message in &bus::retrieve_all::<peer::Connected>() {
