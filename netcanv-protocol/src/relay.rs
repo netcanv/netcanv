@@ -1,6 +1,6 @@
 //! Relay packaets.
 
-use std::fmt::{self, Display, Formatter};
+use std::{fmt::{self, Display, Formatter}, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -69,10 +69,10 @@ impl RoomId {
    pub const LEN: usize = 6;
 }
 
-impl TryFrom<&str> for RoomId {
-   type Error = RoomIdError;
+impl FromStr for RoomId {
+   type Err = RoomIdError;
 
-   fn try_from(value: &str) -> Result<Self, Self::Error> {
+   fn from_str(value: &str) -> Result<Self, Self::Err> {
       if value.len() != Self::LEN {
          Err(RoomIdError(()))
       } else {
