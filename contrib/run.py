@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import subprocess
 
@@ -6,11 +7,14 @@ HOST_COLOR = "\033[94m"
 CLIENT_COLOR = "\033[93m"
 ENDC = "\033[0m"
 
+parser = argparse.ArgumentParser()
+executable_path = "./target/debug/netcanv"
+
 def log(who: str, color: str, line: str):
     print(f"{color}{who.ljust(8)}{ENDC} {line}", end="")
 
 async def run_client(room_id: str):
-    cmd = ["./target/debug/netcanv", "join-room", "-r", room_id]
+    cmd = [executable_path, "join-room", "-r", room_id]
     client = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if client.stderr is not None:
         while True:
@@ -21,7 +25,7 @@ async def run_client(room_id: str):
 
 async def run_host():
     tasks = []
-    cmd = ["./target/debug/netcanv", "host-room"]
+    cmd = [executable_path, "host-room"]
     host = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if host.stderr is not None:
@@ -41,4 +45,10 @@ async def run_host():
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
+    args, rest = parser.parse_known_args()
+    if len(rest) > 0 and rest[0] == "--": # remove "--"
+        rest = rest[1:]
+    if "--release" in rest:
+        executable_path = "./target/release/netcanv"
+    subprocess.run(["cargo", "build", *rest]) # build executable
     asyncio.run(run_host())
