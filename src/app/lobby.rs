@@ -599,7 +599,7 @@ impl State {
          ));
       }
       Self::validate_nickname(tr, nickname)?;
-      let room_id = RoomId::try_from(room_id_str)?;
+      let room_id = room_id_str.parse()?;
       Ok(Peer::join(socket_system, nickname, relay_addr_str, room_id))
    }
 
