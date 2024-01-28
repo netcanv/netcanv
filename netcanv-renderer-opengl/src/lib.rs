@@ -7,17 +7,23 @@ mod rect_packer;
 mod rendering;
 mod shape_buffer;
 
-use std::fmt::Write;
+use std::ffi::CString;
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use cli::RendererCli;
-use glutin::dpi::PhysicalSize;
-use glutin::{
-   ContextBuilder, ContextWrapper, GlProfile, GlRequest, NotCurrent, PossiblyCurrent,
-   WindowedContext,
+use glutin::config::{Config, ConfigTemplateBuilder, GlConfig};
+use glutin::context::{
+   ContextApi, ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext,
 };
+use glutin::display::{GetGlDisplay, GlDisplay};
+use glutin::prelude::*;
+use glutin::surface::{Surface, WindowSurface};
+use glutin_winit::{DisplayBuilder, GlWindow};
 use netcanv_renderer::paws::Ui;
+use raw_window_handle::HasRawWindowHandle;
 pub use winit;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
@@ -27,8 +33,10 @@ pub use crate::image::Image;
 use rendering::RenderState;
 
 pub struct OpenGlBackend {
-   context: WindowedContext<PossiblyCurrent>,
-   context_size: PhysicalSize<u32>,
+   context: PossiblyCurrentContext,
+   surface: Surface<WindowSurface>,
+   window: Window,
+   window_size: PhysicalSize<u32>,
    pub(crate) gl: Rc<glow::Context>,
    state: RenderState,
 }
@@ -37,58 +45,50 @@ impl OpenGlBackend {
    fn build_context(
       window_builder: WindowBuilder,
       event_loop: &EventLoop<()>,
-   ) -> anyhow::Result<ContextWrapper<NotCurrent, Window>> {
-      struct Configuration {
-         msaa: u16,
-         error: String,
-      }
-      let mut attempted_configurations = Vec::new();
-      let mut successful_configuration = None;
+   ) -> anyhow::Result<(NotCurrentContext, Config, Window)> {
+      let template = ConfigTemplateBuilder::new().with_multisampling(8);
 
-      // Multiply MSAA value by 2, because it's divided by 2 before construction.
-      // This gives us a maximum MSAA value of 8, and minimum of 0.
-      let mut msaa: u16 = 8 * 2;
-      while msaa > 0 {
-         let mut context = ContextBuilder::new()
-            .with_gl(GlRequest::Latest)
-            .with_gl_profile(GlProfile::Core)
-            .with_vsync(false)
-            .with_multisampling(msaa);
-         if msaa > 0 {
-            msaa /= 2;
-            context = context.with_multisampling(msaa);
-         }
+      // Passing window_builder is required by Windows.
+      // On Android, it should be passed later, but because we don't care about Android, we can take
+      // a shortcut.
+      let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
 
-         match context.build_windowed(window_builder.clone(), event_loop) {
-            Ok(ok) => {
-               successful_configuration = Some(ok);
-               break;
-            }
-            Err(error) => {
-               attempted_configurations.push(Configuration {
-                  msaa,
-                  error: error.to_string(),
-               });
-            }
-         }
-      }
+      let (window, gl_config) = display_builder
+         .build(&event_loop, template, |configs| {
+            configs
+               .reduce(|accum, config| {
+                  // Find the config with the maximum number of samples
+                  if config.num_samples() > accum.num_samples() {
+                     config
+                  } else {
+                     accum
+                  }
+               })
+               .unwrap()
+         })
+         .map_err(|_| anyhow::anyhow!("Failed to create OpenGL window"))?;
 
-      if let Some(configuration) = successful_configuration {
-         Ok(configuration)
-      } else {
-         let mut error_message = String::from(
-            "Failed to create OpenGL context.\nTried the following configurations, none of which seem to be supported:\n",
-         );
-         for Configuration { msaa, error } in &attempted_configurations {
-            let _ = writeln!(
-               error_message,
-               " - Multisampling: {:?}; failed with: '{}'",
-               msaa, error
-            );
-         }
-         error_message.push_str("Try updating your graphics drivers. If that doesn't help, NetCanv is too new to run on your hardware!");
-         anyhow::bail!(error_message)
-      }
+      let raw_window_handle = window.as_ref().map(|window| window.raw_window_handle());
+
+      let gl_display = gl_config.display();
+
+      // Default modern OpenGL core
+      let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
+
+      // In case if modern OpenGL isn't present, fallback to OpenGL ES
+      let fallback_context_attributes = ContextAttributesBuilder::new()
+         .with_context_api(ContextApi::Gles(None))
+         .build(raw_window_handle);
+
+      let not_current_gl_context = unsafe {
+         gl_display
+            .create_context(&gl_config, &context_attributes)
+            .or_else(|_| gl_display.create_context(&gl_config, &fallback_context_attributes))
+      }?;
+
+      let window = window.ok_or(anyhow::anyhow!("Failed to create OpenGL window"))?;
+
+      Ok((not_current_gl_context, gl_config, window))
    }
 
    /// Creates a new OpenGL renderer.
@@ -97,15 +97,26 @@ impl OpenGlBackend {
       event_loop: &EventLoop<()>,
       _: &RendererCli,
    ) -> anyhow::Result<Self> {
-      let context = Self::build_context(window_builder, event_loop)?;
-      let context = unsafe { context.make_current().unwrap() };
+      let (context, gl_config, window) = Self::build_context(window_builder, event_loop)?;
+      let window_size = window.inner_size();
+
+      let attributes = window.build_surface_attributes(<_>::default());
+      let surface = unsafe { gl_config.display().create_window_surface(&gl_config, &attributes) }?;
+
+      let context = context.make_current(&surface)?;
+
       let gl = unsafe {
-         glow::Context::from_loader_function(|name| context.get_proc_address(name) as *const _)
+         glow::Context::from_loader_function(|name| {
+            let name = CString::new(name).unwrap();
+            gl_config.display().get_proc_address(&name) as *const _
+         })
       };
       let gl = Rc::new(gl);
       Ok(Self {
-         context_size: context.window().inner_size(),
          context,
+         surface,
+         window,
+         window_size,
          state: RenderState::new(Rc::clone(&gl)),
          gl,
       })
@@ -113,7 +124,21 @@ impl OpenGlBackend {
 
    /// Returns the window.
    pub fn window(&self) -> &Window {
-      self.context.window()
+      &self.window
+   }
+
+   /// Resize the window.
+   pub fn resize(&self, size: PhysicalSize<u32>) {
+      self.surface.resize(
+         &self.context,
+         NonZeroU32::new(size.width).unwrap(),
+         NonZeroU32::new(size.height).unwrap(),
+      );
+   }
+
+   /// Swap buffers.
+   pub fn swap_buffers(&self) -> glutin::error::Result<()> {
+      self.surface.swap_buffers(&self.context)
    }
 }
 
@@ -125,12 +150,12 @@ pub trait UiRenderFrame {
 impl UiRenderFrame for Ui<OpenGlBackend> {
    fn render_frame(&mut self, callback: impl FnOnce(&mut Self)) -> anyhow::Result<()> {
       let window_size = self.window().inner_size();
-      if self.context_size != window_size {
-         self.context.resize(window_size);
+      if self.window_size != window_size {
+         self.resize(window_size);
       }
       self.state.viewport(window_size.width, window_size.height);
       callback(self);
-      self.context.swap_buffers()?;
+      self.swap_buffers()?;
       Ok(())
    }
 }
