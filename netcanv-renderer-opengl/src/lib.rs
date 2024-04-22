@@ -128,7 +128,8 @@ impl OpenGlBackend {
    }
 
    /// Resize the window.
-   pub fn resize(&self, size: PhysicalSize<u32>) {
+   pub fn resize(&mut self, size: PhysicalSize<u32>) {
+      self.window_size = size;
       self.surface.resize(
          &self.context,
          NonZeroU32::new(size.width).unwrap(),
