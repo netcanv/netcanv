@@ -3,9 +3,9 @@ use netcanv_renderer::paws::{AlignH, AlignV, Color, Layout, Point};
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
+use crate::backend::winit::keyboard::Key;
 use crate::common::ColorMath;
 use crate::config::config;
-use crate::keymap::KeyBinding;
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{view, ColorPicker, ColorPickerArgs};
 use crate::viewport::Viewport;
@@ -39,8 +39,8 @@ impl Tool for EyedropperTool {
       &self.icon
    }
 
-   fn key_shortcut(&self) -> KeyBinding {
-      config().keymap.tools.eyedropper
+   fn key_shortcut(&self) -> Key {
+      config().keymap.tools.eyedropper.clone()
    }
 
    fn process_paint_canvas_input(

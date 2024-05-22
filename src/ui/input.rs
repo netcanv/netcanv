@@ -2,11 +2,13 @@
 
 use instant::Instant;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr};
 
 use crate::backend::winit::dpi::PhysicalPosition;
-pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
-use crate::backend::winit::event::{KeyboardInput, WindowEvent};
+pub use crate::backend::winit::event::{ElementState, MouseButton};
+use crate::backend::winit::event::{KeyEvent, WindowEvent};
+use crate::backend::winit::keyboard::{Key, NamedKey};
 use crate::backend::winit::window::{CursorIcon, Window};
 use netcanv_renderer::paws::{point, vector, Point, Vector};
 use serde::de::Visitor;
@@ -14,7 +16,6 @@ use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
 const MOUSE_BUTTON_COUNT: usize = 8;
-const KEY_CODE_COUNT: usize = 256;
 
 /// Input state.
 pub struct Input {
@@ -37,8 +38,8 @@ pub struct Input {
    // keyboard input
    char_buffer: Vec<char>,
 
-   key_just_typed: [bool; KEY_CODE_COUNT],
-   key_is_down: [bool; KEY_CODE_COUNT],
+   key_just_typed: HashMap<Key, bool>,
+   key_is_down: HashMap<Key, bool>,
 
    // time
    time_origin: Instant,
@@ -64,8 +65,8 @@ impl Input {
          cursor: CursorIcon::Default,
 
          char_buffer: Vec::new(),
-         key_just_typed: [false; KEY_CODE_COUNT],
-         key_is_down: [false; KEY_CODE_COUNT],
+         key_just_typed: HashMap::new(),
+         key_is_down: HashMap::new(),
 
          time_origin: Instant::now(),
       }
@@ -170,31 +171,23 @@ impl Input {
    }
 
    /// Returns whether the provided key was just typed.
-   pub fn key_just_typed(&self, key: VirtualKeyCode) -> bool {
-      if let Some(i) = Self::key_index(key) {
-         self.key_just_typed[i]
-      } else {
-         false
-      }
+   pub fn key_just_typed(&self, key: Key) -> bool {
+      self.key_just_typed.get(&key).is_some_and(|b| *b == true)
    }
 
    /// Returns wheter the provided key is down
-   pub fn key_is_down(&self, key: VirtualKeyCode) -> bool {
-      if let Some(i) = Self::key_index(key) {
-         self.key_is_down[i]
-      } else {
-         false
-      }
+   pub fn key_is_down(&self, key: Key) -> bool {
+      self.key_is_down.get(&key).is_some_and(|b| *b == true)
    }
 
    /// Returns whether the Ctrl key is being held down.
    pub fn ctrl_is_down(&self) -> bool {
-      self.key_is_down(VirtualKeyCode::LControl) || self.key_is_down(VirtualKeyCode::RControl)
+      self.key_is_down(Key::Named(NamedKey::Control))
    }
 
    /// Returns whether the Shift key is being held down.
    pub fn shift_is_down(&self) -> bool {
-      self.key_is_down(VirtualKeyCode::LShift) || self.key_is_down(VirtualKeyCode::RShift)
+      self.key_is_down(Key::Named(NamedKey::Shift))
    }
 
    /// Returns the time elapsed since this `Input` was created, in seconds.
@@ -235,17 +228,25 @@ impl Input {
             }
          }
 
-         WindowEvent::ReceivedCharacter(c) => self.char_buffer.push(*c),
-
          WindowEvent::KeyboardInput {
-            input:
-               KeyboardInput {
+            event:
+               KeyEvent {
                   state,
-                  virtual_keycode: Some(key),
+                  logical_key,
+                  text,
                   ..
                },
             ..
-         } => self.process_keyboard_input(*key, *state),
+         } => {
+            if *state == ElementState::Pressed {
+               if let Some(text) = text {
+                  let chars: Vec<char> = text.chars().collect();
+                  self.char_buffer.extend_from_slice(&chars);
+               }
+            }
+
+            self.process_keyboard_input(logical_key.clone(), *state)
+         }
 
          _ => (),
       }
@@ -268,7 +269,7 @@ impl Input {
          self.previous_cursor = self.cursor;
          window.set_cursor_icon(self.cursor);
       }
-      for state in &mut self.key_just_typed {
+      for (_, state) in &mut self.key_just_typed {
          *state = false;
       }
       self.char_buffer.clear();
@@ -282,6 +283,7 @@ impl Input {
          MouseButton::Right => 1,
          MouseButton::Middle => 2,
          MouseButton::Other(x) => 3 + x as usize,
+         MouseButton::Back | MouseButton::Forward => 99, // we don't care about those
       };
 
       if i < MOUSE_BUTTON_COUNT {
@@ -308,27 +310,15 @@ impl Input {
       }
    }
 
-   /// Returns the numeric index of the key code, or `None` if the key code is not supported.
-   fn key_index(key: VirtualKeyCode) -> Option<usize> {
-      let i = key as usize;
-      if i < KEY_CODE_COUNT {
-         Some(i)
-      } else {
-         None
-      }
-   }
-
    /// Processes a keyboard input event.
-   fn process_keyboard_input(&mut self, key: VirtualKeyCode, state: ElementState) {
-      if let Some(i) = Self::key_index(key) {
-         if state == ElementState::Pressed {
-            self.key_just_typed[i] = true;
-            self.key_is_down[i] = true;
-         }
+   fn process_keyboard_input(&mut self, key: Key, state: ElementState) {
+      if state == ElementState::Pressed {
+         self.key_just_typed.insert(key.clone(), true);
+         self.key_is_down.insert(key.clone(), true);
+      }
 
-         if state == ElementState::Released {
-            self.key_is_down[i] = false;
-         }
+      if state == ElementState::Released {
+         self.key_is_down.insert(key.clone(), false);
       }
    }
 }
@@ -376,11 +366,11 @@ impl BasicAction for MouseButton {
    }
 }
 
-impl BasicAction for VirtualKeyCode {
+impl BasicAction for Key {
    type Result = bool;
 
    fn check(&self, input: &Input) -> Self::Result {
-      input.key_just_typed(*self)
+      input.key_just_typed(self.clone())
    }
 }
 

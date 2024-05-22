@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 use crate::backend::winit::window::CursorIcon;
+use crate::backend::winit::keyboard::{Key, NamedKey};
 use netcanv_renderer::Font as FontTrait;
 use paws::{point, vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 
@@ -374,7 +375,7 @@ impl TextField {
          // Most of these keybindings don't use the action system, as it would be quite cumbersome
          // and repetitive to represent all the possible textbox actions using it.
 
-         if input.key_just_typed(VirtualKeyCode::Left) {
+         if input.key_just_typed(Key::Named(NamedKey::ArrowLeft)) {
             self.reset_blink(input);
 
             if input.ctrl_is_down() {
@@ -384,7 +385,7 @@ impl TextField {
             }
          }
 
-         if input.key_just_typed(VirtualKeyCode::Right) {
+         if input.key_just_typed(Key::Named(NamedKey::ArrowRight)) {
             self.reset_blink(input);
 
             if input.ctrl_is_down() {
@@ -394,29 +395,29 @@ impl TextField {
             }
          }
 
-         if input.key_just_typed(VirtualKeyCode::Home) {
+         if input.key_just_typed(Key::Named(NamedKey::Home)) {
             self.selection.move_to(TextPosition(0));
             self.reset_blink(input);
          }
 
-         if input.key_just_typed(VirtualKeyCode::End) {
+         if input.key_just_typed(Key::Named(NamedKey::End)) {
             self.selection.move_to(TextPosition(self.text.len()));
             self.reset_blink(input);
          }
 
-         if input.action(config().keymap.edit.select_all) == (true, true) {
+         if input.action(config().keymap.edit.select_all.clone()) == (true, true) {
             self.selection.anchor = TextPosition(0);
             self.selection.cursor = TextPosition(self.text.len());
          }
 
-         if input.action(config().keymap.edit.copy) == (true, true) {
+         if input.action(config().keymap.edit.copy.clone()) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
             );
          }
 
-         if input.action(config().keymap.edit.paste) == (true, true) {
+         if input.action(config().keymap.edit.paste.clone()) == (true, true) {
             if let Ok(clipboard) = clipboard::paste_string() {
                let clipboard = clipboard.replace('\n', " ");
                let start = self.selection.start();
@@ -425,7 +426,7 @@ impl TextField {
             }
          }
 
-         if input.action(config().keymap.edit.cut) == (true, true) {
+         if input.action(config().keymap.edit.cut.clone()) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
@@ -433,8 +434,7 @@ impl TextField {
             self.backspace();
          }
 
-         // NB: This is actually backspace, but the winit enum has a misnomer.
-         if input.key_just_typed(VirtualKeyCode::Back) {
+         if input.key_just_typed(Key::Named(NamedKey::Backspace)) {
             if input.ctrl_is_down() {
                // Simulate the shift key being held down while moving to the word on the left, so as
                // to select the word to the left and then backspace it.
@@ -443,7 +443,7 @@ impl TextField {
             self.backspace();
          }
 
-         if input.key_just_typed(VirtualKeyCode::Delete) {
+         if input.key_just_typed(Key::Named(NamedKey::Delete)) {
             if input.ctrl_is_down() {
                // Similar to backspace, simulate the shift key being held down, but this time
                // while moving over to the right.
@@ -452,7 +452,7 @@ impl TextField {
             self.delete();
          }
 
-         if input.key_just_typed(VirtualKeyCode::Return) {
+         if input.key_just_typed(Key::Named(NamedKey::Enter)) {
             process_result.done = true;
          }
 

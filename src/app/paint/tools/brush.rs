@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use crate::backend::winit::event::MouseButton;
 use crate::config::config;
-use crate::keymap::KeyBinding;
 use crate::Error;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
@@ -17,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
+use crate::backend::winit::keyboard::Key;
 use crate::common::{deserialize_bincode, lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{
@@ -131,8 +131,8 @@ impl Tool for BrushTool {
       &self.icon
    }
 
-   fn key_shortcut(&self) -> KeyBinding {
-      config().keymap.tools.brush
+   fn key_shortcut(&self) -> Key {
+      config().keymap.tools.brush.clone()
    }
 
    /// Handles input and drawing to the paint canvas with the brush.
@@ -166,10 +166,10 @@ impl Tool for BrushTool {
          thickness_change += scroll.y * 2.0;
       }
 
-      if input.action(config().keymap.brush.decrease_thickness) == (true, true) {
+      if input.action(config().keymap.brush.decrease_thickness.clone()) == (true, true) {
          thickness_change -= 2.0;
       }
-      if input.action(config().keymap.brush.increase_thickness) == (true, true) {
+      if input.action(config().keymap.brush.increase_thickness.clone()) == (true, true) {
          thickness_change += 2.0;
       }
 

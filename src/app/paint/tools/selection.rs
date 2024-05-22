@@ -6,8 +6,8 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
+use crate::backend::winit::keyboard::Key;
 use crate::config::config;
-use crate::keymap::KeyBinding;
 use image::codecs::png::PngEncoder;
 use image::io::Reader;
 use image::{ColorType, ImageEncoder, ImageFormat, RgbaImage};
@@ -309,8 +309,8 @@ impl Tool for SelectionTool {
       &self.icons.tool
    }
 
-   fn key_shortcut(&self) -> KeyBinding {
-      config().keymap.tools.selection
+   fn key_shortcut(&self) -> Key {
+      config().keymap.tools.selection.clone()
    }
 
    /// When the tool is deactivated, the selection should be deselected.
@@ -325,7 +325,7 @@ impl Tool for SelectionTool {
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action(config().keymap.edit.delete) == (true, true) {
+      if input.action(config().keymap.edit.delete.clone()) == (true, true) {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
@@ -336,12 +336,12 @@ impl Tool for SelectionTool {
          return KeyShortcutAction::Success;
       }
 
-      if input.action(config().keymap.edit.copy) == (true, true) {
+      if input.action(config().keymap.edit.copy.clone()) == (true, true) {
          self.copy_to_clipboard(ui);
          return KeyShortcutAction::Success;
       }
 
-      if input.action(config().keymap.edit.cut) == (true, true) {
+      if input.action(config().keymap.edit.cut.clone()) == (true, true) {
          self.copy_to_clipboard(ui);
          self.selection.cancel();
          return KeyShortcutAction::Success;
@@ -357,7 +357,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action(config().keymap.edit.paste) == (true, true) {
+      if input.action(config().keymap.edit.paste.clone()) == (true, true) {
          tracing::info!("pasting image from clipboard");
          self.enqueue_paste_from_clipboard(viewport.pan());
       }

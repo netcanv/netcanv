@@ -1,12 +1,7 @@
 //! Keyboard shortcut mappings.
 
-use crate::backend::winit::event::VirtualKeyCode;
 use serde::{Deserialize, Serialize};
-
-use crate::ui::Modifier;
-
-/// A key binding with a modifier.
-pub type KeyBinding = (Modifier, VirtualKeyCode);
+use crate::backend::winit::keyboard::{Key, NamedKey};
 
 /// The key map.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -20,27 +15,27 @@ pub struct Keymap {
 /// The key map for common editing actions, such as copying and pasting.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct EditKeymap {
-   pub copy: KeyBinding,
-   pub cut: KeyBinding,
-   pub paste: KeyBinding,
-   pub delete: KeyBinding,
-   pub select_all: KeyBinding,
+   pub copy: Key,
+   pub cut: Key,
+   pub paste: Key,
+   pub delete: Key,
+   pub select_all: Key,
 }
 
 /// The key map for selecting tools.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ToolKeymap {
-   pub selection: KeyBinding,
-   pub brush: KeyBinding,
-   pub eyedropper: KeyBinding,
+   pub selection: Key,
+   pub brush: Key,
+   pub eyedropper: Key,
 }
 
 impl Default for ToolKeymap {
    fn default() -> Self {
       Self {
-         selection: (Modifier::NONE, VirtualKeyCode::Key1),
-         brush: (Modifier::NONE, VirtualKeyCode::Key2),
-         eyedropper: (Modifier::NONE, VirtualKeyCode::Key3),
+         selection: Key::Character("1".into()),
+         brush: Key::Character("2".into()),
+         eyedropper: Key::Character("3".into()),
       }
    }
 }
@@ -48,24 +43,24 @@ impl Default for ToolKeymap {
 /// The key mappings for the brush tool.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct BrushKeymap {
-   pub decrease_thickness: KeyBinding,
-   pub increase_thickness: KeyBinding,
+   pub decrease_thickness: Key,
+   pub increase_thickness: Key,
 }
 
 impl Default for Keymap {
    fn default() -> Self {
       Self {
          edit: EditKeymap {
-            copy: (Modifier::CTRL, VirtualKeyCode::C),
-            cut: (Modifier::CTRL, VirtualKeyCode::X),
-            paste: (Modifier::CTRL, VirtualKeyCode::V),
-            delete: (Modifier::NONE, VirtualKeyCode::Delete),
-            select_all: (Modifier::CTRL, VirtualKeyCode::A),
+            copy: Key::Character("C".into()),
+            cut: Key::Character("X".into()),
+            paste: Key::Character("V".into()),
+            delete: Key::Named(NamedKey::Delete),
+            select_all: Key::Character("A".into()),
          },
          tools: Default::default(),
          brush: BrushKeymap {
-            decrease_thickness: (Modifier::NONE, VirtualKeyCode::LBracket),
-            increase_thickness: (Modifier::NONE, VirtualKeyCode::RBracket),
+            decrease_thickness: Key::Character("[".into()),
+            increase_thickness: Key::Character("]".into()),
          },
       }
    }

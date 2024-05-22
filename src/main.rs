@@ -116,7 +116,9 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let (renderer, event_loop) = {
       profiling::scope!("init_renderer");
 
-      let event_loop = EventLoop::new();
+      let event_loop = EventLoop::new().map_err(|e| {
+         Error::CouldNotInitializeBackend { error: e.to_string() }
+      })?;
       let window_builder = {
          let b = WindowBuilder::new()
             .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
@@ -157,11 +159,8 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let assets = Box::new(Assets::new(ui.render(), color_scheme)?);
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
-   let mut app: Option<Box<dyn AppState>> = Some(boot::State::new(
-      cli,
-      assets,
-      Arc::clone(&socket_system),
-   ));
+   let mut app: Option<Box<dyn AppState>> =
+      Some(boot::State::new(cli, assets, Arc::clone(&socket_system)));
    let mut input = Input::new();
 
    // Initialize the clipboard because we now have a window handle and translation strings.
@@ -187,8 +186,9 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    profiling::finish_frame!();
 
-   event_loop.run(move |event, _, control_flow| {
-      *control_flow = ControlFlow::Poll;
+   // TODO: don't discard the result
+   event_loop.run(move |event, elwt| {
+      elwt.set_control_flow(ControlFlow::Poll);
 
       match event {
          Event::WindowEvent { event, .. } => {
@@ -202,7 +202,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
                   last_window_position = new_position;
                }
                WindowEvent::CloseRequested => {
-                  *control_flow = ControlFlow::Exit;
+                  elwt.exit();
                }
                _ => {
                   input.process_event(&event);
@@ -210,7 +210,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
             }
          }
 
-         Event::MainEventsCleared => {
+         Event::AboutToWait => {
             let window_size = ui.window().inner_size();
             if let Err(error) = ui.render_frame(|ui| {
                ui.root(
@@ -233,7 +233,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
             input.finish_frame(ui.window());
          }
 
-         Event::LoopDestroyed => {
+         Event::LoopExiting => {
             // This is a bit cursed, but works.
             Arc::clone(&socket_system).shutdown();
 
@@ -257,9 +257,11 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
             let _ = log_guards.take();
          }
 
-         _ => (),
+         _ => ()
       }
    });
+
+   Ok(())
 }
 
 async fn async_main() {

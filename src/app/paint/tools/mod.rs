@@ -4,8 +4,8 @@ use std::ops::Deref;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
+use crate::backend::winit::keyboard::Key;
 use crate::common::serialize_bincode;
-use crate::keymap::KeyBinding;
 use crate::net::peer::Peer;
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::view::View;
@@ -36,7 +36,7 @@ pub trait Tool {
    fn icon(&self) -> &Image;
 
    /// Returns the key shortcut for this tool.
-   fn key_shortcut(&self) -> KeyBinding;
+   fn key_shortcut(&self) -> Key;
 
    /// Called when the tool is selected.
    fn activate(&mut self) {}

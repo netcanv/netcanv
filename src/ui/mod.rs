@@ -4,6 +4,7 @@ use netcanv_renderer::paws::{self, vector, AlignH, AlignV, Color, Layout, Point,
 use netcanv_renderer::{Font as FontTrait, Image as ImageTrait, RenderBackend};
 
 use crate::backend::{Backend, Font, Image};
+use crate::backend::winit::keyboard::{Key, NamedKey};
 
 mod button;
 mod color_picker;
@@ -192,7 +193,8 @@ pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
 
    let mut had_focus = false;
 
-   match input.action((Modifier::SHIFT, VirtualKeyCode::Tab)) {
+   // TODO: Shift + TAB
+   match input.action(Key::Named(NamedKey::Tab)) {
       (true, true) => {
          for element in fields.iter_mut().rev() {
             process_focus_change!(had_focus, element);
