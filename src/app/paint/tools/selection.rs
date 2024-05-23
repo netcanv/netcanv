@@ -6,8 +6,8 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
-use crate::backend::winit::keyboard::Key;
 use crate::config::config;
+use crate::keymap::KeyBinding;
 use image::codecs::png::PngEncoder;
 use image::io::Reader;
 use image::{ColorType, ImageEncoder, ImageFormat, RgbaImage};
@@ -309,7 +309,7 @@ impl Tool for SelectionTool {
       &self.icons.tool
    }
 
-   fn key_shortcut(&self) -> Key {
+   fn key_shortcut(&self) -> KeyBinding {
       config().keymap.tools.selection.clone()
    }
 

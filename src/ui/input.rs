@@ -8,7 +8,8 @@ use std::ops::{BitAnd, BitOr};
 use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton};
 use crate::backend::winit::event::{KeyEvent, WindowEvent};
-use crate::backend::winit::keyboard::{Key, NamedKey};
+use crate::backend::winit::keyboard::{Key, ModifiersState};
+use crate::backend::winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 use crate::backend::winit::window::{CursorIcon, Window};
 use netcanv_renderer::paws::{point, vector, Point, Vector};
 use serde::de::Visitor;
@@ -40,6 +41,7 @@ pub struct Input {
 
    key_just_typed: HashMap<Key, bool>,
    key_is_down: HashMap<Key, bool>,
+   modifiers: ModifiersState,
 
    // time
    time_origin: Instant,
@@ -67,6 +69,7 @@ impl Input {
          char_buffer: Vec::new(),
          key_just_typed: HashMap::new(),
          key_is_down: HashMap::new(),
+         modifiers: ModifiersState::default(),
 
          time_origin: Instant::now(),
       }
@@ -175,19 +178,14 @@ impl Input {
       self.key_just_typed.get(&key).is_some_and(|b| *b == true)
    }
 
-   /// Returns wheter the provided key is down
-   pub fn key_is_down(&self, key: Key) -> bool {
-      self.key_is_down.get(&key).is_some_and(|b| *b == true)
-   }
-
    /// Returns whether the Ctrl key is being held down.
    pub fn ctrl_is_down(&self) -> bool {
-      self.key_is_down(Key::Named(NamedKey::Control))
+      self.modifiers.control_key()
    }
 
    /// Returns whether the Shift key is being held down.
    pub fn shift_is_down(&self) -> bool {
-      self.key_is_down(Key::Named(NamedKey::Shift))
+      self.modifiers.shift_key()
    }
 
    /// Returns the time elapsed since this `Input` was created, in seconds.
@@ -228,16 +226,13 @@ impl Input {
             }
          }
 
-         WindowEvent::KeyboardInput {
-            event:
-               KeyEvent {
-                  state,
-                  logical_key,
-                  text,
-                  ..
-               },
-            ..
-         } => {
+         WindowEvent::ModifiersChanged(new) => {
+            self.modifiers = new.state();
+         }
+
+         WindowEvent::KeyboardInput { event, .. } => {
+            let KeyEvent { state, text, .. } = event;
+
             if *state == ElementState::Pressed {
                if let Some(text) = text {
                   let chars: Vec<char> = text.chars().collect();
@@ -245,7 +240,7 @@ impl Input {
                }
             }
 
-            self.process_keyboard_input(logical_key.clone(), *state)
+            self.process_keyboard_input(event.key_without_modifiers(), *state)
          }
 
          _ => (),

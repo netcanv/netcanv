@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::backend::winit::event::MouseButton;
 use crate::config::config;
+use crate::keymap::KeyBinding;
 use crate::Error;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{
@@ -16,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
-use crate::backend::winit::keyboard::Key;
 use crate::common::{deserialize_bincode, lerp_point, ColorMath};
 use crate::paint_canvas::PaintCanvas;
 use crate::ui::{
@@ -131,7 +131,7 @@ impl Tool for BrushTool {
       &self.icon
    }
 
-   fn key_shortcut(&self) -> Key {
+   fn key_shortcut(&self) -> KeyBinding {
       config().keymap.tools.brush.clone()
    }
 
