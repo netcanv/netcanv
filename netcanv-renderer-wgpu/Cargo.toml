@@ -14,6 +14,6 @@ profiling.workspace = true
 tracing.workspace = true
 swash = "0.1.8"
 wgpu = "0.18.0"
-winit = { version = "0.28.6", features = ["serde"] }
+winit = { version = "0.29.15", features = ["serde", "rwh_05"] }
 
 netcanv-renderer = { path = "../netcanv-renderer" }
