@@ -116,8 +116,8 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let (renderer, event_loop) = {
       profiling::scope!("init_renderer");
 
-      let event_loop = EventLoop::new().map_err(|e| {
-         Error::CouldNotInitializeBackend { error: e.to_string() }
+      let event_loop = EventLoop::new().map_err(|e| Error::CouldNotInitializeBackend {
+         error: e.to_string(),
       })?;
       let window_builder = {
          let b = WindowBuilder::new()
@@ -186,82 +186,85 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
 
    profiling::finish_frame!();
 
-   // TODO: don't discard the result
-   event_loop.run(move |event, elwt| {
-      elwt.set_control_flow(ControlFlow::Poll);
+   event_loop
+      .run(move |event, elwt| {
+         elwt.set_control_flow(ControlFlow::Poll);
 
-      match event {
-         Event::WindowEvent { event, .. } => {
-            match event {
-               // Ignore resize event if window is maximized, and move event if position is lower than 0,
-               // because it isn't what we want, when saving window's size and position to config file.
-               WindowEvent::Resized(new_size) if !ui.window().is_maximized() => {
-                  last_window_size = new_size;
-               }
-               WindowEvent::Moved(new_position) if new_position.x >= 0 && new_position.y >= 0 => {
-                  last_window_position = new_position;
-               }
-               WindowEvent::CloseRequested => {
-                  elwt.exit();
-               }
-               _ => {
-                  input.process_event(&event);
+         match event {
+            Event::WindowEvent { event, .. } => {
+               match event {
+                  // Ignore resize event if window is maximized, and move event if position is lower than 0,
+                  // because it isn't what we want, when saving window's size and position to config file.
+                  WindowEvent::Resized(new_size) if !ui.window().is_maximized() => {
+                     last_window_size = new_size;
+                  }
+                  WindowEvent::Moved(new_position)
+                     if new_position.x >= 0 && new_position.y >= 0 =>
+                  {
+                     last_window_position = new_position;
+                  }
+                  WindowEvent::CloseRequested => {
+                     elwt.exit();
+                  }
+                  _ => {
+                     input.process_event(&event);
+                  }
                }
             }
-         }
 
-         Event::AboutToWait => {
-            let window_size = ui.window().inner_size();
-            if let Err(error) = ui.render_frame(|ui| {
-               ui.root(
-                  vector(window_size.width as f32, window_size.height as f32),
-                  Layout::Freeform,
-               );
-               let mut root_view = View::group_sized(ui);
-               view::layout::full_screen(&mut root_view);
+            Event::AboutToWait => {
+               let window_size = ui.window().inner_size();
+               if let Err(error) = ui.render_frame(|ui| {
+                  ui.root(
+                     vector(window_size.width as f32, window_size.height as f32),
+                     Layout::Freeform,
+                  );
+                  let mut root_view = View::group_sized(ui);
+                  view::layout::full_screen(&mut root_view);
 
-               input.set_cursor(CursorIcon::Default);
-               app.as_mut().unwrap().process(StateArgs {
-                  ui,
-                  input: &mut input,
-                  root_view,
-               });
-               app = Some(app.take().unwrap().next_state(ui.render()));
-            }) {
-               error!("render error: {}", error)
+                  input.set_cursor(CursorIcon::Default);
+                  app.as_mut().unwrap().process(StateArgs {
+                     ui,
+                     input: &mut input,
+                     root_view,
+                  });
+                  app = Some(app.take().unwrap().next_state(ui.render()));
+               }) {
+                  error!("render error: {}", error)
+               }
+               input.finish_frame(ui.window());
             }
-            input.finish_frame(ui.window());
-         }
 
-         Event::LoopExiting => {
-            // This is a bit cursed, but works.
-            Arc::clone(&socket_system).shutdown();
+            Event::LoopExiting => {
+               // This is a bit cursed, but works.
+               Arc::clone(&socket_system).shutdown();
 
-            let window = ui.window();
-            let position = last_window_position;
-            let size = last_window_size;
-            let maximized = window.is_maximized();
-            config::write(|config| {
-               config.window = Some(WindowConfig {
-                  x: position.x,
-                  y: position.y,
-                  width: size.width,
-                  height: size.height,
-                  maximized,
+               let window = ui.window();
+               let position = last_window_position;
+               let size = last_window_size;
+               let maximized = window.is_maximized();
+               config::write(|config| {
+                  config.window = Some(WindowConfig {
+                     x: position.x,
+                     y: position.y,
+                     width: size.width,
+                     height: size.height,
+                     maximized,
+                  });
                });
-            });
 
-            let app = app.take().unwrap();
-            app.exit();
+               let app = app.take().unwrap();
+               app.exit();
 
-            let _ = log_guards.take();
+               let _ = log_guards.take();
+            }
+
+            _ => (),
          }
-
-         _ => ()
-      }
-   });
-
-   Ok(())
+      })
+      .map_err(|e| Error::CouldNotInitializeBackend {
+         error: e.to_string(),
+      })
 }
 
 async fn async_main() {
