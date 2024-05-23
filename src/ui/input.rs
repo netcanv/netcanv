@@ -414,7 +414,7 @@ pub trait Action {
 
 impl Input {
    /// Checks the input state against an action.
-   pub fn action<A>(&self, action: A) -> A::Result
+   pub fn action<A>(&self, action: &A) -> A::Result
    where
       A: Action,
    {

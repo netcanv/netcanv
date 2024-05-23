@@ -193,7 +193,7 @@ pub fn chain_focus(input: &Input, fields: &mut [&mut dyn Focus]) {
 
    let mut had_focus = false;
 
-   match input.action((Modifier::SHIFT, Key::Named(NamedKey::Tab))) {
+   match input.action(&(Modifier::SHIFT, Key::Named(NamedKey::Tab))) {
       (true, true) => {
          for element in fields.iter_mut().rev() {
             process_focus_change!(had_focus, element);

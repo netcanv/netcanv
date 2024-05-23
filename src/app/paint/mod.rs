@@ -358,7 +358,7 @@ impl State {
          .flatten();
 
       self.toolbar.with_each_tool::<(), _>(|tool_id, tool| {
-         if input.action(tool.key_shortcut()) == (true, true) {
+         if input.action(&tool.key_shortcut()) == (true, true) {
             switch_tool = Some(tool_id);
          }
          ControlFlow::Continue
@@ -380,7 +380,7 @@ impl State {
 
       // Panning and zooming
 
-      match input.action(MouseButton::Middle) {
+      match input.action(&MouseButton::Middle) {
          (true, ButtonState::Pressed) if ui.hover(input) => self.panning = true,
          (_, ButtonState::Released) => self.panning = false,
          _ => (),
@@ -393,7 +393,7 @@ impl State {
          let position = format!("{}, {}", (pan.x / 256.0).floor(), (pan.y / 256.0).floor());
          self.show_tip(&position, Duration::from_millis(100));
       }
-      if let (true, Some(scroll)) = input.action(MouseScroll) {
+      if let (true, Some(scroll)) = input.action(&MouseScroll) {
          self.viewport.zoom_in(scroll.y);
          self.show_tip(
             &format!("{:.0}%", self.viewport.zoom() * 100.0),

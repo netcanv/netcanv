@@ -111,7 +111,7 @@ impl Button {
 
       ui.outline_rounded(colors.outline, *corner_radius, 1.0);
       if ui.hover(input) {
-         let fill_color = match input.action(MouseButton::Left) {
+         let fill_color = match input.action(&MouseButton::Left) {
             (true, ButtonState::Pressed | ButtonState::Down) => colors.pressed,
             _ => colors.hover,
          };

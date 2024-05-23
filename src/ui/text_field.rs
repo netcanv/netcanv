@@ -349,7 +349,7 @@ impl TextField {
          done: false,
       };
 
-      if input.action(MouseButton::Left) == (true, ButtonState::Pressed) {
+      if input.action(&MouseButton::Left) == (true, ButtonState::Pressed) {
          let was_focused = self.focused;
          self.focused = ui.hover(input);
          if self.focused {
@@ -361,7 +361,7 @@ impl TextField {
             process_result.unfocused = true;
          }
       }
-      if input.action(MouseButton::Left) == (true, ButtonState::Down) && self.focused {
+      if input.action(&MouseButton::Left) == (true, ButtonState::Down) && self.focused {
          self.reset_blink(input);
          let position = self.get_text_position_from_mouse(ui, input, font);
          self.selection.cursor = position;
@@ -405,19 +405,19 @@ impl TextField {
             self.reset_blink(input);
          }
 
-         if input.action(config().keymap.edit.select_all.clone()) == (true, true) {
+         if input.action(&config().keymap.edit.select_all) == (true, true) {
             self.selection.anchor = TextPosition(0);
             self.selection.cursor = TextPosition(self.text.len());
          }
 
-         if input.action(config().keymap.edit.copy.clone()) == (true, true) {
+         if input.action(&config().keymap.edit.copy) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result
             );
          }
 
-         if input.action(config().keymap.edit.paste.clone()) == (true, true) {
+         if input.action(&config().keymap.edit.paste) == (true, true) {
             if let Ok(clipboard) = clipboard::paste_string() {
                let clipboard = clipboard.replace('\n', " ");
                let start = self.selection.start();
@@ -426,7 +426,7 @@ impl TextField {
             }
          }
 
-         if input.action(config().keymap.edit.cut.clone()) == (true, true) {
+         if input.action(&config().keymap.edit.cut) == (true, true) {
             catch!(
                clipboard::copy_string(self.selection_text().to_owned()),
                return process_result

@@ -325,7 +325,7 @@ impl Tool for SelectionTool {
       _paint_canvas: &mut PaintCanvas,
       _viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action(config().keymap.edit.delete.clone()) == (true, true) {
+      if input.action(&config().keymap.edit.delete) == (true, true) {
          if self.selection.rect.is_some() {
             self.selection.cancel();
             catch!(
@@ -336,12 +336,12 @@ impl Tool for SelectionTool {
          return KeyShortcutAction::Success;
       }
 
-      if input.action(config().keymap.edit.copy.clone()) == (true, true) {
+      if input.action(&config().keymap.edit.copy) == (true, true) {
          self.copy_to_clipboard(ui);
          return KeyShortcutAction::Success;
       }
 
-      if input.action(config().keymap.edit.cut.clone()) == (true, true) {
+      if input.action(&config().keymap.edit.cut) == (true, true) {
          self.copy_to_clipboard(ui);
          self.selection.cancel();
          return KeyShortcutAction::Success;
@@ -357,7 +357,7 @@ impl Tool for SelectionTool {
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) -> KeyShortcutAction {
-      if input.action(config().keymap.edit.paste.clone()) == (true, true) {
+      if input.action(&config().keymap.edit.paste) == (true, true) {
          tracing::info!("pasting image from clipboard");
          self.enqueue_paste_from_clipboard(viewport.pan());
       }
@@ -439,7 +439,7 @@ impl Tool for SelectionTool {
       });
 
       // Check if the left mouse button was pressed, and if so, start selecting.
-      match input.action(MouseButton::Left) {
+      match input.action(&MouseButton::Left) {
          (true, ButtonState::Pressed) => {
             if self.potential_action == Action::Selecting {
                // Before we erase the old data, draw the capture back onto the canvas.

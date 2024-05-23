@@ -189,14 +189,14 @@ impl WindowManager {
          // clicked the close button.
          let mouse_clicked_outside_window = mouse_clicked && !window.view.has_mouse(input);
          let close_button_clicked = hit_test == HitTest::CloseButton
-            && input.action(MouseButton::Left) == (true, ButtonState::Released);
+            && input.action(&MouseButton::Left) == (true, ButtonState::Released);
          if (mouse_clicked_outside_window && !window.pinned) || close_button_clicked {
             window.close_requested = true;
          }
 
          // If the pin button was clicked, toggle the window's pin state.
          if hit_test == HitTest::PinButton
-            && input.action(MouseButton::Left) == (true, ButtonState::Released)
+            && input.action(&MouseButton::Left) == (true, ButtonState::Released)
          {
             window.pinned = !window.pinned;
          }
@@ -209,7 +209,7 @@ impl WindowManager {
          }
 
          // Perform dragging if the mouse is over the draggable area.
-         match input.action(MouseButton::Left) {
+         match input.action(&MouseButton::Left) {
             (true, ButtonState::Pressed) if hit_test == HitTest::Draggable => {
                window.dragging = true;
                window.pinned = true;

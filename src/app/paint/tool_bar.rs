@@ -212,7 +212,7 @@ impl Toolbar {
          );
 
          // Snap to the correct position if the mouse was released.
-         if input.action(MouseButton::Left) == (true, ButtonState::Released)
+         if input.action(&MouseButton::Left) == (true, ButtonState::Released)
             && new_position != position
          {
             config::write(|config| {
