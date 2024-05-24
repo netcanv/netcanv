@@ -2,7 +2,7 @@
 
 use instant::Instant;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::ops::{BitAnd, BitOr};
 
 use crate::backend::winit::dpi::PhysicalPosition;
@@ -39,8 +39,8 @@ pub struct Input {
    // keyboard input
    char_buffer: Vec<char>,
 
-   key_just_typed: HashMap<Key, bool>,
-   key_is_down: HashMap<Key, bool>,
+   key_just_typed: HashSet<Key>,
+   key_is_down: HashSet<Key>,
    modifiers: ModifiersState,
 
    // time
@@ -67,8 +67,8 @@ impl Input {
          cursor: CursorIcon::Default,
 
          char_buffer: Vec::new(),
-         key_just_typed: HashMap::new(),
-         key_is_down: HashMap::new(),
+         key_just_typed: HashSet::new(),
+         key_is_down: HashSet::new(),
          modifiers: ModifiersState::default(),
 
          time_origin: Instant::now(),
@@ -175,7 +175,7 @@ impl Input {
 
    /// Returns whether the provided key was just typed.
    pub fn key_just_typed(&self, key: Key) -> bool {
-      self.key_just_typed.get(&key).is_some_and(|b| *b == true)
+      self.key_just_typed.contains(&key)
    }
 
    /// Returns whether the Ctrl key is being held down.
@@ -264,9 +264,7 @@ impl Input {
          self.previous_cursor = self.cursor;
          window.set_cursor_icon(self.cursor);
       }
-      for (_, state) in &mut self.key_just_typed {
-         *state = false;
-      }
+      self.key_just_typed.clear();
       self.char_buffer.clear();
    }
 
@@ -308,12 +306,12 @@ impl Input {
    /// Processes a keyboard input event.
    fn process_keyboard_input(&mut self, key: Key, state: ElementState) {
       if state == ElementState::Pressed {
-         self.key_just_typed.insert(key.clone(), true);
-         self.key_is_down.insert(key.clone(), true);
+         self.key_just_typed.insert(key.clone());
+         self.key_is_down.insert(key.clone());
       }
 
       if state == ElementState::Released {
-         self.key_is_down.insert(key.clone(), false);
+         self.key_is_down.remove(&key);
       }
    }
 }
