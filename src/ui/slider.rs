@@ -64,7 +64,7 @@ impl Slider {
 
       ui.push((width, ui.height()), Layout::Freeform);
 
-      match input.action(&MouseButton::Left) {
+      match input.action(MouseButton::Left) {
          (true, ButtonState::Pressed) if ui.hover(input) => self.sliding = true,
          (_, ButtonState::Released) => self.sliding = false,
          _ => (),
@@ -75,7 +75,7 @@ impl Slider {
       }
 
       if ui.hover(input) {
-         if let (true, Some(scroll)) = input.action(&MouseScroll) {
+         if let (true, Some(scroll)) = input.action(MouseScroll) {
             let scroll_amount = match self.step {
                SliderStep::Discrete(increment) => increment / self.step_count() as f32 * 2.0,
                SliderStep::Smooth => 8.0 / width,

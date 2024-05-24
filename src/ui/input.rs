@@ -414,7 +414,7 @@ pub trait Action {
 
 impl Input {
    /// Checks the input state against an action.
-   pub fn action<A>(&self, action: &A) -> A::Result
+   pub fn action<A>(&self, action: A) -> A::Result
    where
       A: Action,
    {
@@ -545,6 +545,18 @@ where
 
    fn check(&self, input: &Input) -> Self::Result {
       (Modifier::from_input(input) == self.0, self.1.check(input))
+   }
+}
+
+impl<A> Action for &(Modifier, A)
+where
+   A: BasicAction,
+{
+   /// See the other implementation.
+   type Result = (bool, A::Result);
+
+   fn check(&self, input: &Input) -> Self::Result {
+      (*self).check(input)
    }
 }
 

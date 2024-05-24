@@ -89,7 +89,7 @@ impl Expand {
       ui.push((width, ui.height()), Layout::Freeform);
       if ui.hover(input) {
          let pressed = matches!(
-            input.action(&MouseButton::Left),
+            input.action(MouseButton::Left),
             (true, ButtonState::Pressed | ButtonState::Down)
          );
          // underline
@@ -109,7 +109,7 @@ impl Expand {
             );
          });
          // events
-         if input.action(&MouseButton::Left) == (true, ButtonState::Released) {
+         if input.action(MouseButton::Left) == (true, ButtonState::Released) {
             self.expanded = !self.expanded;
             result.just_clicked = true;
             if self.expanded {

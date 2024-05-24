@@ -455,7 +455,7 @@ impl PickerWindow {
          );
       });
 
-      match input.action(&MouseButton::Left) {
+      match input.action(MouseButton::Left) {
          (true, ButtonState::Pressed) if ui.hover(input) => self.slider_sliding = true,
          (_, ButtonState::Released) => self.slider_sliding = false,
          _ => (),
@@ -505,7 +505,7 @@ impl PickerWindow {
          ui.render().outline_circle(point(x, y), radius, Color::WHITE, 1.0);
       });
 
-      match input.action(&MouseButton::Left) {
+      match input.action(MouseButton::Left) {
          (true, ButtonState::Pressed) if ui.hover(input) => self.canvas_sliding = true,
          (_, ButtonState::Released) => self.canvas_sliding = false,
          _ => (),

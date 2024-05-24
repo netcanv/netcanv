@@ -149,7 +149,7 @@ impl Tool for BrushTool {
    ) {
       // Read input.
 
-      match input.action(&[MouseButton::Left, MouseButton::Right]) {
+      match input.action([MouseButton::Left, MouseButton::Right]) {
          (true, [ButtonState::Pressed, _]) => self.state = BrushState::Drawing,
          (true, [_, ButtonState::Pressed]) => self.state = BrushState::Erasing,
          (_, [ButtonState::Released, _] | [_, ButtonState::Released]) => {
@@ -162,7 +162,7 @@ impl Tool for BrushTool {
 
       let mut thickness_change = 0.0;
 
-      if let (true, Some(scroll)) = input.action(&(Modifier::CTRL, MouseScroll)) {
+      if let (true, Some(scroll)) = input.action((Modifier::CTRL, MouseScroll)) {
          thickness_change += scroll.y * 2.0;
       }
 
