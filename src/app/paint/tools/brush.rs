@@ -28,17 +28,24 @@ use crate::viewport::Viewport;
 use super::{Net, Tool, ToolArgs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BrushType {
+   Brush,
+   Eraser,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BrushState {
    Idle,
    Drawing,
-   Erasing,
 }
 
 pub struct BrushTool {
    icon: Image,
 
    state: BrushState,
-   thickness_slider: Slider,
+   tool: BrushType,
+   brush_thickness_slider: Slider,
+   eraser_thickness_slider: Slider,
 
    mouse_position: Point,
    previous_mouse_position: Point,
@@ -49,13 +56,26 @@ pub struct BrushTool {
 
 impl BrushTool {
    const MAX_THICKNESS: f32 = 64.0;
+   const DEFAULT_THICKNESS: f32 = 4.0;
 
    /// Creates an instance of the brush tool.
    pub fn new(renderer: &mut Backend) -> Self {
       Self {
          icon: Assets::load_svg(renderer, include_bytes!("../../../assets/icons/brush.svg")),
          state: BrushState::Idle,
-         thickness_slider: Slider::new(4.0, 1.0, Self::MAX_THICKNESS, SliderStep::Discrete(1.0)),
+         tool: BrushType::Brush,
+         brush_thickness_slider: Slider::new(
+            Self::DEFAULT_THICKNESS,
+            1.0,
+            Self::MAX_THICKNESS,
+            SliderStep::Discrete(1.0),
+         ),
+         eraser_thickness_slider: Slider::new(
+            Self::DEFAULT_THICKNESS,
+            1.0,
+            Self::MAX_THICKNESS,
+            SliderStep::Discrete(1.0),
+         ),
          mouse_position: point(0.0, 0.0),
          previous_mouse_position: point(0.0, 0.0),
          stroke_points: Vec::new(),
@@ -65,7 +85,24 @@ impl BrushTool {
 
    /// Returns the brush thickness.
    fn thickness(&self) -> f32 {
-      self.thickness_slider.value()
+      match self.tool {
+         BrushType::Brush => self.brush_thickness_slider.value(),
+         BrushType::Eraser => self.eraser_thickness_slider.value(),
+      }
+   }
+
+   fn set_thickness(&mut self, thickness: f32) {
+      match self.tool {
+         BrushType::Brush => self.brush_thickness_slider.set_value(thickness),
+         BrushType::Eraser => self.eraser_thickness_slider.set_value(thickness),
+      }
+   }
+
+   fn thickness_slider(&mut self) -> &mut Slider {
+      match self.tool {
+         BrushType::Brush => &mut self.brush_thickness_slider,
+         BrushType::Eraser => &mut self.eraser_thickness_slider,
+      }
    }
 
    /// Returns the coverage rectangle for the provided point.
@@ -147,13 +184,32 @@ impl Tool for BrushTool {
       paint_canvas: &mut PaintCanvas,
       viewport: &Viewport,
    ) {
+      // Take color picker's eraser status into consideration only when user isn't drawing.
+      // If user is pressing mouse right button, then the tool is set to Eraser,
+      // but color picker's eraser status might be false, and overwrite tool
+      // to Brush.
+      if self.state == BrushState::Idle {
+         match global_controls.color_picker.eraser {
+            true => self.tool = BrushType::Eraser,
+            false => self.tool = BrushType::Brush,
+         }
+      }
+
       // Read input.
 
       match input.action([MouseButton::Left, MouseButton::Right]) {
          (true, [ButtonState::Pressed, _]) => self.state = BrushState::Drawing,
-         (true, [_, ButtonState::Pressed]) => self.state = BrushState::Erasing,
-         (_, [ButtonState::Released, _] | [_, ButtonState::Released]) => {
-            self.state = BrushState::Idle
+         (true, [_, ButtonState::Pressed]) => {
+            self.tool = BrushType::Eraser;
+            self.state = BrushState::Drawing;
+         }
+         (_, [ButtonState::Released, _]) => self.state = BrushState::Idle,
+         (_, [_, ButtonState::Released]) => {
+            if !global_controls.color_picker.eraser {
+               self.tool = BrushType::Brush;
+            }
+
+            self.state = BrushState::Idle;
          }
          _ => (),
       }
@@ -173,7 +229,7 @@ impl Tool for BrushTool {
          thickness_change += 2.0;
       }
 
-      self.thickness_slider.set_value(self.thickness() + thickness_change);
+      self.set_thickness(self.thickness() + thickness_change);
 
       // Draw to the paint canvas.
       let a = ui.previous_mouse_position(input);
@@ -189,18 +245,16 @@ impl Tool for BrushTool {
             paint_canvas,
             a,
             b,
-            match self.state {
-               BrushState::Drawing => color,
-               BrushState::Erasing => Color::TRANSPARENT,
-               _ => unreachable!(),
+            match self.tool {
+               BrushType::Brush => color,
+               BrushType::Eraser => Color::TRANSPARENT,
             },
             self.thickness(),
          );
          self.stroke_points.push(Stroke {
-            color: match self.state {
-               BrushState::Drawing => (color.r, color.g, color.b, color.a),
-               BrushState::Erasing => (0, 0, 0, 0),
-               _ => unreachable!(),
+            color: match self.tool {
+               BrushType::Brush => (color.r, color.g, color.b, color.a),
+               BrushType::Eraser => (0, 0, 0, 0),
             },
             thickness: self.thickness() as u8,
             a: (a.x, a.y),
@@ -328,7 +382,7 @@ impl Tool for BrushTool {
       ui.space(16.0);
 
       ui.push((192.0, ui.height()), Layout::Freeform);
-      self.thickness_slider.process(
+      self.thickness_slider().process(
          ui,
          input,
          SliderArgs {
@@ -338,11 +392,11 @@ impl Tool for BrushTool {
       );
 
       // Draw the size indicator above the slider.
-      if self.thickness_slider.is_sliding() {
+      if self.thickness_slider().is_sliding() {
          ui.draw(|ui| {
             let size =
                (self.thickness() + (self.thickness() / Self::MAX_THICKNESS * 8.0 + 8.0)).max(32.0);
-            let x = self.thickness_slider.raw_value() * ui.width() - size / 2.0;
+            let x = self.thickness_slider().raw_value() * ui.width() - size / 2.0;
             let renderer = ui.render();
             let rect = Rect::new(point(x, -size - 8.0), vector(size, size));
             renderer.fill(rect, assets.colors.panel, 8.0);

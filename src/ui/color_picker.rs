@@ -42,7 +42,7 @@ pub struct ColorPickerIcons {
 pub struct ColorPicker {
    palette: [AnyColor; Self::NUM_COLORS],
    index: usize,
-   eraser: bool,
+   pub eraser: bool,
 
    window_state: Option<PickerWindowState>,
 }
