@@ -20,7 +20,7 @@ members = [
 ]
 
 [features]
-default = ["renderer-wgpu"]
+default = ["renderer-opengl"]
 renderer-opengl = ["netcanv-renderer-opengl"]
 renderer-wgpu = ["netcanv-renderer-wgpu"]
 
