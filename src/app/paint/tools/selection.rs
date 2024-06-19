@@ -1,8 +1,8 @@
 use image::imageops::FilterType;
-use instant::Instant;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use tokio::sync::{mpsc, oneshot};
+use web_time::Instant;
 
 use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;

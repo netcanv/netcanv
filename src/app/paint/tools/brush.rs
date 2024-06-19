@@ -1,7 +1,7 @@
 //! The Brush tool. Allows for painting, as well as erasing pixels from the canvas.
 
-use instant::Instant;
 use std::collections::HashMap;
+use web_time::Instant;
 
 use crate::backend::winit::event::MouseButton;
 use crate::config::config;

@@ -5,10 +5,10 @@ pub mod tool_bar;
 mod tools;
 
 use image::RgbaImage;
-use instant::{Duration, Instant};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use web_time::{Duration, Instant};
 
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::PeerId;

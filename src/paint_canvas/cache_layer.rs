@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use instant::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct CachedChunk {

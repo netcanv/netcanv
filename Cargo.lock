@@ -1802,7 +1802,6 @@ dependencies = [
  "futures-util",
  "heapless",
  "image 0.24.7",
- "instant",
  "native-dialog",
  "netcanv-i18n",
  "netcanv-protocol",
@@ -1827,6 +1826,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "usvg",
+ "web-time",
  "webbrowser",
 ]
 
@@ -3894,6 +3894,16 @@ name = "web-sys"
 version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

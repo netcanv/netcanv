@@ -78,7 +78,7 @@ directories = "5.0.1"
 tempfile = "3.8.0"
 toml = "0.8.0"
 url = "2.4.1"
-instant = "0.1.12"
+web-time = "1.1.0"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
 # Clipboard
