@@ -94,7 +94,7 @@ netcanv-i18n = { path = "netcanv-i18n" }
 
 [workspace.dependencies]
 clap = { version = "4.5.7", features = ["derive"] }
-profiling = "1.0.11"
+profiling = "1.0.15"
 tracing = "0.1.40"
 
 [profile.release]
