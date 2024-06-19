@@ -75,7 +75,7 @@ nysa = "0.2.2"
 
 # Utilities
 directories = "5.0.1"
-tempfile = "3.8.0"
+tempfile = "3.10.1"
 toml = "0.8.0"
 url = "2.4.1"
 web-time = "1.1.0"
