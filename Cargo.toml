@@ -82,7 +82,7 @@ instant = "0.1.12"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
 # Clipboard
-arboard = "2.0.1"
+arboard = "3.4.0"
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }

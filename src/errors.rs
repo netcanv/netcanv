@@ -177,6 +177,9 @@ impl From<arboard::Error> for Error {
          arboard::Error::ClipboardOccupied => Self::ClipboardOccupied,
          arboard::Error::ConversionFailure => Self::ClipboardConversion,
          arboard::Error::Unknown { description } => Self::ClipboardUnknown { error: description },
+         _ => Self::ClipboardUnknown {
+            error: error.to_string(),
+         },
       }
    }
 }
