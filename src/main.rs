@@ -56,7 +56,6 @@ use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use clap::Parser;
-use instant::{Duration, Instant};
 use native_dialog::{MessageDialog, MessageType};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
@@ -66,6 +65,7 @@ use tracing::{error, info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, Layer};
+use web_time::{Duration, Instant};
 
 use crate::backend::UiRenderFrame;
 
@@ -157,11 +157,8 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let assets = Box::new(Assets::new(ui.render(), color_scheme)?);
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
-   let mut app: Option<Box<dyn AppState>> = Some(boot::State::new(
-      cli,
-      assets,
-      Arc::clone(&socket_system),
-   ));
+   let mut app: Option<Box<dyn AppState>> =
+      Some(boot::State::new(cli, assets, Arc::clone(&socket_system)));
    let mut input = Input::new();
 
    // Initialize the clipboard because we now have a window handle and translation strings.

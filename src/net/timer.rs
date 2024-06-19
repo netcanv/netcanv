@@ -1,6 +1,6 @@
 //! Configurable, framerate-independent timer for use in `process()`.
 
-use instant::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// A framerate-independent timer.
 pub struct Timer {

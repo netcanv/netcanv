@@ -29,15 +29,15 @@ tracy-profiling = ["profiling/profile-with-tracy"]
 [dependencies]
 
 # Common things
-heapless = { version = "0.7.16", default-features = false }
-once_cell = "1.18.0"
+heapless = { version = "0.8.0", default-features = false }
+once_cell = "1.19.0"
 phf = { version = "0.11.2", features = ["macros"] }
-strum = { version = "0.25.0", features = ["derive"] }
+strum = { version = "0.26.2", features = ["derive"] }
 
 # Logging
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-tracing-chrome = "0.7.1"
+tracing-chrome = "0.7.2"
 profiling.workspace = true
 
 # CLI
@@ -45,7 +45,7 @@ clap = { workspace = true }
 
 # Windowing and graphics
 native-dialog = "0.5.5"
-webbrowser = "0.8.11"
+webbrowser = "1.0.1"
 image = { version = "0.24.7", default-features = false, features = [
    "png",
    "jpeg",
@@ -63,26 +63,27 @@ tiny-skia = { version = "0.5.0", default-features = false, features = [
 sys-locale = "0.3.1"
 
 # Networking
-serde = { version = "1.0.188", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 bincode = "1.3.2"
-tokio = { version = "1.32.0", features = ["full"] }
-tokio-tungstenite = { version = "0.20.1", features = [
-   "rustls-tls-native-roots",
+tokio = { version = "1.38.0", features = ["full"] }
+tokio-tungstenite = { version = "0.23.1", features = [
+   "rustls-tls-native-roots", "url"
 ] }
+rustls = { version = "0.23.10", default-features = false, features = ["ring"] }
 
 # Multithreading
 nysa = "0.2.2"
 
 # Utilities
 directories = "5.0.1"
-tempfile = "3.8.0"
-toml = "0.8.0"
-url = "2.4.1"
-instant = "0.1.12"
+tempfile = "3.10.1"
+toml = "0.8.14"
+url = "2.5.2"
+web-time = "1.1.0"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
 # Clipboard
-arboard = "2.0.1"
+arboard = "3.4.0"
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
@@ -93,8 +94,8 @@ netcanv-protocol = { path = "netcanv-protocol", features = ["i18n"] }
 netcanv-i18n = { path = "netcanv-i18n" }
 
 [workspace.dependencies]
-clap = { version = "4.3.0", features = ["derive"] }
-profiling = "1.0.11"
+clap = { version = "4.5.7", features = ["derive"] }
+profiling = "1.0.15"
 tracing = "0.1.40"
 
 [profile.release]

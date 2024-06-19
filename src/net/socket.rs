@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use instant::Duration;
 use netcanv_protocol::relay;
 use nysa::global as bus;
 use tokio::net::TcpStream;
@@ -15,6 +14,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 use url::Url;
+use web_time::Duration;
 
 use crate::common::{deserialize_bincode, serialize_bincode, Fatal};
 use crate::Error;

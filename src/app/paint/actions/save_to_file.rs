@@ -1,6 +1,6 @@
 //! The `Save to file` action.
 
-use instant::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use native_dialog::FileDialog;
 

@@ -1,8 +1,8 @@
 //! Simplified input handling facility.
 
-use instant::Instant;
 use std::borrow::Cow;
 use std::ops::{BitAnd, BitOr};
+use web_time::Instant;
 
 use crate::backend::winit::dpi::PhysicalPosition;
 pub use crate::backend::winit::event::{ElementState, MouseButton, VirtualKeyCode};
