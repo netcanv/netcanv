@@ -83,7 +83,7 @@ web-time = "1.1.0"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
 # Clipboard
-arboard = "3.4.0"
+arboard = { version = "3.4.0", features = ["wayland-data-control"] }
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
