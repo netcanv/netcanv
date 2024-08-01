@@ -26,6 +26,7 @@ use crate::app::*;
 use crate::assets::*;
 use crate::backend::Backend;
 use crate::clipboard;
+use crate::common;
 use crate::common::*;
 use crate::image_coder::ImageCoder;
 use crate::net::peer::{self, Peer};
@@ -611,8 +612,14 @@ impl State {
          )
          .clicked()
          {
-            log!(self.log, "{}", &self.assets.tr.room_id_copied);
-            catch!(clipboard::copy_string(id_text.clone()));
+            {
+               let message = self.assets.tr.room_id_copied.clone();
+               let id_text = id_text.clone();
+               tokio::task::spawn(async move {
+                  catch!(clipboard::copy_string_async(id_text).await);
+                  bus::push(common::Log(message));
+               });
+            }
          }
          ui.horizontal_label(
             &self.assets.monospace.with_size(24.0),
@@ -1005,6 +1012,10 @@ impl AppState for State {
 
       // Error checking
 
+      for message in &bus::retrieve_all::<common::Log>() {
+         let Log(log): common::Log = message.consume();
+         log!(self.log, "{}", log);
+      }
       for message in &bus::retrieve_all::<Error>() {
          let Error(error) = message.consume();
          log!(
