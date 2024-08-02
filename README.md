@@ -43,10 +43,17 @@ Alternate rendering backends can be chosen by passing in features via the `--fea
 
 - `renderer-opengl` (default) – The OpenGL rendering backend. May be incomplete or buggy in some
   places on certain drivers, please file issue reports if you find bugs!
+- `renderer-wgpu` - The wgpu rendering backend. Has feature parity with OpenGL rendering backend,
+  but is a bit buggy. Will replace OpenGL backend in the future.
 
-Right now this is the only backend available. Do note that PRs implementing alternate backends will
-not be merged, because the rendering API is still in flux and may change at any time. More backends
-may be added after 1.0 is released.
+For example, to build with the wgpu backend:
+
+```
+$ cargo build --no-default-features --features renderer-wgpu --release
+```
+
+Do note that PRs implementing alternate backends will not be merged, because the rendering API is
+still in flux and may change at any time. More backends may be added after 1.0 is released.
 
 #### Skia backend
 
