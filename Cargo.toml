@@ -100,3 +100,6 @@ tracing = "0.1.40"
 
 [profile.release]
 lto = "fat"
+
+[patch.crates-io]
+arboard = { git = "https://github.com/netcanv/arboard.git" }
