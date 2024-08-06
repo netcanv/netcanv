@@ -68,6 +68,7 @@ impl ColorMath for Color {
    }
 }
 
+#[allow(dead_code)]
 pub trait VectorMath {
    /// Floors the vector component-wise.
    fn floor(self) -> Self;
