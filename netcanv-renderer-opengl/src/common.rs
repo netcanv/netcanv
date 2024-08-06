@@ -12,17 +12,12 @@ pub fn normalized_color(color: Color) -> (f32, f32, f32, f32) {
 }
 
 pub trait VectorMath {
-   fn length(self) -> f32;
    fn normalize(self) -> Self;
    fn perpendicular_cw(self) -> Self;
    fn perpendicular_ccw(self) -> Self;
 }
 
 impl VectorMath for Vector {
-   fn length(self) -> f32 {
-      (self.x * self.x + self.y * self.y).sqrt()
-   }
-
    fn normalize(self) -> Self {
       let length = self.length();
       if length == 0.0 {

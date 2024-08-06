@@ -48,7 +48,6 @@ const INFO_SVG: &[u8] = include_bytes!("assets/icons/info.svg");
 const ERROR_SVG: &[u8] = include_bytes!("assets/icons/error.svg");
 const PEER_CLIENT_SVG: &[u8] = include_bytes!("assets/icons/peer-client.svg");
 const PEER_HOST_SVG: &[u8] = include_bytes!("assets/icons/peer-host.svg");
-const SAVE_SVG: &[u8] = include_bytes!("assets/icons/save.svg");
 const DARK_MODE_SVG: &[u8] = include_bytes!("assets/icons/dark-mode.svg");
 const LIGHT_MODE_SVG: &[u8] = include_bytes!("assets/icons/light-mode.svg");
 const TRANSLATE_SVG: &[u8] = include_bytes!("assets/icons/translate.svg");
@@ -102,11 +101,6 @@ pub struct StatusIcons {
    pub error: Image,
 }
 
-/// Icons for file operations.
-pub struct FileIcons {
-   pub save: Image,
-}
-
 /// Icons for peer roles.
 pub struct PeerIcons {
    pub client: Image,
@@ -137,7 +131,6 @@ pub struct Icons {
    // Generic
    pub navigation: NavigationIcons,
    pub status: StatusIcons,
-   pub file: FileIcons,
    pub peer: PeerIcons,
    pub window: WindowIcons,
 }
@@ -256,9 +249,6 @@ impl Assets {
             status: StatusIcons {
                info: Self::load_svg(renderer, INFO_SVG),
                error: Self::load_svg(renderer, ERROR_SVG),
-            },
-            file: FileIcons {
-               save: Self::load_svg(renderer, SAVE_SVG),
             },
             peer: PeerIcons {
                client: Self::load_svg(renderer, PEER_CLIENT_SVG),
