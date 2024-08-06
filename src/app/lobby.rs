@@ -547,7 +547,7 @@ impl State {
             .clicked()
             {
                config::write(|config| {
-                  config.language = code.clone();
+                  config.language.clone_from(code);
                });
                changed = true;
             }
@@ -606,8 +606,8 @@ impl State {
    /// Saves the user configuration.
    fn save_config(&mut self) {
       config::write(|config| {
-         config.lobby.nickname = self.nickname_field.text().strip_whitespace().to_owned();
-         config.lobby.relay = self.relay_field.text().strip_whitespace().to_owned();
+         self.nickname_field.text().strip_whitespace().clone_into(&mut config.lobby.nickname);
+         self.relay_field.text().strip_whitespace().clone_into(&mut config.lobby.relay);
       });
    }
 }
