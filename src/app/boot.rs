@@ -20,7 +20,7 @@ pub struct State {
 }
 
 impl State {
-   pub fn new(
+   pub fn new_state(
       cli: cli::Cli,
       assets: Box<Assets>,
       socket_system: Arc<SocketSystem>,
