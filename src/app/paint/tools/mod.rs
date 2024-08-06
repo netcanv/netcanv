@@ -26,6 +26,7 @@ use serde::Serialize;
 
 use super::GlobalControls;
 
+#[allow(dead_code)]
 pub trait Tool {
    /// Returns the name of the tool.
    ///

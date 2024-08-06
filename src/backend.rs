@@ -18,6 +18,7 @@ pub type Framebuffer = the_backend::Framebuffer;
 
 // Check if the provided types implement renderer traits.
 
+#[allow(dead_code)]
 trait Requirements {
    type Backend: netcanv_renderer::RenderBackend;
    type Font: netcanv_renderer::Font;
@@ -27,6 +28,7 @@ trait Requirements {
 
 enum Assertions {}
 
+#[allow(dead_code)]
 impl Requirements for Assertions {
    type Backend = Backend;
    type Font = Font;

@@ -291,6 +291,7 @@ pub trait WindowContent {
 }
 
 /// Arguments passed to [`WindowContent::process`].
+#[allow(dead_code)]
 pub struct WindowContentArgs<'ui, 'input, 'process> {
    pub ui: &'ui mut Ui,
    pub input: &'input mut Input,
