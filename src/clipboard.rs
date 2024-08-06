@@ -23,7 +23,7 @@ impl ClipboardState {
    }
 }
 
-static CLIPBOARD_STATE: Lazy<ClipboardState> = Lazy::new(|| ClipboardState::new());
+static CLIPBOARD_STATE: Lazy<ClipboardState> = Lazy::new(ClipboardState::new);
 
 /// Initializes the clipboard in a platform-specific way.
 #[allow(unused)]
