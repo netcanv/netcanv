@@ -1,6 +1,9 @@
 //! Relay packaets.
 
-use std::{fmt::{self, Display, Formatter}, str::FromStr};
+use std::{
+   fmt::{self, Display, Formatter},
+   str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 
