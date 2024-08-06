@@ -54,7 +54,7 @@ impl OpenGlBackend {
       let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
 
       let (window, gl_config) = display_builder
-         .build(&event_loop, template, |configs| {
+         .build(event_loop, template, |configs| {
             configs
                .reduce(|accum, config| {
                   // Find the config with the maximum number of samples
