@@ -104,7 +104,7 @@ jobs:
       uses: actions/download-artifact@v2
 
     - name: Upload artifacts as release assets
-      uses: AButler/upload-release-assets@v2.0
+      uses: AButler/upload-release-assets@v3.0
       with:
         files: "netcanv-nightly-windows/*;netcanv-nightly-linux/*"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
