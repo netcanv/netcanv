@@ -98,6 +98,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'Release' && github.event.action == 'Created'
     needs: [build-linux, build-windows]
+    permissions:
+      contents: write
 
     steps:
     - name: Download all artifacts
