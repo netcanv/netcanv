@@ -37,6 +37,7 @@ enum BrushType {
 enum BrushState {
    Idle,
    Drawing,
+   Erasing,
 }
 
 pub struct BrushTool {
@@ -199,17 +200,9 @@ impl Tool for BrushTool {
 
       match input.action([MouseButton::Left, MouseButton::Right]) {
          (true, [ButtonState::Pressed, _]) => self.state = BrushState::Drawing,
-         (true, [_, ButtonState::Pressed]) => {
-            self.tool = BrushType::Eraser;
-            self.state = BrushState::Drawing;
-         }
-         (_, [ButtonState::Released, _]) => self.state = BrushState::Idle,
-         (_, [_, ButtonState::Released]) => {
-            if !global_controls.color_picker.eraser {
-               self.tool = BrushType::Brush;
-            }
-
-            self.state = BrushState::Idle;
+         (true, [_, ButtonState::Pressed]) => self.state = BrushState::Erasing,
+         (_, [ButtonState::Released, _]) | (_, [_, ButtonState::Released]) => {
+            self.state = BrushState::Idle
          }
          _ => (),
       }
@@ -245,16 +238,18 @@ impl Tool for BrushTool {
             paint_canvas,
             a,
             b,
-            match self.tool {
-               BrushType::Brush => color,
-               BrushType::Eraser => Color::TRANSPARENT,
+            match self.state {
+               BrushState::Drawing => color,
+               BrushState::Erasing => Color::TRANSPARENT,
+               _ => unreachable!(),
             },
             self.thickness(),
          );
          self.stroke_points.push(Stroke {
-            color: match self.tool {
-               BrushType::Brush => (color.r, color.g, color.b, color.a),
-               BrushType::Eraser => (0, 0, 0, 0),
+            color: match self.state {
+               BrushState::Drawing => (color.r, color.g, color.b, color.a),
+               BrushState::Erasing => (0, 0, 0, 0),
+               _ => unreachable!(),
             },
             thickness: self.thickness() as u8,
             a: (a.x, a.y),
