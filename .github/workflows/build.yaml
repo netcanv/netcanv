@@ -98,13 +98,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'Release' && github.event.action == 'Created'
     needs: [build-linux, build-windows]
+    permissions:
+      contents: write
 
     steps:
     - name: Download all artifacts
       uses: actions/download-artifact@v2
 
     - name: Upload artifacts as release assets
-      uses: AButler/upload-release-assets@v2.0
+      uses: AButler/upload-release-assets@v3.0
       with:
         files: "netcanv-nightly-windows/*;netcanv-nightly-linux/*"
         repo-token: ${{ secrets.GITHUB_TOKEN }}
