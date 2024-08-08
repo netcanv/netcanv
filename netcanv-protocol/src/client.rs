@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// The version constant. Increased by 100 every minor client version, and by 10000 every major
 /// version. eg. 200 is 0.2.0, 10000 is 1.0.0, 10203 is 1.2.3.
 /// If two versions' hundreds places differ, the versions are incompatible.
-pub const PROTOCOL_VERSION: u32 = 300;
+pub const PROTOCOL_VERSION: u32 = 400;
 
 pub fn versions_compatible(v1: u32, v2: u32) -> bool {
    v1 / 100 == v2 / 100
