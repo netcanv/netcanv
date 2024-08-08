@@ -494,6 +494,28 @@ impl Tool for BrushTool {
       Ok(())
    }
 
+   fn network_peer_join(
+      &mut self,
+      _renderer: &mut Backend,
+      net: Net,
+      peer_id: PeerId,
+      global_controls: &GlobalControls,
+   ) -> netcanv::Result<()> {
+      // Send to newly joined peer where and what color we are.
+      let Point { x, y } = self.mouse_position;
+      let Color { r, g, b, a } = Self::color(global_controls);
+      net.send(
+         self,
+         peer_id,
+         Packet::Cursor {
+            position: (x, y),
+            thickness: self.thickness() as u8,
+            color: (r, g, b, a),
+         },
+      )?;
+      Ok(())
+   }
+
    fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> netcanv::Result<()> {
       self.ensure_peer(peer_id);
       Ok(())

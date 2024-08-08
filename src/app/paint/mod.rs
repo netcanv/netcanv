@@ -765,7 +765,7 @@ impl State {
                .peer
                .send_select_tool(self.toolbar.clone_tool_name(self.toolbar.current_tool()))?;
             self.toolbar.with_current_tool(|tool| {
-               tool.network_peer_join(ui, Net::new(&self.peer), peer_id)
+               tool.network_peer_join(ui, Net::new(&self.peer), peer_id, &self.global_controls)
             })?;
          }
          MessageKind::Left {

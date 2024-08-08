@@ -151,6 +151,7 @@ pub trait Tool {
       _renderer: &mut Backend,
       _net: Net,
       _peer_id: PeerId,
+      _global_controls: &GlobalControls,
    ) -> netcanv::Result<()> {
       Ok(())
    }
