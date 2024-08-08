@@ -691,6 +691,7 @@ impl Tool for SelectionTool {
       renderer: &mut Backend,
       net: Net,
       peer_id: PeerId,
+      _global_controls: &GlobalControls,
    ) -> netcanv::Result<()> {
       if let Some(capture) = self.selection.download_rgba(renderer) {
          self.send_rect_packet(&net)?;
