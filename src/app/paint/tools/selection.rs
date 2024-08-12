@@ -485,16 +485,42 @@ impl Tool for SelectionTool {
                rect.size = mouse_position - rect.position;
             }
             Action::DraggingHandle(handle) => {
-               match handle {
-                  Handle::TopLeft => *rect = rect.with_top_left(mouse_position),
-                  Handle::Top => *rect = rect.with_top(mouse_position.y),
-                  Handle::TopRight => *rect = rect.with_top_right(mouse_position),
-                  Handle::Right => *rect = rect.with_right(mouse_position.x),
-                  Handle::BottomRight => *rect = rect.with_bottom_right(mouse_position),
-                  Handle::Bottom => *rect = rect.with_bottom(mouse_position.y),
-                  Handle::BottomLeft => *rect = rect.with_bottom_left(mouse_position),
-                  Handle::Left => *rect = rect.with_left(mouse_position.x),
-               }
+               let new_rect = match handle {
+                  Handle::TopLeft => rect.with_top_left(mouse_position),
+                  Handle::Top => rect.with_top(mouse_position.y),
+                  Handle::TopRight => rect.with_top_right(mouse_position),
+                  Handle::Right => rect.with_right(mouse_position.x),
+                  Handle::BottomRight => rect.with_bottom_right(mouse_position),
+                  Handle::Bottom => rect.with_bottom(mouse_position.y),
+                  Handle::BottomLeft => rect.with_bottom_left(mouse_position),
+                  Handle::Left => rect.with_left(mouse_position.x),
+               };
+               // Prevent the selection, that is at its max size, from being moved
+               // by dragging a handle.
+               //
+               // This works by limiting minimum X to the X of the top right corner
+               // minus selection's max size, and limiting maximum X to the X of the
+               // top right corner plus selection's max size. The same for Y, but with
+               // bottom left instead of top right.
+               //
+               // If top right corner is at X = 0, then minimum X would be -1024,
+               // and maximum X would be 1024, and same for Y if Y = 0. Selection's position
+               // is calculated (new_rect) and then new_rect.x and new_rect.y are restricted
+               // to the interval with clamp. So, e.g. new_rect.x = -1100, will become -1024,
+               // and selection won't move.
+               *rect = Rect::new(
+                  point(
+                     new_rect.x().clamp(
+                        rect.top_right().x - Selection::MAX_SIZE as f32,
+                        rect.top_right().x + Selection::MAX_SIZE as f32,
+                     ),
+                     new_rect.y().clamp(
+                        rect.bottom_left().y - Selection::MAX_SIZE as f32,
+                        rect.bottom_left().y + Selection::MAX_SIZE as f32,
+                     ),
+                  ),
+                  new_rect.size,
+               );
                self.selection.rect = self.selection.normalized_rect();
             }
             Action::DraggingWhole => {
