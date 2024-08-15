@@ -56,7 +56,7 @@ use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use clap::Parser;
-use native_dialog::{MessageDialog, MessageType};
+use rfd::{MessageDialog, MessageLevel};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
@@ -285,10 +285,9 @@ async fn async_main() {
          );
          MessageDialog::new()
             .set_title("NetCanv - Error")
-            .set_text(&message)
-            .set_type(MessageType::Error)
-            .show_alert()
-            .unwrap();
+            .set_description(&message)
+            .set_level(MessageLevel::Error)
+            .show();
       }
    }
 }
