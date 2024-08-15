@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use native_dialog::FileDialog;
+use rfd::FileDialog;
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::RoomId;
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
@@ -366,20 +366,19 @@ impl State {
          .clicked()
          {
             match FileDialog::new()
-               .set_filename("canvas.png")
+               .set_file_name("canvas.png")
                .add_filter(
                   &self.assets.tr.fd_supported_image_files,
                   &["png", "jpg", "jpeg", "jfif"],
                )
                .add_filter(&self.assets.tr.fd_netcanv_canvas, &["toml"])
-               .show_open_single_file()
+               .pick_file()
             {
-               Ok(Some(path)) => {
+               Some(path) => {
                   self.image_file = Some(path);
                   host_room!();
-               }
-               Err(error) => self.status = Status::from(error),
-               _ => (),
+               },
+               None => self.status = Status::None
             }
          }
          ui.pop();
