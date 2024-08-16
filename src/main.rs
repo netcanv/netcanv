@@ -305,7 +305,7 @@ fn main() {
       {
          let mut message = heapless::String::<8192>::new();
          let _ = write!(message, "Oh no! A fatal error occured.\n{}", panic_info);
-         let _ = write!(message, "\n\nThis is most definitely a bug, so please file an issue on GitHub. https://github.com/liquidev/netcanv");
+         let _ = write!(message, "\n\nThis is most definitely a bug, so please file an issue on GitHub. https://github.com/netcanv/netcanv");
          let _ = MessageDialog::new()
             .set_title("NetCanv - Fatal Error")
             .set_description(message.to_string())

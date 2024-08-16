@@ -77,10 +77,10 @@ rgb-hex-code = RGB hex code
 ## Errors
 
 failure =
-   An error occured: { $message }
+   An error occurred: { $message }
 
    If you think this is a bug, please file an issue on GitHub.
-   https://github.com/liquidev/netcanv
+   https://github.com/netcanv/netcanv
 
 error = Error: { $error }
 error-fatal = Fatal: { $error }
