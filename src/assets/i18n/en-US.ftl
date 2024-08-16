@@ -135,10 +135,6 @@ error-invalid-chunk-position-pattern = Chunk position must follow the pattern: x
 error-trailing-chunk-coordinates-in-filename = Trailing coordinates found after x,y
 error-canvas-toml-version-mismatch = Version mismatch in canvas.toml. Try downloading a newer version of NetCanv
 
-error-dialog-unexpected-output = Unexpected output while opening dialog: { $output }
-error-no-dialog-implementation = Dialogs are not available on your platform
-error-dialog-implementation-error = Dialog implementation error: { $error }
-
 error-invalid-url = Could not parse URL. Please double-check if it's correct
 error-no-version-packet = Did not receive a version packet from the relay
 error-invalid-version-packet = The relay sent an invalid version packet

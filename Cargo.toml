@@ -44,7 +44,7 @@ profiling.workspace = true
 clap = { workspace = true }
 
 # Windowing and graphics
-native-dialog = "0.5.5"
+rfd = "0.14.1"
 webbrowser = "1.0.1"
 image = { version = "0.24.7", default-features = false, features = [
    "png",

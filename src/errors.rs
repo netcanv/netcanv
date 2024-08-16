@@ -87,13 +87,6 @@ pub enum Error {
    CanvasTomlVersionMismatch,
 
    //
-   // File dialogs
-   //
-   DialogUnexpectedOutput { output: &'static str },
-   NoDialogImplementation,
-   DialogImplementationError { error: String },
-
-   //
    // Socket networking
    //
    InvalidUrl,
@@ -180,20 +173,6 @@ impl From<arboard::Error> for Error {
          _ => Self::ClipboardUnknown {
             error: error.to_string(),
          },
-      }
-   }
-}
-
-impl From<native_dialog::Error> for Error {
-   fn from(error: native_dialog::Error) -> Self {
-      match error {
-         native_dialog::Error::IoFailure(error) => Self::from(error),
-         native_dialog::Error::InvalidString(_) => Self::InvalidUtf8,
-         native_dialog::Error::UnexpectedOutput(output) => Self::DialogUnexpectedOutput { output },
-         native_dialog::Error::NoImplementation => Self::NoDialogImplementation,
-         native_dialog::Error::ImplementationError(error) => {
-            Self::DialogImplementationError { error }
-         }
       }
    }
 }

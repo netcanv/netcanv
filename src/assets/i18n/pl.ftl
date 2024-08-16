@@ -127,10 +127,6 @@ error-invalid-chunk-position-pattern = Pozycja chunka powinna spełniać wzór: 
 error-trailing-chunk-coordinates-in-filename = Dodatkowe współrzędne znalezione po pozycji x,y
 error-canvas-toml-version-mismatch = Niezgodność wersji w canvas.toml. Spróbuj pobrać nowszego NetCanva
 
-error-dialog-unexpected-output = Nieoczekiwany błąd przy otwieraniu dialogu: { $output }
-error-no-dialog-implementation = Dialogi nie są obsługiwane na twoim systemie
-error-dialog-implementation-error = Błąd implementacji dialogu: { $error }
-
 error-invalid-url = Niepoprawny URL. Sprawdź czy nie posiada błędów w pisowni
 error-no-version-packet = Nie otrzymano pakietu wersji od serwera
 error-invalid-version-packet = Serwer wysłał niepoprawny pakiet wersji
