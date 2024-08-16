@@ -308,9 +308,9 @@ fn main() {
          let _ = write!(message, "\n\nThis is most definitely a bug, so please file an issue on GitHub. https://github.com/liquidev/netcanv");
          let _ = MessageDialog::new()
             .set_title("NetCanv - Fatal Error")
-            .set_text(&message)
-            .set_type(MessageType::Error)
-            .show_alert();
+            .set_description(message.to_string())
+            .set_level(MessageLevel::Error)
+            .show();
       }
       default_panic_hook(panic_info);
    }));
