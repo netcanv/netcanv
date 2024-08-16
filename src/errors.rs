@@ -87,13 +87,6 @@ pub enum Error {
    CanvasTomlVersionMismatch,
 
    //
-   // File dialogs
-   //
-   DialogUnexpectedOutput { output: &'static str },
-   NoDialogImplementation,
-   DialogImplementationError { error: String },
-
-   //
    // Socket networking
    //
    InvalidUrl,

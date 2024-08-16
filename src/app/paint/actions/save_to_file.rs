@@ -2,7 +2,7 @@
 
 use web_time::{Duration, Instant};
 
-use native_dialog::FileDialog;
+use rfd::FileDialog;
 
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
@@ -44,14 +44,12 @@ impl Action for SaveToFileAction {
          ..
       }: ActionArgs,
    ) -> netcanv::Result<()> {
-      match FileDialog::new()
+      if let Some(path) = FileDialog::new()
          .add_filter(&assets.tr.fd_png_file, &["png"])
          .add_filter(&assets.tr.fd_netcanv_canvas, &["netcanv", "toml"])
-         .show_save_single_file()
+         .save_file()
       {
-         Ok(Some(path)) => project_file.save(renderer, Some(&path), paint_canvas)?,
-         Ok(None) => (),
-         Err(error) => return Err(error.into()),
+         project_file.save(renderer, Some(&path), paint_canvas)?
       }
       Ok(())
    }
