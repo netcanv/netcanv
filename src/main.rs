@@ -1,5 +1,5 @@
 // NetCanv - online collaborative paint canvas
-// Copyright 2021-2022, liquidev
+// Copyright 2021-2024 liquidev, 2024-today NetCanv contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

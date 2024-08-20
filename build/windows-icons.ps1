@@ -17,7 +17,7 @@ Write-Output "netcanv: $app_version"
 Write-Output "netcanv-relay: $relay_version"
 
 # Generate the copyright info according to the current year.
-$company_name = "liquidev"
+$company_name = "NetCanv"
 $year = Get-Date -Format "yyyy"
 $copyright = "Copyright (c) $year liquidev and contributors"
 
