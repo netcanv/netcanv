@@ -16,9 +16,9 @@ A screenshot of my imaginary friend and I scribbling things together in NetCanv.
 - **Free.** Being licensed under the Apache License 2.0, NetCanv is and will always be free to use
   and modify, by anyone, for any purpose.
 - **Open.** NetCanv is an open platform - if you're tech-savvy, you're free to set up an alternative
-  server, and if you're into programming we invite you to [contribute](https://github.com/liquidev/netcanv/pulls)!
+  server, and if you're into programming we invite you to [contribute](https://github.com/netcanv/netcanv/pulls)!
 - **Handmade with 💙** by people who care about good software. We take your feedback seriously -
-  head over to [issues](https://github.com/liquidev/netcanv) and tell us what's bugging you!
+  head over to [issues](https://github.com/netcanv/netcanv/issues) and tell us what's bugging you!
 
 ## Compiling
 
@@ -58,7 +58,7 @@ still in flux and may change at any time. More backends may be added after 1.0 i
 #### Skia backend
 
 There used to be a Skia backend, but it was removed because it was an unsupported, unnecessary
-maintenance burden. The last tag to feature this backend is [0.5.0](https://github.com/liquidev/netcanv/tree/0.5.0).
+maintenance burden. The last tag to feature this backend is [0.5.0](https://github.com/netcanv/netcanv/tree/0.5.0).
 
 ### Relay
 
