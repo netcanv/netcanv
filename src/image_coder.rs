@@ -71,6 +71,24 @@ impl ImageCoder {
       Ok(CachedChunk { png, webp })
    }
 
+   /// Encodes an image to PNG data synchronously.
+   pub fn encode_png_data_sync(image: RgbaImage) -> netcanv::Result<Vec<u8>> {
+      let mut bytes: Vec<u8> = Vec::new();
+      match PngEncoder::new(Cursor::new(&mut bytes)).write_image(
+         &image,
+         image.width(),
+         image.height(),
+         ColorType::Rgba8,
+      ) {
+         Ok(()) => (),
+         Err(error) => {
+            tracing::error!("error while encoding: {}", error);
+            return Err(error.into());
+         }
+      }
+      Ok(bytes)
+   }
+
    /// Decodes a PNG file into the given sub-chunk.
    pub fn decode_png_data(data: &[u8]) -> netcanv::Result<RgbaImage> {
       let decoder = PngDecoder::new(Cursor::new(data))?;

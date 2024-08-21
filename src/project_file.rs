@@ -112,7 +112,7 @@ impl ProjectFile {
    }
 
    /// Saves the paint canvas as a `.netcanv` canvas.
-   async fn save_as_netcanv(
+   fn save_as_netcanv(
       &mut self,
       renderer: &mut Backend,
       path: &Path,
@@ -139,7 +139,7 @@ impl ProjectFile {
       for (chunk_position, chunk) in canvas.chunks_mut() {
          tracing::debug!("chunk {:?}", chunk_position);
          let image = chunk.download_image(renderer);
-         let image_data = ImageCoder::encode_png_data(image).await?;
+         let image_data = ImageCoder::encode_png_data_sync(image)?;
          let filename = format!("{},{}.png", chunk_position.0, chunk_position.1);
          let filepath = path.join(Path::new(&filename));
          tracing::debug!("saving to {:?}", filepath);
@@ -168,8 +168,7 @@ impl ProjectFile {
             Some("png") => self.save_as_png(renderer, &path, canvas),
             Some("netcanv") | Some("toml") => {
                // TODO: Saving should be asynchronous.
-               tokio::runtime::Handle::current()
-                  .block_on(async { self.save_as_netcanv(renderer, &path, canvas).await })
+               self.save_as_netcanv(renderer, &path, canvas)
             }
             _ => Err(Error::UnsupportedSaveFormat),
          }
