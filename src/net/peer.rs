@@ -231,15 +231,25 @@ impl Peer {
             self.client_packet(author, client_packet)?;
          }
          relay::Packet::Disconnected(address) => {
-            if let Some(mate) = self.mates.remove(&address) {
-               self.send_message(MessageKind::Left {
-                  peer_id: address,
-                  nickname: mate.nickname,
-                  last_tool: mate.tool,
-               });
-            }
+            self.remove_mate(address);
          }
-         relay::Packet::Error(error) => return Err(Error::Relay(error)),
+         relay::Packet::Error(error) => match error {
+            relay::Error::NoSuchPeer { address } => {
+               // Remove the peer when relay tells us that they are no longer
+               // in the room.
+               //
+               // This is fine, because the relay already knows this, so what
+               // we are doing here is synchronising our state with relay's state.
+               if self.mates.contains_key(&address) {
+                  self.remove_mate(address);
+                  tracing::warn!(
+                     "{:?} is no longer in the room, so they got removed",
+                     address
+                  );
+               }
+            }
+            _ => return Err(Error::Relay(error)),
+         },
          _ => return Err(Error::UnexpectedRelayPacket),
       }
       Ok(())
@@ -324,6 +334,18 @@ impl Peer {
             tool: None,
          },
       );
+   }
+
+   /// Removes a peer from the list of registered peers
+   /// and sends to everyone that they left.
+   pub fn remove_mate(&mut self, peer_id: PeerId) {
+      if let Some(mate) = self.mates.remove(&peer_id) {
+         self.send_message(MessageKind::Left {
+            peer_id,
+            nickname: mate.nickname,
+            last_tool: mate.tool,
+         });
+      }
    }
 
    /// Sends a chunk positions packet.
