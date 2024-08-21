@@ -302,7 +302,11 @@ async fn relay(
    } else if let Some(sink) = state.peers.peer_sinks.get(&target_id) {
       send_packet(sink, packet).await?;
    } else {
-      send_packet(write, Packet::Error(relay::Error::NoSuchPeer)).await?;
+      send_packet(
+         write,
+         Packet::Error(relay::Error::NoSuchPeer { address: target_id }),
+      )
+      .await?;
    }
 
    Ok(())
