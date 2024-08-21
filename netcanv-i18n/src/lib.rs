@@ -8,7 +8,7 @@ mod map;
 pub mod translate_enum;
 
 pub use error::*;
-pub use format::Formatted;
+pub use format::{FormatArg, Formatted};
 pub use language::*;
 pub use map::Map;
 
