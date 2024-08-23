@@ -822,13 +822,10 @@ impl Selection {
    ///
    /// Returns `None` if there's no _captured_ selection.
    fn download_rgba(&self, renderer: &mut Backend) -> Option<RgbaImage> {
-      if let Some(rect) = self.normalized_rect() {
-         let rect = rect.sort();
-         if let Some(capture) = self.capture.as_ref() {
-            let mut image = RgbaImage::new(rect.width() as u32, rect.height() as u32);
-            renderer.download_framebuffer(capture, (0, 0), capture.size(), &mut image);
-            return Some(image);
-         }
+      if let Some(capture) = self.capture.as_ref() {
+         let mut image = RgbaImage::new(capture.width() as u32, capture.height() as u32);
+         renderer.download_framebuffer(capture, (0, 0), capture.size(), &mut image);
+         return Some(image);
       }
       None
    }
