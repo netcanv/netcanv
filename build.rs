@@ -7,6 +7,7 @@ fn cargo_about_is_available() -> bool {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+   println!("cargo:rustc-check-cfg=cfg(netcanv_has_about_html)");
    // Builds the license file using cargo-about.
    if cargo_about_is_available() {
       println!("cargo:rerun-if-changed=src/assets/about/about.toml");
