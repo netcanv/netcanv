@@ -17,5 +17,6 @@ bytemuck = "1.17.0"
 nanorand = "0.7.0"
 anyhow = "1.0.75"
 structopt = "0.3.25"
-log = "0.4.20"
-simple_logger = "5.0.0"
+
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
