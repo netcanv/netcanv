@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 bitflags = "2.5.0"
-bytemuck = "1.16.1"
+bytemuck = "1.17.0"
 clap.workspace = true
-glam = "0.28.0"
+glam = "0.29.0"
 guillotiere = "0.6.2"
 profiling.workspace = true
 tracing.workspace = true
