@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     # Hopefully this doesn't break too bad.
     - name: Cache cargo-about
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         key: cargo-about-${{ runner.os }}
         path: "~/.cargo/bin/cargo-about"
@@ -51,7 +51,7 @@ jobs:
       run: bash build/appimages.sh
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2.2.2
+      uses: actions/upload-artifact@v4
       with:
         name: netcanv-nightly-linux
         path: bin
@@ -60,10 +60,10 @@ jobs:
     runs-on: windows-2022
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Cache cargo-about
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         key: cargo-about-${{ runner.os }}
         path: "~/.cargo/bin/cargo-about.exe"
@@ -89,7 +89,7 @@ jobs:
         move target/release/netcanv-relay.exe bin/NetCanv-Relay-windows-x86_64.exe
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: netcanv-nightly-windows
         path: bin
@@ -103,7 +103,7 @@ jobs:
 
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
 
     - name: Upload artifacts as release assets
       uses: AButler/upload-release-assets@v3.0
