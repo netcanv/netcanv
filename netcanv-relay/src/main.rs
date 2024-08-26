@@ -9,15 +9,14 @@ use std::time::Duration;
 use anyhow::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use log::LevelFilter;
 use nanorand::Rng;
 use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
-use simple_logger::SimpleLogger;
 use structopt::StructOpt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_async, tungstenite, WebSocketStream};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 type Sink = SplitSink<WebSocketStream<TcpStream>, Message>;
 type Stream = SplitStream<WebSocketStream<TcpStream>>;
@@ -353,12 +352,12 @@ async fn read_packets(
          }
          Ok(Message::Close(frame)) => {
             if let Some(frame) = frame {
-               log::info!("client disconnected, reason: {}", frame.reason);
+               tracing::info!("client disconnected, reason: {}", frame.reason);
                return Ok(());
             }
          }
          Ok(Message::Pong(_)) => {}
-         Ok(_) => log::info!("got ignored message"),
+         Ok(_) => tracing::info!("got ignored message"),
          Err(e) => {
             use tungstenite::Error::*;
             match e {
@@ -367,7 +366,7 @@ async fn read_packets(
                   // According to the documentation this error is the fault of the programmer.
                   // However, this error would crash the entire relay and *all* rooms,
                   // so it's better to treat it as a simple error and end the connection.
-                  log::error!("cannot work with already closed connection");
+                  tracing::error!("cannot work with already closed connection");
                   break;
                }
                _ => anyhow::bail!(e),
@@ -413,7 +412,7 @@ async fn handle_connection(
    address: SocketAddr,
    state: Arc<Mutex<State>>,
 ) -> anyhow::Result<()> {
-   log::info!("{} has connected", address);
+   tracing::info!("{} has connected", address);
    stream.set_nodelay(true)?;
 
    let (mut write, read) = {
@@ -429,20 +428,20 @@ async fn handle_connection(
       let write = Arc::clone(&write);
       tokio::spawn(async move {
          if let Err(error) = ping_loop(write).await {
-            log::error!("[{}] ping loop: {}", address, error);
+            tracing::error!("[{}] ping loop: {}", address, error);
          }
       })
    };
 
    match read_packets(read, write, address, &state).await {
       Ok(()) => (),
-      Err(error) => log::error!("[{}] connection error: {}", address, error),
+      Err(error) => tracing::error!("[{}] connection error: {}", address, error),
    }
 
    // Abort the pinger if it hasn't already exited.
    pinger.abort();
 
-   log::info!("tearing down {}'s connection", address);
+   tracing::info!("tearing down {}'s connection", address);
    {
       let mut state = state.lock().await;
       let peer_id =
@@ -469,7 +468,10 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-   SimpleLogger::new().with_level(LevelFilter::Debug).env().init()?;
+   let subscriber =
+      FmtSubscriber::builder().with_env_filter(EnvFilter::from_default_env()).finish();
+   tracing::subscriber::set_global_default(subscriber)?;
+
    let options = Options::from_args();
 
    let listener = TcpListener::bind((
@@ -479,12 +481,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
    .await?;
    let state = Arc::new(Mutex::new(State::new()));
 
-   log::info!(
+   tracing::info!(
       "NetCanv Relay server {} (protocol version {})",
       env!("CARGO_PKG_VERSION"),
       relay::PROTOCOL_VERSION
    );
-   log::info!("listening on {}", listener.local_addr()?);
+   tracing::info!("listening on {}", listener.local_addr()?);
 
    loop {
       let (socket, address) = listener.accept().await?;
