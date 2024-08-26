@@ -7,5 +7,5 @@ edition = "2021"
 i18n = ["netcanv-i18n"]
 
 [dependencies]
-serde = { version = "1.0.203", features = ["derive"] }
+serde = { version = "1.0.209", features = ["derive"] }
 netcanv-i18n = { path = "../netcanv-i18n", optional = true }
