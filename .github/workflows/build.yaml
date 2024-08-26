@@ -19,6 +19,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # rust-cache uses the current rustc version as its cache key
+    - run: rustup toolchain install stable --profile minimal --no-self-update
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+
     # Hopefully this doesn't break too bad.
     - name: Cache cargo-about
       uses: actions/cache@v4
@@ -61,6 +66,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    # rust-cache uses the current rustc version as its cache key
+    - run: rustup toolchain install stable --profile minimal --no-self-update
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
 
     - name: Cache cargo-about
       uses: actions/cache@v4
