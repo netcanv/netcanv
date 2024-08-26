@@ -3,6 +3,6 @@ end_of_line = lf
 
 [*.rs]
 indent_size = 3
-indent_style = spaces
+indent_style = space
 max_line_length = 100
 
