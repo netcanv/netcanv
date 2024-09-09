@@ -2049,6 +2049,7 @@ dependencies = [
  "netcanv-renderer-wgpu",
  "nysa",
  "once_cell",
+ "parking_lot",
  "phf",
  "profiling",
  "resvg",

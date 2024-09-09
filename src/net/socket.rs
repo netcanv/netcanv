@@ -7,8 +7,9 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use netcanv_protocol::relay;
 use nysa::global as bus;
+use parking_lot::Mutex;
 use tokio::net::TcpStream;
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
@@ -91,7 +92,7 @@ impl SocketSystem {
       });
 
       tracing::debug!("registering quitters");
-      let mut quitters = self.quitters.lock().await;
+      let mut quitters = self.quitters.lock();
       quitters.push(SocketQuitter {
          quit: quit_tx,
          send_join_handle,
@@ -120,7 +121,7 @@ impl SocketSystem {
    pub fn shutdown(self: Arc<Self>) {
       tracing::info!("shutting down socket system");
       tokio::spawn(async move {
-         let mut handles = self.quitters.lock().await;
+         let mut handles = self.quitters.lock();
          for handle in handles.drain(..) {
             tokio::spawn(async move {
                handle.quit().await;

@@ -1,7 +1,7 @@
 //! Platform-agnostic clipboard handling.
 
+use parking_lot::Mutex;
 use std::borrow::Cow;
-use std::sync::Mutex;
 
 use arboard::{Clipboard, ImageData};
 use image::RgbaImage;
@@ -30,14 +30,14 @@ static CLIPBOARD_STATE: Lazy<ClipboardState> = Lazy::new(ClipboardState::new);
 pub fn init() -> netcanv::Result<()> {
    profiling::scope!("clipboard::init");
 
-   let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
+   let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
    *clipboard = Some(Clipboard::new()?);
    Ok(())
 }
 
 /// Copies the provided string into the clipboard.
 pub fn copy_string(string: String) -> netcanv::Result<()> {
-   let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
+   let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
    if let Some(clipboard) = &mut *clipboard {
       clipboard.set_text(string).map_err(|e| Error::CannotSaveToClipboard {
          error: e.to_string(),
@@ -53,15 +53,15 @@ pub fn copy_string(string: String) -> netcanv::Result<()> {
 pub async fn copy_string_async(string: String) -> netcanv::Result<()> {
    // Update string to copy
    {
-      let mut state_string = CLIPBOARD_STATE.string.lock().unwrap();
+      let mut state_string = CLIPBOARD_STATE.string.lock();
       *state_string = Some(string);
    }
 
    tokio::task::spawn_blocking(move || {
       // Wait for clipboard's mutex to unlock first, because by the time the clipboard unlocks,
       // string that we have to copy could have changed already.
-      let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
-      let mut string = CLIPBOARD_STATE.string.lock().unwrap();
+      let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
+      let mut string = CLIPBOARD_STATE.string.lock();
 
       if let Some(clipboard) = &mut *clipboard {
          if let Some(string_to_copy) = (*string).take() {
@@ -83,7 +83,7 @@ pub async fn copy_string_async(string: String) -> netcanv::Result<()> {
 
 /// Copies the provided image into the clipboard.
 pub fn copy_image(image: RgbaImage) -> netcanv::Result<()> {
-   let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
+   let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
    if let Some(clipboard) = &mut *clipboard {
       clipboard
          .set_image(ImageData {
@@ -102,7 +102,7 @@ pub fn copy_image(image: RgbaImage) -> netcanv::Result<()> {
 
 /// Pastes the contents of the clipboard into a string.
 pub fn paste_string() -> netcanv::Result<String> {
-   let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
+   let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
    if let Some(clipboard) = &mut *clipboard {
       Ok(clipboard.get_text().map_err(|e| {
          if let arboard::Error::ContentNotAvailable = e {
@@ -117,7 +117,7 @@ pub fn paste_string() -> netcanv::Result<String> {
 }
 
 pub fn paste_image() -> netcanv::Result<RgbaImage> {
-   let mut clipboard = CLIPBOARD_STATE.clipboard.lock().unwrap();
+   let mut clipboard = CLIPBOARD_STATE.clipboard.lock();
    if let Some(clipboard) = &mut *clipboard {
       let image = clipboard
          .get_image()
