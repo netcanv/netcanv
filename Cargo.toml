@@ -92,6 +92,7 @@ netcanv-renderer-wgpu = { path = "netcanv-renderer-wgpu", optional = true }
 netcanv-protocol = { path = "netcanv-protocol", features = ["i18n"] }
 
 netcanv-i18n = { path = "netcanv-i18n" }
+parking_lot = "0.12.3"
 
 [workspace.dependencies]
 clap = { version = "4.5.7", features = ["derive"] }
