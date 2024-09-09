@@ -4,6 +4,7 @@ mod actions;
 pub mod tool_bar;
 mod tools;
 
+use actions::{ActionMessage, LeaveTheRoomAction};
 use image::RgbaImage;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -106,6 +107,7 @@ pub struct State {
    decode_channels: DecodeChannels,
 
    fatal_error: bool,
+   leave_the_room: bool,
    log: Log,
    tip: Tip,
 
@@ -187,6 +189,7 @@ impl State {
          },
 
          fatal_error: false,
+         leave_the_room: false,
          log: Log::new(),
          tip: Tip {
             text: "".into(),
@@ -240,6 +243,7 @@ impl State {
    /// Registers all the actions and calculates the layout height of the overflow menu.
    fn register_actions(&mut self, renderer: &mut Backend) {
       self.actions.push(Box::new(SaveToFileAction::new(renderer)));
+      self.actions.push(Box::new(LeaveTheRoomAction::new(renderer)));
 
       let room_id_height = 108.0;
       let separator_height = 8.0 * 2.0;
@@ -713,23 +717,29 @@ impl State {
                },
             );
             if action_button.clicked() {
-               if let Err(error) = action.perform(ActionArgs {
+               match action.perform(ActionArgs {
                   assets: &self.assets,
                   paint_canvas: &mut self.paint_canvas,
                   project_file: &mut self.project_file,
                   renderer: ui,
                }) {
-                  log!(
-                     self.log,
-                     "{}",
-                     self
-                        .assets
-                        .tr
-                        .error_while_performing_action
-                        .format()
-                        .with("error", error.translate(&self.assets.language))
-                        .done()
-                  );
+                  Ok(Some(ActionMessage::LeaveTheRoom)) => {
+                     self.leave_the_room = true;
+                  }
+                  Err(error) => {
+                     log!(
+                        self.log,
+                        "{}",
+                        self
+                           .assets
+                           .tr
+                           .error_while_performing_action
+                           .format()
+                           .with("error", error.translate(&self.assets.language))
+                           .done()
+                     );
+                  }
+                  _ => (),
                }
             }
             ui.space(4.0);
@@ -1061,6 +1071,11 @@ impl AppState for State {
 
    fn next_state(self: Box<Self>, _renderer: &mut Backend) -> Box<dyn AppState> {
       if self.fatal_error {
+         Box::new(lobby::State::new(self.assets, self.socket_system))
+      } else if self.leave_the_room {
+         // Socket system is moved when we call `shutdown()`,
+         // so we need to clone the smart pointer
+         Arc::clone(&self.socket_system).shutdown();
          Box::new(lobby::State::new(self.assets, self.socket_system))
       } else {
          self

@@ -65,6 +65,7 @@ tool-eyedropper = Pipeta
 brush-thickness = Grubość
 
 action-save-to-file = Zapisz do pliku
+action-leave-the-room = Wyjdź z pokoju
 
 ## Color picker
 

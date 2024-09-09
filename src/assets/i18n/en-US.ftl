@@ -61,6 +61,7 @@ tool-eyedropper = Eyedropper
 brush-thickness = Thickness
 
 action-save-to-file = Save to file
+action-leave-the-room = Leave the room
 
 ## File dialogs
 

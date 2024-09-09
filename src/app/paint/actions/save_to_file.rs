@@ -7,7 +7,7 @@ use rfd::FileDialog;
 use crate::assets::Assets;
 use crate::backend::{Backend, Image};
 
-use super::{Action, ActionArgs};
+use super::{Action, ActionArgs, ActionMessage};
 
 pub struct SaveToFileAction {
    icon: Image,
@@ -43,7 +43,7 @@ impl Action for SaveToFileAction {
          renderer,
          ..
       }: ActionArgs,
-   ) -> netcanv::Result<()> {
+   ) -> netcanv::Result<Option<ActionMessage>> {
       if let Some(path) = FileDialog::new()
          .add_filter(&assets.tr.fd_png_file, &["png"])
          .add_filter(&assets.tr.fd_netcanv_canvas, &["netcanv", "toml"])
@@ -51,7 +51,7 @@ impl Action for SaveToFileAction {
       {
          project_file.save(renderer, Some(&path), paint_canvas)?
       }
-      Ok(())
+      Ok(None)
    }
 
    fn process(
