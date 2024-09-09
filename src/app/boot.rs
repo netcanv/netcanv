@@ -26,12 +26,10 @@ impl State {
       socket_system: Arc<SocketSystem>,
    ) -> Box<dyn AppState> {
       match cli.command {
-         Some(cli::Commands::HostRoom) => {
-            let peer = Some(Peer::host(
-               Arc::clone(&socket_system),
-               &config().lobby.nickname,
-               &config().lobby.relay,
-            ));
+         Some(cli::Commands::HostRoom { nickname, relay }) => {
+            let nickname = nickname.unwrap_or(config().lobby.nickname.clone());
+            let relay = relay.unwrap_or(config().lobby.relay.clone());
+            let peer = Some(Peer::host(Arc::clone(&socket_system), &nickname, &relay));
 
             Box::new(Self {
                assets,
@@ -39,11 +37,17 @@ impl State {
                peer,
             })
          }
-         Some(cli::Commands::JoinRoom { room_id }) => {
+         Some(cli::Commands::JoinRoom {
+            room_id,
+            nickname,
+            relay,
+         }) => {
+            let nickname = nickname.unwrap_or(config().lobby.nickname.clone());
+            let relay = relay.unwrap_or(config().lobby.relay.clone());
             let peer = Some(Peer::join(
                Arc::clone(&socket_system),
-               &config().lobby.nickname,
-               &config().lobby.relay,
+               &nickname,
+               &relay,
                room_id,
             ));
 
