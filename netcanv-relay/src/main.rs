@@ -9,7 +9,6 @@ use std::time::Duration;
 use anyhow::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use nanorand::Rng;
 use netcanv_protocol::relay::{self, Packet, PeerId, RoomId, DEFAULT_PORT};
 use structopt::StructOpt;
 use tokio::net::{TcpListener, TcpStream};
@@ -59,9 +58,8 @@ impl Rooms {
 
    /// Generates a pseudo-random room ID.
    fn generate_room_id(&self) -> RoomId {
-      let mut rng = nanorand::tls_rng();
       RoomId([(); 6].map(|_| {
-         let index = rng.generate_range(0..Self::ID_CHARSET.len());
+         let index = fastrand::usize(0..Self::ID_CHARSET.len());
          Self::ID_CHARSET[index]
       }))
    }
@@ -152,9 +150,8 @@ impl Peers {
 
    /// Allocates a new peer ID for the given socket address.
    fn allocate_peer_id(&mut self, sink: Arc<Mutex<Sink>>, address: SocketAddr) -> Option<PeerId> {
-      let mut rng = nanorand::tls_rng();
       for _attempt in 0..50 {
-         let id = PeerId(rng.generate_range(PeerId::FIRST_PEER..=PeerId::LAST_PEER));
+         let id = PeerId(fastrand::u64(PeerId::FIRST_PEER..=PeerId::LAST_PEER));
          if self.occupied_peer_ids.insert(id) {
             self.peer_ids.insert(address, id);
             self.peer_sinks.insert(id, sink);
