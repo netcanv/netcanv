@@ -164,6 +164,15 @@ pub trait RenderBackend: Renderer {
       out_pixels: &mut [u8],
    );
 
+   /// Downloads RGBA pixels from the framebuffer, scaled to fit into a buffer.
+   fn download_framebuffer_scaled(
+      &mut self,
+      framebuffer: &Self::Framebuffer,
+      position: (u32, u32),
+      size: (u32, u32),
+      out_pixels: &mut [u8],
+   );
+
    /// Scales the transform matrix by the given factor.
    fn scale(&mut self, scale: Vector);
 

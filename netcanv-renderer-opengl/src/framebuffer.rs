@@ -147,6 +147,51 @@ impl Framebuffer {
       // Fleeeeeeeeeeep them 'round.
       flip_vertically(width as usize, height as usize, 4, dest);
    }
+
+   pub(crate) fn download_rgba_scaled(
+      &self,
+      (x, y): (u32, u32),
+      (width, height): (u32, u32),
+      dest: &mut [u8],
+   ) {
+      unsafe {
+         // Create a framebuffer we will copy pixels to, to resize the current framebuffer
+         let scaled_framebuffer = Framebuffer::new(
+            Rc::clone(&self.gl),
+            Rc::clone(&self.gl_state),
+            width,
+            height,
+         );
+
+         // Bind the framebuffers we will read from and copy to
+         self.gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(self.framebuffer));
+         self.gl.bind_framebuffer(
+            glow::DRAW_FRAMEBUFFER,
+            Some(scaled_framebuffer.framebuffer()),
+         );
+
+         // Copy pixels
+         self.gl.blit_framebuffer(
+            x as i32,
+            y as i32,
+            self.width as i32,
+            self.height as i32,
+            0,
+            0,
+            width as i32,
+            height as i32,
+            glow::COLOR_BUFFER_BIT,
+            glow::NEAREST,
+         );
+
+         // Download pixels from the scaled framebuffer to the destination
+         scaled_framebuffer.download_rgba((x, y), (width, height), dest);
+
+         // Unbind the framebuffers
+         self.gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, None);
+         self.gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+      }
+   }
 }
 
 impl netcanv_renderer::Framebuffer for Framebuffer {
