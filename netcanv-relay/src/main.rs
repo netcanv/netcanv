@@ -15,7 +15,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_async, tungstenite, WebSocketStream};
-use tracing::level_filters::LevelFilter;
+use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 type Sink = SplitSink<WebSocketStream<TcpStream>, Message>;
