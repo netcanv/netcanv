@@ -15,6 +15,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_async, tungstenite, WebSocketStream};
+use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 type Sink = SplitSink<WebSocketStream<TcpStream>, Message>;
@@ -465,8 +466,14 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-   let subscriber =
-      FmtSubscriber::builder().with_env_filter(EnvFilter::from_default_env()).finish();
+   let subscriber = FmtSubscriber::builder()
+      .with_env_filter(
+         EnvFilter::builder()
+            .with_default_directive(LevelFilter::INFO.into())
+            .with_env_var("NETCANV_LOG")
+            .from_env_lossy(),
+      )
+      .finish();
    tracing::subscriber::set_global_default(subscriber)?;
 
    let options = Options::from_args();
