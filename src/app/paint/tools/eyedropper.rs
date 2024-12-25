@@ -93,7 +93,7 @@ impl Tool for EyedropperTool {
             assets,
             wm,
             window_view: picker_window,
-            show_eraser: true,
+            show_eraser: false,
          },
       );
 
