@@ -458,7 +458,7 @@ impl Tool for ShapesTool {
       Ok(())
    }
 
-   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> crate::Result<()> {
+   fn network_peer_activate(&mut self, _net: Net, peer_id: PeerId) -> netcanv::Result<()> {
       self.ensure_peer(peer_id);
       Ok(())
    }
