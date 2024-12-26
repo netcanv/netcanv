@@ -163,11 +163,6 @@ impl SelectionTool {
       renderer.fill_circle(position, radius, Self::COLOR);
    }
 
-   /// Returns whether a rect is smaller than a pixel.
-   fn rect_is_smaller_than_a_pixel(rect: Rect) -> bool {
-      rect.width().trunc().abs() < 1.0 || rect.height().trunc().abs() < 1.0
-   }
-
    /// Ensures that a peer's selection is properly initialized. Returns a mutable reference to
    /// said selection.
    fn ensure_peer(&mut self, peer_id: PeerId) -> &mut PeerSelection {
@@ -455,7 +450,7 @@ impl Tool for SelectionTool {
          (_, ButtonState::Released) => {
             // After the button is released and the selection's size is close to 0, deselect.
             if let Some(rect) = self.selection.rect {
-               if Self::rect_is_smaller_than_a_pixel(rect) {
+               if rect.is_smaller_than_a_pixel() {
                   self.selection.cancel();
                   catch!(net.send(self, PeerId::BROADCAST, Packet::Cancel));
                }
@@ -534,7 +529,7 @@ impl Tool for SelectionTool {
    /// Processes the selection overlay.
    fn process_paint_canvas_overlays(&mut self, ToolArgs { ui, .. }: ToolArgs, viewport: &Viewport) {
       if let Some(rect) = self.selection.normalized_rect() {
-         if !Self::rect_is_smaller_than_a_pixel(rect) {
+         if !rect.is_smaller_than_a_pixel() {
             ui.draw(|ui| {
                // Oh my.
                let top_left = viewport.to_screen_space(rect.top_left(), ui.size()).floor();
@@ -584,7 +579,7 @@ impl Tool for SelectionTool {
    ) {
       if let Some(peer) = self.peer_selections.get(&peer_id) {
          if let Some(rect) = peer.lerp_normalized_rect() {
-            if !Self::rect_is_smaller_than_a_pixel(rect) {
+            if !rect.is_smaller_than_a_pixel() {
                ui.draw(|ui| {
                   let top_left = viewport.to_screen_space(rect.top_left(), ui.size());
                   let bottom_right = viewport.to_screen_space(rect.bottom_right(), ui.size());

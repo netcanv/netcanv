@@ -33,6 +33,7 @@ pub struct ToolKeymap {
    pub selection: KeyBinding,
    pub brush: KeyBinding,
    pub eyedropper: KeyBinding,
+   pub shapes: KeyBinding,
 }
 
 impl Default for ToolKeymap {
@@ -41,6 +42,7 @@ impl Default for ToolKeymap {
          selection: (Modifier::NONE, VirtualKeyCode::Key1),
          brush: (Modifier::NONE, VirtualKeyCode::Key2),
          eyedropper: (Modifier::NONE, VirtualKeyCode::Key3),
+         shapes: (Modifier::NONE, VirtualKeyCode::Key4),
       }
    }
 }

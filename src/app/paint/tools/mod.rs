@@ -16,10 +16,12 @@ use crate::viewport::Viewport;
 mod brush;
 mod eyedropper;
 mod selection;
+mod shapes;
 
 pub use brush::*;
 pub use eyedropper::*;
 pub use selection::*;
+pub use shapes::*;
 
 use netcanv_protocol::relay::PeerId;
 use serde::Serialize;
