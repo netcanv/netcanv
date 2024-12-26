@@ -140,6 +140,9 @@ pub trait RectMath {
 
    /// Returns whether the rectangle contains the given point.
    fn contains(&self, point: Point) -> bool;
+
+   /// Returns whether a rect is smaller than a pixel.
+   fn is_smaller_than_a_pixel(&self) -> bool;
 }
 
 impl RectMath for Rect {
@@ -245,6 +248,10 @@ impl RectMath for Rect {
          && point.y >= self.top()
          && point.x <= self.right()
          && point.y <= self.bottom()
+   }
+   
+   fn is_smaller_than_a_pixel(&self) -> bool {
+      self.width().trunc().abs() < 1.0 || self.height().trunc().abs() < 1.0
    }
 }
 
