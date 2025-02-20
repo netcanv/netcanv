@@ -249,7 +249,7 @@ impl RectMath for Rect {
          && point.x <= self.right()
          && point.y <= self.bottom()
    }
-   
+
    fn is_smaller_than_a_pixel(&self) -> bool {
       self.width().trunc().abs() < 1.0 || self.height().trunc().abs() < 1.0
    }
@@ -347,6 +347,14 @@ impl StrExt for &str {
          &self[start..end]
       }
    }
+}
+
+pub fn format_vector(vector: Vector) -> String {
+   format!("{:.0}, {:.0}", vector.x, vector.y)
+}
+
+pub fn label_width(font: &Font, text: &str) -> f32 {
+   font.text_width(text).max(96.0)
 }
 
 //

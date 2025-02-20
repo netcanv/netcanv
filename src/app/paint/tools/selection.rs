@@ -8,11 +8,12 @@ use crate::backend::winit::event::MouseButton;
 use crate::backend::winit::window::CursorIcon;
 use crate::config::config;
 use crate::keymap::KeyBinding;
+use crate::paint::{format_vector, label_width};
 use image::codecs::png::PngEncoder;
 use image::io::Reader;
 use image::{ColorType, ImageEncoder, ImageFormat, RgbaImage};
 use netcanv_protocol::relay::PeerId;
-use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer, Vector};
+use netcanv_renderer::paws::{point, vector, AlignH, AlignV, Color, Point, Rect, Renderer};
 use netcanv_renderer::{
    BlendMode, Font as FontTrait, Framebuffer as FramebufferTrait, RenderBackend,
 };
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::paint::{self, GlobalControls};
 use crate::assets::Assets;
-use crate::backend::{Backend, Font, Framebuffer, Image};
+use crate::backend::{Backend, Framebuffer, Image};
 use crate::clipboard;
 use crate::common::{deserialize_bincode, lerp_point, RectMath, VectorMath};
 use crate::paint_canvas::PaintCanvas;
@@ -930,12 +931,4 @@ enum Packet {
    Paste((f32, f32), Vec<u8>),
    /// Update the captured image.
    Update(Vec<u8>),
-}
-
-fn format_vector(vector: Vector) -> String {
-   format!("{:.0}, {:.0}", vector.x, vector.y)
-}
-
-fn label_width(font: &Font, text: &str) -> f32 {
-   font.text_width(text).max(96.0)
 }
