@@ -360,7 +360,11 @@ fn init_logging(cli: &Cli) -> errors::Result<LogGuards> {
             .with_writer(std::io::stderr)
             .with_filter(
                EnvFilter::builder()
-                  .with_default_directive(LevelFilter::INFO.into())
+                  .with_default_directive(if cfg!(debug_assertions) {
+                     LevelFilter::TRACE.into()
+                  } else {
+                     LevelFilter::INFO.into()
+                  })
                   .with_env_var("NETCANV_LOG")
                   .from_env_lossy(),
             ),
