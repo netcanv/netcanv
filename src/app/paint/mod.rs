@@ -6,10 +6,10 @@ mod tools;
 
 use actions::{ActionMessage, LeaveTheRoomAction};
 use image::RgbaImage;
-use tools::ShapesTool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tools::ShapesTool;
 use web_time::{Duration, Instant};
 
 use netcanv_i18n::translate_enum::TranslateEnum;

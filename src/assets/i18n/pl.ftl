@@ -77,6 +77,7 @@ rgb-hex-code = Kod koloru RGB
 ## Shapes
 
 rectangle = Prostokąt
+ellipse = Elipsa
 
 ## Errors
 

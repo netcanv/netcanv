@@ -206,4 +206,6 @@ pub trait RenderBackend: Renderer {
          thickness,
       );
    }
+
+   fn fill_with_radiuses(&mut self, rect: Rect, color: Color, radius: (f32, f32));
 }

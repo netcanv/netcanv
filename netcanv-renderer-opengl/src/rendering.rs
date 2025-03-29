@@ -898,7 +898,7 @@ impl RenderBackend for OpenGlBackend {
    ) {
       framebuffer.download_rgba(position, size, out_pixels);
    }
-   
+
    fn download_framebuffer_scaled(
       &mut self,
       framebuffer: &Self::Framebuffer,
@@ -916,5 +916,110 @@ impl RenderBackend for OpenGlBackend {
    fn set_blend_mode(&mut self, new_blend_mode: BlendMode) {
       self.state.transform_mut().blend_mode = new_blend_mode;
       self.state.apply_transform();
+   }
+
+   // TODO: Move to Renderer trait implementation later
+   fn fill_with_radiuses(&mut self, rect: Rect, color: Color, (radius_x, radius_y): (f32, f32)) {
+      use std::f32::consts::PI;
+
+      self.state.bind_null_texture();
+      self.start();
+      if radius_x > 0.0 || radius_y > 0.0 {
+         let inner_rect = Rect::new(
+            rect.position + vector(radius_x, radius_y),
+            rect.size - vector(radius_x, radius_y) * 2.0,
+         );
+         let (inner_top_left, inner_top_right, inner_bottom_right, inner_bottom_left) =
+            self.shape().rect(
+               Vertex::colored(inner_rect.top_left(), color),
+               Vertex::colored(inner_rect.bottom_right(), color),
+            );
+         // Top edge
+         let top_left = self.shape().push_vertex(Vertex::colored(
+            rect.top_left() + vector(radius_x, 0.0),
+            color,
+         ));
+         let top_right = self.shape().push_vertex(Vertex::colored(
+            rect.top_right() + vector(-radius_x, 0.0),
+            color,
+         ));
+         self.shape().quad_indices(top_left, top_right, inner_top_right, inner_top_left);
+         // Right edge
+         let right_upper = self.shape().push_vertex(Vertex::colored(
+            rect.top_right() + vector(0.0, radius_y),
+            color,
+         ));
+         let right_lower = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_right() + vector(0.0, -radius_y),
+            color,
+         ));
+         self.shape().quad_indices(
+            inner_top_right,
+            right_upper,
+            right_lower,
+            inner_bottom_right,
+         );
+         // Bottom edge
+         let bottom_left = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_left() + vector(radius_x, 0.0),
+            color,
+         ));
+         let bottom_right = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_right() + vector(-radius_x, 0.0),
+            color,
+         ));
+         self.shape().quad_indices(
+            inner_bottom_left,
+            inner_bottom_right,
+            bottom_right,
+            bottom_left,
+         );
+         // Left edge
+         let left_upper = self.shape().push_vertex(Vertex::colored(
+            rect.top_left() + vector(0.0, radius_y),
+            color,
+         ));
+         let left_lower = self.shape().push_vertex(Vertex::colored(
+            rect.bottom_left() + vector(0.0, -radius_y),
+            color,
+         ));
+         self.shape().quad_indices(left_upper, inner_top_left, inner_bottom_left, left_lower);
+         // Corners
+         self.shape().ellipse(
+            inner_top_left,
+            inner_rect.top_left(),
+            (radius_x, radius_y),
+            PI,
+            1.5 * PI,
+         );
+         self.shape().ellipse(
+            inner_top_right,
+            inner_rect.top_right(),
+            (radius_x, radius_y),
+            1.5 * PI,
+            2.0 * PI,
+         );
+         self.shape().ellipse(
+            inner_bottom_right,
+            inner_rect.bottom_right(),
+            (radius_x, radius_y),
+            0.0,
+            0.5 * PI,
+         );
+         self.shape().ellipse(
+            inner_bottom_left,
+            inner_rect.bottom_left(),
+            (radius_x, radius_y),
+            0.5 * PI,
+            PI,
+         );
+         self.state.draw();
+      } else {
+         self.shape().rect(
+            Vertex::colored(rect.top_left(), color),
+            Vertex::colored(rect.bottom_right(), color),
+         );
+         self.state.draw();
+      }
    }
 }

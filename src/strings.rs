@@ -63,6 +63,7 @@ pub struct Strings {
    // Shapes
    //
    pub rectangle: String,
+   pub ellipse: String,
 
    //
    // File dialogs

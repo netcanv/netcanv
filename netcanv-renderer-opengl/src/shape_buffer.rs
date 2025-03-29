@@ -134,6 +134,36 @@ impl ShapeBuffer {
       }
    }
 
+   /// Pushes a filled ellipse into the shape buffer.
+   ///
+   /// See also [`ShapeBuffer::arc`].
+   pub fn ellipse(
+      &mut self,
+      center_index: u32,
+      center: Vector,
+      (radius_x, radius_y): (f32, f32),
+      start_angle: f32,
+      end_angle: f32,
+   ) {
+      let Vertex { color, uv, .. } = self.vertices[center_index as usize];
+      // TODO: Replace radius_x + radius_y with something more reasonable
+      let vertex_count = Self::arc_vertex_count(radius_x + radius_y, start_angle, end_angle);
+      let mut perimeter_indices = SmallVec::<[u32; 32]>::new();
+      for angle_vector in Rotate::new(start_angle, end_angle, vertex_count) {
+         perimeter_indices.push(self.push_vertex(Vertex {
+            position: point(
+               center.x + angle_vector.x * radius_x,
+               center.y + angle_vector.y * radius_y,
+            ),
+            uv,
+            color,
+         }));
+      }
+      for pair in perimeter_indices.windows(2) {
+         self.push_indices(&[center_index, pair[0], pair[1]]);
+      }
+   }
+
    pub fn arc_outline(
       &mut self,
       center: Vector,

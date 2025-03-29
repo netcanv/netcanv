@@ -79,6 +79,7 @@ rgb-hex-code = RGB hex code
 ## Shapes
 
 rectangle = Rectangle
+ellipse = Ellipse
 
 ## Errors
 

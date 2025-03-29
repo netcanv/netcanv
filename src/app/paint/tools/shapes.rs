@@ -30,11 +30,13 @@ struct Icons {
    cursor: Image,
    position: Image,
    rectangle: Image,
+   ellipse: Image,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum Shape {
    Rectangle,
+   Ellipse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +88,11 @@ fn normalize_rect(rect: &Option<Rect>) -> Option<Rect> {
 fn draw_shape(renderer: &mut Backend, shape: Shape, rect: Rect, color: Color) {
    match shape {
       Shape::Rectangle => renderer.fill(rect, color, 0.0),
+      Shape::Ellipse => {
+         let radius_x = (rect.x() - rect.center_x()).abs();
+         let radius_y = (rect.y() - rect.center_y()).abs();
+         renderer.fill_with_radiuses(rect.sort(), color, (radius_x, radius_y));
+      }
    }
 }
 
@@ -126,6 +133,7 @@ pub struct ShapesTool {
    previous_mouse_position: Point,
    potential_action: Action,
    action: Action,
+   shape: Shape,
    state: State,
    peer_shapes: HashMap<PeerId, PeerShape>,
 }
@@ -151,11 +159,16 @@ impl ShapesTool {
                renderer,
                include_bytes!("../../../assets/icons/rectangle.svg"),
             ),
+            ellipse: Assets::load_svg(
+               renderer,
+               include_bytes!("../../../assets/icons/ellipse.svg"),
+            ),
          },
          mouse_position: point(0.0, 0.0),
          previous_mouse_position: point(0.0, 0.0),
          potential_action: Action::None,
          action: Action::None,
+         shape: Shape::Rectangle,
          state: State::Shape {
             shape: Shape::Rectangle,
             rect: None,
@@ -384,7 +397,7 @@ impl Tool for ShapesTool {
                   catch!(net.send(self, PeerId::BROADCAST, Packet::Deselect));
                }
                self.state = State::Shape {
-                  shape: Shape::Rectangle,
+                  shape: self.shape,
                   rect: Some(Rect::new(mouse_position, vector(0.0, 0.0))),
                };
                tracing::trace!("changed state into shape");
@@ -605,26 +618,44 @@ impl Tool for ShapesTool {
 
       // Draw the shape buttons
 
-      if let State::Shape { shape, .. } = &mut self.state {
-         if Button::with_icon(
+      if Button::with_icon(
+         ui,
+         input,
+         &ButtonArgs::new(
             ui,
-            input,
-            &ButtonArgs::new(
-               ui,
-               ButtonColors::toggle(
-                  *shape == Shape::Rectangle,
-                  &assets.colors.toolbar_button,
-                  &assets.colors.selected_toolbar_button,
-               ),
-            )
-            .tooltip(&assets.sans, Tooltip::top(&assets.tr.rectangle)),
-            &self.icons.rectangle,
+            ButtonColors::toggle(
+               self.shape == Shape::Rectangle,
+               &assets.colors.toolbar_button,
+               &assets.colors.selected_toolbar_button,
+            ),
          )
-         .clicked()
-         {
-            *shape = Shape::Rectangle;
-            catch!(net.send(self, PeerId::BROADCAST, Packet::Shape(Shape::Rectangle)));
-         }
+         .tooltip(&assets.sans, Tooltip::top(&assets.tr.rectangle)),
+         &self.icons.rectangle,
+      )
+      .clicked()
+      {
+         self.shape = Shape::Rectangle;
+         catch!(net.send(self, PeerId::BROADCAST, Packet::Shape(Shape::Rectangle)));
+      }
+
+      if Button::with_icon(
+         ui,
+         input,
+         &ButtonArgs::new(
+            ui,
+            ButtonColors::toggle(
+               self.shape == Shape::Ellipse,
+               &assets.colors.toolbar_button,
+               &assets.colors.selected_toolbar_button,
+            ),
+         )
+         .tooltip(&assets.sans, Tooltip::top(&assets.tr.ellipse)),
+         &self.icons.ellipse,
+      )
+      .clicked()
+      {
+         self.shape = Shape::Ellipse;
+         catch!(net.send(self, PeerId::BROADCAST, Packet::Shape(Shape::Ellipse)));
       }
 
       if let State::Selection(selection) = &mut self.state {
