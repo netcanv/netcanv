@@ -57,6 +57,7 @@ you-are-now-hosting-the-room = You are now hosting the room
 tool-selection = Selection
 tool-brush = Brush
 tool-eyedropper = Eyedropper
+tool-shapes = Shapes
 
 brush-thickness = Thickness
 
@@ -74,6 +75,11 @@ fd-netcanv-canvas = NetCanv canvas
 click-to-edit-color = Click to edit color
 eraser = Eraser
 rgb-hex-code = RGB hex code
+
+## Shapes
+
+rectangle = Rectangle
+ellipse = Ellipse
 
 ## Errors
 

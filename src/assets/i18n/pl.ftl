@@ -61,6 +61,7 @@ you-are-now-hosting-the-room = Zostałeś gospodarzem pokoju
 tool-selection = Zaznaczenie
 tool-brush = Pędzel
 tool-eyedropper = Pipeta
+tool-shapes = Kształty
 
 brush-thickness = Grubość
 
@@ -72,6 +73,11 @@ action-leave-the-room = Wyjdź z pokoju
 click-to-edit-color = Kliknij aby edytować kolor
 eraser = Gumka
 rgb-hex-code = Kod koloru RGB
+
+## Shapes
+
+rectangle = Prostokąt
+ellipse = Elipsa
 
 ## Errors
 

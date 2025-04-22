@@ -56,11 +56,11 @@ use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use clap::Parser;
-use rfd::{MessageDialog, MessageLevel};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
+use rfd::{MessageDialog, MessageLevel};
 use tracing::{error, info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -353,12 +353,21 @@ fn init_logging(cli: &Cli) -> errors::Result<LogGuards> {
 
    let subscriber = tracing_subscriber::registry()
       .with(
-         tracing_subscriber::fmt::layer().without_time().with_writer(std::io::stderr).with_filter(
-            EnvFilter::builder()
-               .with_default_directive(LevelFilter::INFO.into())
-               .with_env_var("NETCANV_LOG")
-               .from_env_lossy(),
-         ),
+         tracing_subscriber::fmt::layer()
+            .with_line_number(cfg!(debug_assertions))
+            .with_file(cfg!(debug_assertions))
+            .without_time()
+            .with_writer(std::io::stderr)
+            .with_filter(
+               EnvFilter::builder()
+                  .with_default_directive(if cfg!(debug_assertions) {
+                     LevelFilter::TRACE.into()
+                  } else {
+                     LevelFilter::INFO.into()
+                  })
+                  .with_env_var("NETCANV_LOG")
+                  .from_env_lossy(),
+            ),
       )
       .with(chrome_trace.as_mut().and_then(|(ct, _)| ct.take()));
 

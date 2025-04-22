@@ -9,6 +9,7 @@ use image::RgbaImage;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tools::ShapesTool;
 use web_time::{Duration, Instant};
 
 use netcanv_i18n::translate_enum::TranslateEnum;
@@ -235,6 +236,7 @@ impl State {
       let _selection = self.toolbar.add_tool(SelectionTool::new(renderer));
       let brush = self.toolbar.add_tool(BrushTool::new(renderer));
       let _eyedropper = self.toolbar.add_tool(EyedropperTool::new(renderer));
+      let _shapes = self.toolbar.add_tool(ShapesTool::new(renderer));
 
       // Set the default tool to the brush.
       self.toolbar.set_current_tool(brush);

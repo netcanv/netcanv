@@ -2566,8 +2566,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "paws"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0c8e82e15d7415496cfc6c853e88679c342e713d4ec1280668996262d81f0e1"
+source = "git+https://github.com/netcanv/paws.git?rev=f624f88087ac4d5a2827c2c22717ca1976585815#f624f88087ac4d5a2827c2c22717ca1976585815"
 
 [[package]]
 name = "percent-encoding"

@@ -60,6 +60,12 @@ pub struct Strings {
    pub rgb_hex_code: String,
 
    //
+   // Shapes
+   //
+   pub rectangle: String,
+   pub ellipse: String,
+
+   //
    // File dialogs
    //
    pub fd_supported_image_files: String,
