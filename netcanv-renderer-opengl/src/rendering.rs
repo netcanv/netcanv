@@ -598,6 +598,10 @@ impl Renderer for OpenGlBackend {
       }
    }
 
+   fn fill_with_radiuses(&mut self, _: Rect, _: Color, _: (f32, f32)) {
+      unimplemented!()
+   }
+
    fn outline(&mut self, mut rect: Rect, color: Color, radius: f32, thickness: f32) {
       use std::f32::consts::PI;
 
@@ -898,7 +902,7 @@ impl RenderBackend for OpenGlBackend {
    ) {
       framebuffer.download_rgba(position, size, out_pixels);
    }
-   
+
    fn download_framebuffer_scaled(
       &mut self,
       framebuffer: &Self::Framebuffer,
