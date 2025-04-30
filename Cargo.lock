@@ -2142,6 +2142,7 @@ dependencies = [
  "raw-window-handle 0.5.2",
  "smallvec",
  "swash",
+ "tracing",
  "winit",
 ]
 
@@ -2566,8 +2567,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "paws"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0c8e82e15d7415496cfc6c853e88679c342e713d4ec1280668996262d81f0e1"
+source = "git+https://github.com/netcanv/paws.git?rev=6e66fd34d750306addc2afca390e4ad016ca3d2e#6e66fd34d750306addc2afca390e4ad016ca3d2e"
 
 [[package]]
 name = "percent-encoding"
