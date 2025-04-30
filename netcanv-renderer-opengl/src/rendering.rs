@@ -723,9 +723,17 @@ impl Renderer for OpenGlBackend {
    fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
       use std::f32::consts::PI;
 
+      // A hack to work around anti-aliasing.
+      //
+      // When drawing a line from, for example, (0, 0) to (1, 0), the points are in the corners and 
+      // the renderer will actually draw two lines - one on top and one on bottom. We add 0.5 to
+      // the positions, so the points are in the center and the renderer will draw now one
+      // pixel-perfect line.
+      //
+      // Floor is here to stop the 1 pixel brush from drawing 1 pixel further.
       if thickness % 2.0 > 0.95 {
-         a += vector(0.5, 0.5);
-         b += vector(0.5, 0.5);
+         a = a.floor() + vector(0.5, 0.5);
+         b = b.floor() + vector(0.5, 0.5);
       }
 
       let half_thickness = thickness / 2.0;
