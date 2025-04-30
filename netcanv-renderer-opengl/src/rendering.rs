@@ -719,15 +719,15 @@ impl Renderer for OpenGlBackend {
    fn line(&mut self, mut a: Point, mut b: Point, color: Color, cap: LineCap, thickness: f32) {
       use std::f32::consts::PI;
 
+      if thickness % 2.0 > 0.95 {
+         a += vector(0.5, 0.5);
+         b += vector(0.5, 0.5);
+      }
+
       let half_thickness = thickness / 2.0;
       if a == b {
          self.point(a, half_thickness, color, cap);
          return;
-      }
-
-      if thickness % 2.0 > 0.95 {
-         a += vector(0.5, 0.5);
-         b += vector(0.5, 0.5);
       }
 
       let direction = (b - a).normalize();
