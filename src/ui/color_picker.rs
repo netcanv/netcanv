@@ -95,7 +95,14 @@ impl ColorPicker {
    /// Sets the currently selected color to the given (paws) color.
    pub fn set_color(&mut self, color: Color) {
       self.eraser = false;
-      self.palette[self.index] = Srgb::from_color(color).into();
+
+      // Check if the palette has the color already.
+      let color = Srgb::from_color(color).into();
+      if let Some(index) = self.palette.iter().position(|&c| c == color) {
+         self.index = index; // If it does, choose it.
+      } else {
+         self.palette[self.index] = color; // If it doesn't, replace the currently selected color.
+      }
    }
 
    /// Sets whether the eraser is enabled.
