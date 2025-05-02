@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::assets::Assets;
-use crate::common::VectorMath;
 use crate::token::Token;
 
 use super::view::View;

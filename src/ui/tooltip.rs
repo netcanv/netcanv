@@ -6,7 +6,7 @@ use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, Rect, Vector
 use netcanv_renderer::Font as FontTrait;
 
 use crate::backend::Font;
-use crate::common::{SafeMath, VectorMath};
+use crate::common::SafeMath;
 
 use super::{Input, Ui, UiInput};
 
