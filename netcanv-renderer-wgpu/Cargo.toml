@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
-bitflags = "2.5.0"
-bytemuck = "1.17.0"
+anyhow = "1.0.98"
+bitflags = "2.9.0"
+bytemuck = "1.23.0"
 clap.workspace = true
-glam = "0.29.0"
+glam = "0.30.3"
 guillotiere = "0.6.2"
 profiling.workspace = true
 tracing.workspace = true
-swash = "0.1.17"
+swash = "0.2.2"
 wgpu = "0.18.0"
 winit = { version = "0.28.7", features = ["serde"] }
 

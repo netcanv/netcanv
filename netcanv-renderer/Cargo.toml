@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.98"
 paws = { git = "https://github.com/netcanv/paws.git", rev = "6e66fd34d750306addc2afca390e4ad016ca3d2e" }
