@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.98"
 clap = { workspace = true }
 winit = { version = "0.28.7", features = ["serde"] }
 glutin = "0.30.10"
@@ -12,9 +12,9 @@ glutin-winit = "0.3.0"
 raw-window-handle = "0.5.2"
 glow = "0.13.1"
 memoffset = "0.9.1"
-swash = "0.1.17"
-smallvec = { version = "1.13.2", features = ["const_generics"] }
-glam = "0.29.0"
+swash = "0.2.2"
+smallvec = { version = "1.15.0", features = ["const_generics"] }
+glam = "0.30.3"
 tracing.workspace = true
 
 netcanv-renderer = { path = "../netcanv-renderer" }
