@@ -1,6 +1,6 @@
 [package]
 name = "netcanv"
-version = "0.8.2"
+version = "0.8.3"
 authors = ["liquidev <liquidev@tutanota.com>", "devildefu"]
 description = "An online collaborative paint canvas."
 repository = "https://github.com/netcanv/netcanv"
