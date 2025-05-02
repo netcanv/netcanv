@@ -7,15 +7,15 @@ edition = "2021"
 
 netcanv-protocol = { path = "../netcanv-protocol" }
 
-tokio = { version = "1.39.3", features = ["full"] }
-tokio-tungstenite = "0.23.1"
-rustls = { version = "0.23.10", default-features = false, features = ["ring"] }
+tokio = { version = "1.44.2", features = ["full"] }
+tokio-tungstenite = "0.24.0"
+rustls = { version = "0.23.26", default-features = false, features = ["ring"] }
 futures-util = { version = "0.3", features = ["sink", "std"] }
-serde = { version = "1.0.209", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }
 bincode = "1.3.2"
-bytemuck = "1.17.0"
-nanorand = "0.7.0"
-anyhow = "1.0.75"
+bytemuck = "1.23.0"
+fastrand = "2.3.0"
+anyhow = "1.0.98"
 structopt = "0.3.25"
 log = "0.4.20"
 simple_logger = "5.0.0"
