@@ -1,5 +1,6 @@
 use image::imageops::FilterType;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::io::Cursor;
 use tokio::sync::{mpsc, oneshot};
 use web_time::Instant;
@@ -84,8 +85,8 @@ pub struct SelectionTool {
       oneshot::Receiver<RgbaImage>,
       oneshot::Receiver<Vec<u8>>,
    )>,
-   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Option<RgbaImage>)>,
-   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Option<RgbaImage>)>,
+   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Option<RgbaImage>, Option<Rect>)>,
+   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Option<RgbaImage>, Option<Rect>)>,
    ongoing_paste_jobs: HashSet<PeerId>,
 }
 
@@ -246,6 +247,27 @@ impl SelectionTool {
          }
          if let Ok(bytes) = bytes.try_recv() {
             let Point { x, y } = *position;
+            // Update selection rectangle to where it was when deselection happened, to mitigate a race condition where
+            // the rectangle could be overridden by 'network_send' method, updating it before the peers catch up with the action.
+            if let Some(deselected_at) = self.selection.deselected_at {
+               tracing::debug!("updating selection rect to where it was");
+               let Point { x, y } = deselected_at.position;
+               let Vector {
+                  x: width,
+                  y: height,
+               } = deselected_at.size;
+               catch!(
+                  net.send(
+                     self,
+                     PeerId::BROADCAST,
+                     Packet::Rect {
+                        position: (x, y),
+                        size: (width, height)
+                     }
+                  ),
+                  return false
+               );
+            }
             catch!(
                net.send(self, PeerId::BROADCAST, Packet::Paste((x, y), bytes)),
                return false
@@ -261,11 +283,12 @@ impl SelectionTool {
    }
 
    fn poll_peer_pastes(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      while let Ok((peer_id, image)) = self.peer_pastes_rx.try_recv() {
+      while let Ok((peer_id, image, rect)) = self.peer_pastes_rx.try_recv() {
          let peer = self.ensure_peer(peer_id);
-         let deselected_before_decoding_finished = peer.selection.rect.is_none();
+         let deselected_before_decoding_finished = rect.is_none();
          if !deselected_before_decoding_finished {
-            peer.selection.deselect(renderer, paint_canvas);
+            peer.selection.deselect_at(renderer, paint_canvas, rect);
+            tracing::debug!("deselected peer paste");
          }
          if let Some(image) = image {
             // We don't update the rectangle here because a data race could happen.
@@ -672,6 +695,7 @@ impl Tool for SelectionTool {
    ) -> netcanv::Result<()> {
       let packet = deserialize_bincode(&payload)?;
       let peer = self.ensure_peer(sender);
+      tracing::trace!("received packet {:?}", packet);
       match packet {
          Packet::Rect {
             position: (x, y),
@@ -694,15 +718,17 @@ impl Tool for SelectionTool {
             // ↑ (x, y) is only here for compatibility with 0.7.0 and is no longer used
             // because it caused a data race
             tracing::debug!("{} pasted image ({} bytes of data)", sender, data.len());
+            // Save the rectangle for later, so it doesn't get updated while we process the paste.
+            let rect = peer.selection.rect;
             let tx = self.peer_pastes_tx.clone();
             self.ongoing_paste_jobs.insert(sender);
             tokio::task::spawn_blocking(move || match Self::decode_image(&data) {
                Ok(image) => {
-                  let _ = tx.send((sender, Some(image)));
+                  let _ = tx.send((sender, Some(image), rect));
                }
                Err(error) => {
                   tracing::error!("could not decode selection image: {:?}", error);
-                  let _ = tx.send((sender, None));
+                  let _ = tx.send((sender, None, rect));
                }
             });
          }
@@ -805,17 +831,27 @@ impl Selection {
       self.capture = None;
    }
 
-   /// Finishes the selection, transferring the old rectangle to the given paint canvas.
-   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      self.deselected_at = self.rect;
+   fn deselect_at(
+      &mut self,
+      renderer: &mut Backend,
+      paint_canvas: &mut PaintCanvas,
+      rect: Option<Rect>,
+   ) {
+      self.deselected_at = rect;
+      tracing::trace!("deselecting at {:?}", self.deselected_at);
       if let Some(capture) = self.capture.as_ref() {
-         if let Some(rect) = self.normalized_rect() {
+         if let Some(rect) = Self::normalize_rect(rect) {
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
          }
       }
       self.cancel();
+   }
+
+   /// Finishes the selection, transferring the old rectangle to the given paint canvas.
+   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      self.deselect_at(renderer, paint_canvas, self.rect);
    }
 
    /// Downloads a captured selection off the graphics card, into an RGBA image.
@@ -874,9 +910,9 @@ impl Selection {
       self.upload_rgba(renderer, image);
    }
 
-   /// Returns a rounded, limited version of the selection rectangle.
-   fn normalized_rect(&self) -> Option<Rect> {
-      self.rect.map(|rect| {
+   /// Returns a rounded, limited version of the rectangle.
+   fn normalize_rect(rect: Option<Rect>) -> Option<Rect> {
+      rect.map(|rect| {
          let rect = Rect::new(
             rect.position,
             vector(
@@ -889,6 +925,11 @@ impl Selection {
             vector(rect.width().ceil(), rect.height().ceil()),
          )
       })
+   }
+
+   /// Returns a rounded, limited version of the selection rectangle.
+   fn normalized_rect(&self) -> Option<Rect> {
+      Self::normalize_rect(self.rect)
    }
 
    /// Normalizes the selection rectangle, such that the corner names match their visual positions.
@@ -935,6 +976,21 @@ enum Packet {
    Paste((f32, f32), Vec<u8>),
    /// Update the captured image.
    Update(Vec<u8>),
+}
+
+impl Debug for Packet {
+   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+         Packet::Rect { position, size } => {
+            f.debug_struct("Rect").field("position", position).field("size", size).finish()
+         }
+         Packet::Capture => write!(f, "Capture"),
+         Packet::Cancel => write!(f, "Cancel"),
+         Packet::Deselect => write!(f, "Deselect"),
+         Packet::Paste((_, _), _) => write!(f, "Paste"),
+         Packet::Update(_) => write!(f, "Update"),
+      }
+   }
 }
 
 fn format_vector(vector: Vector) -> String {
