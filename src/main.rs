@@ -135,6 +135,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       let event_loop = EventLoop::new();
       let window_builder = {
          let b = WindowBuilder::new()
+            .with_min_inner_size(PhysicalSize::<u32>::new(256, 150)) // not usable, but it's better than a crash.
             .with_inner_size(PhysicalSize::<u32>::new(1024, 600))
             .with_title("NetCanv")
             .with_resizable(true);
