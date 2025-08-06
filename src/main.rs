@@ -43,6 +43,8 @@
 
 pub extern crate self as netcanv;
 
+use std::env;
+use std::env::VarError;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -93,6 +95,7 @@ mod viewport;
 
 use app::*;
 use assets::*;
+use backend::winit;
 use config::config;
 use ui::{Input, Ui};
 
@@ -108,6 +111,19 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    // Set up logging.
    let mut log_guards = Some(init_logging(&cli)?);
    info!("NetCanv {}", env!("CARGO_PKG_VERSION"));
+
+   #[cfg(target_os = "linux")]
+   {
+      // Change winit unix backend to X11 on linux, unless explicitly chosen.
+      // Wayland backend doesn't age well, causing issues like crashing when fractional scaling is
+      // enabled. And because we're not up-to-date with winit, and this may be the case for some
+      // time, it's better to pick X11 as the default backend.
+      let unix_backend = env::var("WINIT_UNIX_BACKEND");
+      tracing::debug!("winit unix backend: {:?}", unix_backend);
+      if let Err(VarError::NotPresent) = unix_backend {
+         env::set_var("WINIT_UNIX_BACKEND", "x11")
+      }
+   }
 
    // Load user configuration.
    config::load_or_create()?;
