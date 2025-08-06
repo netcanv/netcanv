@@ -12,7 +12,7 @@ glutin-winit = "0.3.0"
 raw-window-handle = "0.5.2"
 glow = "0.13.1"
 memoffset = "0.9.1"
-swash = "0.2.2"
+swash = "=0.2.2"
 smallvec = { version = "1.15.0", features = ["const_generics"] }
 glam = "0.30.3"
 
