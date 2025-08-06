@@ -247,6 +247,11 @@ impl Input {
             ..
          } => self.process_keyboard_input(*key, *state),
 
+         // We don't have a guarantee that we will get all input events. For example, we might get
+         // an event that Shift got pressed, but not that it got released. To avoid this issue,
+         // reset the input state after gaining or losing focus.
+         WindowEvent::Focused(_) => self.reset_input_state(),
+
          _ => (),
       }
    }
@@ -320,6 +325,8 @@ impl Input {
 
    /// Processes a keyboard input event.
    fn process_keyboard_input(&mut self, key: VirtualKeyCode, state: ElementState) {
+      tracing::trace!(key = ?key, state = ?state);
+
       if let Some(i) = Self::key_index(key) {
          if state == ElementState::Pressed {
             self.key_just_typed[i] = true;
@@ -330,6 +337,15 @@ impl Input {
             self.key_is_down[i] = false;
          }
       }
+   }
+
+   /// Resets the input state.
+   fn reset_input_state(&mut self) {
+      self.mouse_button_is_down.fill(false);
+      self.mouse_button_just_pressed.fill(false);
+      self.mouse_button_just_released.fill(false);
+      self.key_just_typed.fill(false);
+      self.key_is_down.fill(false);
    }
 }
 
