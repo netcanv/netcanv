@@ -81,7 +81,7 @@ web-time = "1.1.0"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 
 # Clipboard
-arboard = { version = "3.4.0", features = ["wayland-data-control"] }
+arboard = { git = "https://github.com/netcanv/arboard.git", rev = "e36d6ee6f6afc8007bcfa707d19079bf9370355e", features = ["wayland-data-control"] }
 
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
@@ -97,6 +97,3 @@ tracing = "0.1.41"
 
 [profile.release]
 lto = "fat"
-
-[patch.crates-io]
-arboard = { git = "https://github.com/netcanv/arboard.git" }
