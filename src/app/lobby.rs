@@ -4,12 +4,12 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rfd::FileDialog;
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::RoomId;
 use netcanv_renderer::paws::{vector, AlignH, AlignV, Color, Layout, LineCap, Rect, Renderer};
 use netcanv_renderer::{Font, Image as ImageTrait, RenderBackend};
 use nysa::global as bus;
+use rfd::FileDialog;
 
 use crate::app::{paint, AppState, StateArgs};
 use crate::assets::{self, Assets, ColorScheme};
@@ -377,8 +377,8 @@ impl State {
                Some(path) => {
                   self.image_file = Some(path);
                   host_room!();
-               },
-               None => self.status = Status::None
+               }
+               None => self.status = Status::None,
             }
          }
          ui.pop();

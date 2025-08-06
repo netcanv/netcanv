@@ -58,11 +58,11 @@ use crate::net::socket::SocketSystem;
 use crate::ui::view::{self, View};
 use backend::Backend;
 use clap::Parser;
-use rfd::{MessageDialog, MessageLevel};
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_i18n::{Formatted, Language};
 use netcanv_renderer::paws::{vector, Layout};
 use nysa::global as bus;
+use rfd::{MessageDialog, MessageLevel};
 use tracing::{error, info, warn};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -95,7 +95,6 @@ mod viewport;
 
 use app::*;
 use assets::*;
-use backend::winit;
 use config::config;
 use ui::{Input, Ui};
 
