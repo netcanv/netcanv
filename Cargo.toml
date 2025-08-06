@@ -97,3 +97,12 @@ tracing = "0.1.41"
 
 [profile.release]
 lto = "fat"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[profile.release-small]
+inherits = "release"
+opt-level = "z"
+codegen-units = 1
