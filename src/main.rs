@@ -95,7 +95,6 @@ mod viewport;
 
 use app::*;
 use assets::*;
-use backend::winit;
 use config::config;
 use ui::{Input, Ui};
 
