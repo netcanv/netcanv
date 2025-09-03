@@ -85,8 +85,8 @@ pub struct SelectionTool {
       oneshot::Receiver<RgbaImage>,
       oneshot::Receiver<Vec<u8>>,
    )>,
-   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Option<RgbaImage>, Option<Rect>)>,
-   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Option<RgbaImage>, Option<Rect>)>,
+   peer_pastes_tx: mpsc::UnboundedSender<(PeerId, Option<RgbaImage>)>,
+   peer_pastes_rx: mpsc::UnboundedReceiver<(PeerId, Option<RgbaImage>)>,
    ongoing_paste_jobs: HashSet<PeerId>,
 }
 
@@ -241,33 +241,20 @@ impl SelectionTool {
    ) -> bool {
       if let Some((position, image, bytes)) = self.paste.as_mut() {
          if let Ok(image) = image.try_recv() {
+            let position = *position;
             self.selection.deselect(renderer, paint_canvas);
-            self.selection.paste(renderer, Some(*position), &image);
+            // Tell peers to deselect the selection now, to avoid a race condition where the
+            // position will get updated before deselecting, thus placing it at wrong position.
+            catch!(self.send_rect_packet(net), return false);
+            catch!(
+               net.send(self, PeerId::BROADCAST, Packet::Deselect),
+               return true
+            );
+            self.selection.paste(renderer, Some(position), &image);
             return true;
          }
          if let Ok(bytes) = bytes.try_recv() {
             let Point { x, y } = *position;
-            // Update selection rectangle to where it was when deselection happened, to mitigate a race condition where
-            // the rectangle could be overridden by 'network_send' method, updating it before the peers catch up with the action.
-            if let Some(deselected_at) = self.selection.deselected_at {
-               tracing::debug!("updating selection rect to where it was");
-               let Point { x, y } = deselected_at.position;
-               let Vector {
-                  x: width,
-                  y: height,
-               } = deselected_at.size;
-               catch!(
-                  net.send(
-                     self,
-                     PeerId::BROADCAST,
-                     Packet::Rect {
-                        position: (x, y),
-                        size: (width, height)
-                     }
-                  ),
-                  return false
-               );
-            }
             catch!(
                net.send(self, PeerId::BROADCAST, Packet::Paste((x, y), bytes)),
                return false
@@ -283,12 +270,11 @@ impl SelectionTool {
    }
 
    fn poll_peer_pastes(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      while let Ok((peer_id, image, rect)) = self.peer_pastes_rx.try_recv() {
+      while let Ok((peer_id, image)) = self.peer_pastes_rx.try_recv() {
          let peer = self.ensure_peer(peer_id);
-         let deselected_before_decoding_finished = rect.is_none();
+         let deselected_before_decoding_finished = peer.selection.rect.is_none();
          if !deselected_before_decoding_finished {
-            peer.selection.deselect_at(renderer, paint_canvas, rect);
-            tracing::debug!("deselected peer paste");
+            peer.selection.deselect(renderer, paint_canvas);
          }
          if let Some(image) = image {
             // We don't update the rectangle here because a data race could happen.
@@ -718,17 +704,15 @@ impl Tool for SelectionTool {
             // ↑ (x, y) is only here for compatibility with 0.7.0 and is no longer used
             // because it caused a data race
             tracing::debug!("{} pasted image ({} bytes of data)", sender, data.len());
-            // Save the rectangle for later, so it doesn't get updated while we process the paste.
-            let rect = peer.selection.rect;
             let tx = self.peer_pastes_tx.clone();
             self.ongoing_paste_jobs.insert(sender);
             tokio::task::spawn_blocking(move || match Self::decode_image(&data) {
                Ok(image) => {
-                  let _ = tx.send((sender, Some(image), rect));
+                  let _ = tx.send((sender, Some(image)));
                }
                Err(error) => {
                   tracing::error!("could not decode selection image: {:?}", error);
-                  let _ = tx.send((sender, None, rect));
+                  let _ = tx.send((sender, None));
                }
             });
          }
@@ -831,27 +815,20 @@ impl Selection {
       self.capture = None;
    }
 
-   fn deselect_at(
-      &mut self,
-      renderer: &mut Backend,
-      paint_canvas: &mut PaintCanvas,
-      rect: Option<Rect>,
-   ) {
-      self.deselected_at = rect;
-      tracing::trace!("deselecting at {:?}", self.deselected_at);
+   /// Finishes the selection, transferring the old rectangle to the given paint canvas.
+   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
+      self.deselected_at = self.rect;
       if let Some(capture) = self.capture.as_ref() {
-         if let Some(rect) = Self::normalize_rect(rect) {
+         tracing::trace!("deselecting at {:?} with capture", self.rect);
+         if let Some(rect) = self.normalized_rect() {
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
          }
+      } else {
+         tracing::trace!("deselecting at {:?} without capture", self.rect);
       }
       self.cancel();
-   }
-
-   /// Finishes the selection, transferring the old rectangle to the given paint canvas.
-   fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
-      self.deselect_at(renderer, paint_canvas, self.rect);
    }
 
    /// Downloads a captured selection off the graphics card, into an RGBA image.
@@ -910,9 +887,9 @@ impl Selection {
       self.upload_rgba(renderer, image);
    }
 
-   /// Returns a rounded, limited version of the rectangle.
-   fn normalize_rect(rect: Option<Rect>) -> Option<Rect> {
-      rect.map(|rect| {
+   /// Returns a rounded, limited version of the selection rectangle.
+   fn normalized_rect(&self) -> Option<Rect> {
+      self.rect.map(|rect| {
          let rect = Rect::new(
             rect.position,
             vector(
@@ -925,11 +902,6 @@ impl Selection {
             vector(rect.width().ceil(), rect.height().ceil()),
          )
       })
-   }
-
-   /// Returns a rounded, limited version of the selection rectangle.
-   fn normalized_rect(&self) -> Option<Rect> {
-      Self::normalize_rect(self.rect)
    }
 
    /// Normalizes the selection rectangle, such that the corner names match their visual positions.
