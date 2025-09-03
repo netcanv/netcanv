@@ -1,5 +1,6 @@
 use image::imageops::FilterType;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::io::Cursor;
 use tokio::sync::{mpsc, oneshot};
 use web_time::Instant;
@@ -240,8 +241,16 @@ impl SelectionTool {
    ) -> bool {
       if let Some((position, image, bytes)) = self.paste.as_mut() {
          if let Ok(image) = image.try_recv() {
+            let position = *position;
             self.selection.deselect(renderer, paint_canvas);
-            self.selection.paste(renderer, Some(*position), &image);
+            // Tell peers to deselect the selection now, to avoid a race condition where the
+            // position will get updated before deselecting, thus placing it at wrong position.
+            catch!(self.send_rect_packet(net), return false);
+            catch!(
+               net.send(self, PeerId::BROADCAST, Packet::Deselect),
+               return true
+            );
+            self.selection.paste(renderer, Some(position), &image);
             return true;
          }
          if let Ok(bytes) = bytes.try_recv() {
@@ -672,6 +681,7 @@ impl Tool for SelectionTool {
    ) -> netcanv::Result<()> {
       let packet = deserialize_bincode(&payload)?;
       let peer = self.ensure_peer(sender);
+      tracing::trace!("received packet {:?}", packet);
       match packet {
          Packet::Rect {
             position: (x, y),
@@ -809,11 +819,14 @@ impl Selection {
    fn deselect(&mut self, renderer: &mut Backend, paint_canvas: &mut PaintCanvas) {
       self.deselected_at = self.rect;
       if let Some(capture) = self.capture.as_ref() {
+         tracing::trace!("deselecting at {:?} with capture", self.rect);
          if let Some(rect) = self.normalized_rect() {
             paint_canvas.draw(renderer, rect, |renderer| {
                renderer.framebuffer(rect, capture);
             });
          }
+      } else {
+         tracing::trace!("deselecting at {:?} without capture", self.rect);
       }
       self.cancel();
    }
@@ -935,6 +948,21 @@ enum Packet {
    Paste((f32, f32), Vec<u8>),
    /// Update the captured image.
    Update(Vec<u8>),
+}
+
+impl Debug for Packet {
+   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      match self {
+         Packet::Rect { position, size } => {
+            f.debug_struct("Rect").field("position", position).field("size", size).finish()
+         }
+         Packet::Capture => write!(f, "Capture"),
+         Packet::Cancel => write!(f, "Cancel"),
+         Packet::Deselect => write!(f, "Deselect"),
+         Packet::Paste((_, _), _) => write!(f, "Paste"),
+         Packet::Update(_) => write!(f, "Update"),
+      }
+   }
 }
 
 fn format_vector(vector: Vector) -> String {
