@@ -242,14 +242,14 @@ impl SelectionTool {
       if let Some((position, image, bytes)) = self.paste.as_mut() {
          if let Ok(image) = image.try_recv() {
             let position = *position;
-            self.selection.deselect(renderer, paint_canvas);
             // Tell peers to deselect the selection now, to avoid a race condition where the
             // position will get updated before deselecting, thus placing it at wrong position.
             catch!(self.send_rect_packet(net), return false);
             catch!(
                net.send(self, PeerId::BROADCAST, Packet::Deselect),
-               return true
+               return false
             );
+            self.selection.deselect(renderer, paint_canvas);
             self.selection.paste(renderer, Some(position), &image);
             return true;
          }
@@ -452,9 +452,9 @@ impl Tool for SelectionTool {
          (true, ButtonState::Pressed) => {
             if self.potential_action == Action::Selecting {
                // Before we erase the old data, draw the capture back onto the canvas.
-               self.selection.deselect(ui, paint_canvas);
                catch!(self.send_rect_packet(&net));
                catch!(net.send(self, PeerId::BROADCAST, Packet::Deselect));
+               self.selection.deselect(ui, paint_canvas);
                // Anchor the selection to the mouse position.
                self.selection.begin(mouse_position);
                catch!(self.send_rect_packet(&net));
