@@ -8,14 +8,14 @@
 use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard};
 
-use directories::ProjectDirs;
-use netcanv_i18n::unic_langid::LanguageIdentifier;
-use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-
 use crate::assets::Assets;
 use crate::keymap::Keymap;
 use crate::Error;
+use directories::ProjectDirs;
+use netcanv::cli::Cli;
+use netcanv_i18n::unic_langid::LanguageIdentifier;
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
 
 /// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
@@ -79,6 +79,9 @@ pub struct UserConfig {
 
    #[serde(default)]
    pub keymap: Keymap,
+
+   #[serde(skip)]
+   pub zoom_level: Option<f32>,
 }
 
 impl UserConfig {
@@ -131,6 +134,11 @@ impl UserConfig {
       std::fs::write(config_file, toml::to_string(self)?)?;
       Ok(())
    }
+
+   fn with_cli(mut self, cli: &Cli) -> netcanv::Result<Self> {
+      self.zoom_level = cli.zoom_level.map(|x| x.into());
+      Ok(self)
+   }
 }
 
 impl Default for UserConfig {
@@ -147,6 +155,7 @@ impl Default for UserConfig {
          },
          window: None,
          keymap: Default::default(),
+         zoom_level: None,
       }
    }
 }
@@ -180,10 +189,10 @@ fn default_language() -> String {
 static CONFIG: OnceCell<RwLock<UserConfig>> = OnceCell::new();
 
 /// Loads or creates the user config.
-pub fn load_or_create() -> netcanv::Result<()> {
-   profiling::scope!("config::load_or_create");
+pub fn load_or_create(cli: &Cli) -> netcanv::Result<()> {
+   profiling::scope!("config::load_or_create_with_cli");
 
-   let config = UserConfig::load_or_create()?;
+   let config = UserConfig::load_or_create().and_then(|config| config.with_cli(cli))?;
    if CONFIG.set(RwLock::new(config)).is_err() {
       return Err(Error::ConfigIsAlreadyLoaded);
    }

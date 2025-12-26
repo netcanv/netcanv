@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-
-use clap::Subcommand;
+use clap::{value_parser, Subcommand};
 use netcanv_protocol::relay::RoomId;
+use std::path::PathBuf;
 
 #[derive(clap::Parser)]
 pub struct Cli {
@@ -14,6 +13,11 @@ pub struct Cli {
 
    #[command(subcommand)]
    pub command: Option<Commands>,
+
+   /// Sets the default zoom level (range: -8..20).
+   #[clap(long)]
+   #[arg(allow_negative_numbers = true, value_parser = value_parser!(i8).range(-8..20))]
+   pub zoom_level: Option<i8>,
 }
 
 #[derive(Subcommand)]

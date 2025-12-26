@@ -125,7 +125,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    }
 
    // Load user configuration.
-   config::load_or_create()?;
+   config::load_or_create(&cli)?;
 
    // Set up the winit event loop and open the window.
    let (renderer, event_loop) = {
