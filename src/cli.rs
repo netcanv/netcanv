@@ -1,9 +1,9 @@
-use std::cell::OnceCell;
 use clap::{value_parser, Parser, Subcommand};
+use netcanv::Error;
 use netcanv_protocol::relay::RoomId;
+use std::cell::OnceCell;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard};
-use netcanv::Error;
 
 static CLI_ARGS: OnceLock<Cli> = OnceLock::new();
 

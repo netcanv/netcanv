@@ -11,6 +11,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 
+use self::actions::SaveToFileAction;
+use self::tool_bar::{ToolId, Toolbar};
+use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
 use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tool_bar::ToolbarArgs;
 use crate::app::paint::tools::KeyShortcutAction;
@@ -33,6 +36,7 @@ use crate::ui::view::{Dimension, View};
 use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
+use netcanv::cli::cli_args;
 use netcanv::config::config;
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::PeerId;
@@ -42,10 +46,6 @@ use netcanv_renderer::paws::{
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 use tokio::sync::mpsc;
-use netcanv::cli::cli_args;
-use self::actions::SaveToFileAction;
-use self::tool_bar::{ToolId, Toolbar};
-use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
 
 /// A log message in the lower left corner.
 ///

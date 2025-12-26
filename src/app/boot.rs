@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use nysa::global as bus;
-use netcanv::cli::cli_args;
 use crate::app::{lobby, paint, AppState, StateArgs};
 use crate::assets::Assets;
 use crate::backend::Backend;
@@ -12,6 +10,8 @@ use crate::net::{
    peer::{self, Peer},
    socket::SocketSystem,
 };
+use netcanv::cli::cli_args;
+use nysa::global as bus;
 
 pub struct State {
    assets: Box<Assets>,
@@ -20,10 +20,7 @@ pub struct State {
 }
 
 impl State {
-   pub fn new_state(
-      assets: Box<Assets>,
-      socket_system: Arc<SocketSystem>,
-   ) -> Box<dyn AppState> {
+   pub fn new_state(assets: Box<Assets>, socket_system: Arc<SocketSystem>) -> Box<dyn AppState> {
       let config = config();
       let cli = cli_args();
       match &cli.command {
