@@ -37,7 +37,6 @@ use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
 use netcanv::cli::cli_args;
-use netcanv::config::config;
 use netcanv_i18n::translate_enum::TranslateEnum;
 use netcanv_protocol::relay::PeerId;
 use netcanv_renderer::paws::{

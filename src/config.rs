@@ -12,7 +12,6 @@ use crate::assets::Assets;
 use crate::keymap::Keymap;
 use crate::Error;
 use directories::ProjectDirs;
-use netcanv::cli::Cli;
 use netcanv_i18n::unic_langid::LanguageIdentifier;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
