@@ -50,5 +50,6 @@ if __name__ == "__main__":
         rest = rest[1:]
     if "--release" in rest:
         executable_path = "./target/release/netcanv"
-    subprocess.run(["cargo", "build", *rest]) # build executable
-    asyncio.run(run_host())
+    process = subprocess.run(["cargo", "build", *rest]) # build executable
+    if process.returncode == 0:
+        asyncio.run(run_host())
