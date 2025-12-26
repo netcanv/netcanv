@@ -26,11 +26,11 @@ pub struct Tiles {
 }
 
 impl Viewport {
-   /// Creates a new viewport.
-   pub fn new() -> Self {
+   /// Creates a new viewport with given zoom level.
+   pub fn with_zoom_level(zoom_level: f32) -> Self {
       Self {
          pan: vector(0.0, 0.0),
-         zoom_level: 0.0,
+         zoom_level,
       }
    }
 

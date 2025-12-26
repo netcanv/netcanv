@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use nysa::global as bus;
-
 use crate::app::{lobby, paint, AppState, StateArgs};
 use crate::assets::Assets;
 use crate::backend::Backend;
@@ -12,6 +10,8 @@ use crate::net::{
    peer::{self, Peer},
    socket::SocketSystem,
 };
+use netcanv::cli::cli_args;
+use nysa::global as bus;
 
 pub struct State {
    assets: Box<Assets>,
@@ -20,16 +20,14 @@ pub struct State {
 }
 
 impl State {
-   pub fn new_state(
-      cli: cli::Cli,
-      assets: Box<Assets>,
-      socket_system: Arc<SocketSystem>,
-   ) -> Box<dyn AppState> {
-      match cli.command {
+   pub fn new_state(assets: Box<Assets>, socket_system: Arc<SocketSystem>) -> Box<dyn AppState> {
+      let config = config();
+      let cli = cli_args();
+      match &cli.command {
          Some(cli::Commands::HostRoom { nickname, relay }) => {
-            let nickname = nickname.unwrap_or(config().lobby.nickname.clone());
-            let relay = relay.unwrap_or(config().lobby.relay.clone());
-            let peer = Some(Peer::host(Arc::clone(&socket_system), &nickname, &relay));
+            let nickname = nickname.as_ref().unwrap_or(&config.lobby.nickname);
+            let relay = relay.as_ref().unwrap_or(&config.lobby.relay);
+            let peer = Some(Peer::host(Arc::clone(&socket_system), nickname, relay));
 
             Box::new(Self {
                assets,
@@ -42,13 +40,13 @@ impl State {
             nickname,
             relay,
          }) => {
-            let nickname = nickname.unwrap_or(config().lobby.nickname.clone());
-            let relay = relay.unwrap_or(config().lobby.relay.clone());
+            let nickname = nickname.as_ref().unwrap_or(&config.lobby.nickname);
+            let relay = relay.as_ref().unwrap_or(&config.lobby.relay);
             let peer = Some(Peer::join(
                Arc::clone(&socket_system),
-               &nickname,
-               &relay,
-               room_id,
+               nickname,
+               relay,
+               *room_id,
             ));
 
             Box::new(Self {

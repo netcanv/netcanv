@@ -11,15 +11,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 
-use netcanv_i18n::translate_enum::TranslateEnum;
-use netcanv_protocol::relay::PeerId;
-use netcanv_renderer::paws::{
-   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
-};
-use netcanv_renderer::{BlendMode, Font, RenderBackend};
-use nysa::global as bus;
-use tokio::sync::mpsc;
-
+use self::actions::SaveToFileAction;
+use self::tool_bar::{ToolId, Toolbar};
+use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
 use crate::app::paint::actions::ActionArgs;
 use crate::app::paint::tool_bar::ToolbarArgs;
 use crate::app::paint::tools::KeyShortcutAction;
@@ -42,10 +36,16 @@ use crate::ui::view::{Dimension, View};
 use crate::ui::wm::WindowManager;
 use crate::ui::*;
 use crate::viewport::Viewport;
-
-use self::actions::SaveToFileAction;
-use self::tool_bar::{ToolId, Toolbar};
-use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
+use netcanv::cli::cli_args;
+use netcanv::config::config;
+use netcanv_i18n::translate_enum::TranslateEnum;
+use netcanv_protocol::relay::PeerId;
+use netcanv_renderer::paws::{
+   point, vector, AlignH, AlignV, Color, Layout, Rect, Renderer, Vector,
+};
+use netcanv_renderer::{BlendMode, Font, RenderBackend};
+use nysa::global as bus;
+use tokio::sync::mpsc;
 
 /// A log message in the lower left corner.
 ///
@@ -163,6 +163,7 @@ impl State {
    ) -> Result<Self, (netcanv::Error, Box<Assets>)> {
       let (encoded_tx, encoded_rx) = mpsc::unbounded_channel();
       let (decoded_tx, decoded_rx) = mpsc::unbounded_channel();
+      let zoom_level = cli_args().zoom_level.map(|x| x.into()).unwrap_or(0.0);
 
       let mut wm = WindowManager::new();
       let mut this = Self {
@@ -198,7 +199,7 @@ impl State {
          },
 
          panning: false,
-         viewport: Viewport::new(),
+         viewport: Viewport::with_zoom_level(zoom_level),
 
          canvas_view: View::new((Dimension::Percentage(1.0), Dimension::Rest(1.0))),
          bottom_bar_view: View::new((Dimension::Percentage(1.0), Self::BOTTOM_BAR_SIZE)),

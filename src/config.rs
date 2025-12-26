@@ -8,14 +8,14 @@
 use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard};
 
-use directories::ProjectDirs;
-use netcanv_i18n::unic_langid::LanguageIdentifier;
-use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-
 use crate::assets::Assets;
 use crate::keymap::Keymap;
 use crate::Error;
+use directories::ProjectDirs;
+use netcanv::cli::Cli;
+use netcanv_i18n::unic_langid::LanguageIdentifier;
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
 
 /// Saved values of lobby text boxes.
 #[derive(Deserialize, Serialize)]
