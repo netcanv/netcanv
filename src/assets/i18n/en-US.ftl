@@ -108,6 +108,8 @@ error-could-not-initialize-clipboard = Could not initialize clipboard: { $error 
 
 error-config-is-already-loaded = User configuration is already loaded. This is a bug, please report this
 
+error-cli-args-are-already-parsed = Command line interface arguments were already parsed. This is a bug, please report this
+
 error-clipboard-was-not-initialized = Clipboard was not initialized properly. Try restarting the app and if the issue persists file a bug
 error-cannot-save-to-clipboard = Could not save to clipboard: { $error }
 error-clipboard-does-not-contain-text = Clipboard does not contain text

@@ -100,6 +100,8 @@ error-could-not-initialize-clipboard = Nie udało się zinicjalizować schowka: 
 
 error-config-is-already-loaded = Konfiguracja użytkownika została wcześniej załadowana. Prosimy to zgłośić
 
+error-cli-args-are-already-parsed = Argumenty interfejsu wiersza poleceń zostały już przeanalizowane. Prosimy to zgłosić
+
 error-clipboard-was-not-initialized = Schowek nie został zinicjalizowany. Spróbuj uruchomić ponownie aplikację oraz zgłosić problem jeśli to nie pomoże
 error-cannot-save-to-clipboard = Nie udało się zapisać od schowka: { $error }
 error-clipboard-does-not-contain-text = Schowek nie zawiera tekstu

@@ -99,16 +99,18 @@ use config::config;
 use ui::{Input, Ui};
 
 pub use errors::*;
+use netcanv::cli::cli_args;
 
 /// The "inner" main function that does all the work, and can fail.
 ///
 /// `language` is populated with the user's language once that's loaded. The language is then used
 /// for displaying crash messages.
 async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
-   let cli = Cli::parse();
+   cli::parse()?;
+   let cli = cli_args();
 
    // Set up logging.
-   let mut log_guards = Some(init_logging(&cli)?);
+   let mut log_guards = Some(init_logging()?);
    info!("NetCanv {}", env!("CARGO_PKG_VERSION"));
 
    #[cfg(target_os = "linux")]
@@ -125,7 +127,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    }
 
    // Load user configuration.
-   config::load_or_create(&cli)?;
+   config::load_or_create()?;
 
    // Set up the winit event loop and open the window.
    let (renderer, event_loop) = {
@@ -174,7 +176,6 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
    let socket_system = SocketSystem::new();
    *language = Some(assets.language.clone());
    let mut app: Option<Box<dyn AppState>> = Some(boot::State::new_state(
-      cli,
       assets,
       Arc::clone(&socket_system),
    ));
@@ -354,7 +355,9 @@ struct LogGuards {
    _chrome: Option<tracing_chrome::FlushGuard>,
 }
 
-fn init_logging(cli: &Cli) -> errors::Result<LogGuards> {
+fn init_logging() -> errors::Result<LogGuards> {
+   let cli = cli_args();
+
    let mut chrome_trace = cli.trace.as_ref().map(|trace_path| {
       let (chrome_trace, guard) =
          tracing_chrome::ChromeLayerBuilder::new().file(trace_path).include_args(true).build();

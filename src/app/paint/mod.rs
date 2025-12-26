@@ -42,7 +42,7 @@ use netcanv_renderer::paws::{
 use netcanv_renderer::{BlendMode, Font, RenderBackend};
 use nysa::global as bus;
 use tokio::sync::mpsc;
-
+use netcanv::cli::cli_args;
 use self::actions::SaveToFileAction;
 use self::tool_bar::{ToolId, Toolbar};
 use self::tools::{BrushTool, EyedropperTool, Net, SelectionTool, ToolArgs};
@@ -163,7 +163,7 @@ impl State {
    ) -> Result<Self, (netcanv::Error, Box<Assets>)> {
       let (encoded_tx, encoded_rx) = mpsc::unbounded_channel();
       let (decoded_tx, decoded_rx) = mpsc::unbounded_channel();
-      let zoom_level = config().zoom_level.unwrap_or(0.0);
+      let zoom_level = cli_args().zoom_level.map(|x| x.into()).unwrap_or(0.0);
 
       let mut wm = WindowManager::new();
       let mut this = Self {

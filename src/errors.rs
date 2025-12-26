@@ -43,6 +43,11 @@ pub enum Error {
    CouldNotInitializeLogger { error: String },
 
    //
+   // Command line interface
+   //
+   CliArgsWereAlreadyParsed,
+
+   //
    // Clipboard
    //
    ClipboardWasNotInitialized,
