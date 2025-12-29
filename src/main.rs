@@ -44,7 +44,6 @@
 pub extern crate self as netcanv;
 
 use std::env;
-use std::env::VarError;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -119,7 +118,7 @@ async fn inner_main(language: &mut Option<Language>) -> errors::Result<()> {
       // time, it's better to pick X11 as the default backend.
       let unix_backend = env::var("WINIT_UNIX_BACKEND");
       tracing::debug!("winit unix backend: {:?}", unix_backend);
-      if let Err(VarError::NotPresent) = unix_backend {
+      if let Err(env::VarError::NotPresent) = unix_backend {
          env::set_var("WINIT_UNIX_BACKEND", "x11")
       }
    }
