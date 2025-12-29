@@ -2,19 +2,24 @@
 import argparse
 import asyncio
 import subprocess
+from argparse import Namespace
 
 HOST_COLOR = "\033[94m"
 CLIENT_COLOR = "\033[93m"
-ENDC = "\033[0m"
+END_COLOR = "\033[0m"
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--zoom-level", type=int)
 executable_path = "./target/debug/netcanv"
 
 def log(who: str, color: str, line: str):
-    print(f"{color}{who.ljust(8)}{ENDC} {line}", end="")
+    print(f"{color}{who.ljust(8)}{END_COLOR} {line}", end="")
 
-async def run_client(room_id: str):
+async def run_client(room_id: str, args: Namespace):
     cmd = [executable_path, "join-room", "-r", room_id]
+    if args.zoom_level:
+        cmd.extend(["--zoom-level", str(args.zoom_level)])
+
     client = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if client.stderr is not None:
         while True:
@@ -23,9 +28,12 @@ async def run_client(room_id: str):
                 break
             log("CLIENT", CLIENT_COLOR, line)
 
-async def run_host():
+async def run_host(args: Namespace):
     tasks = []
     cmd = [executable_path, "host-room"]
+    if args.zoom_level:
+        cmd.extend(["--zoom-level", str(args.zoom_level)])
+
     host = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if host.stderr is not None:
@@ -37,7 +45,7 @@ async def run_host():
             # Find room ID
             if line.find("got free room ID") != -1:
                 id = line.split("r:", 1)[1].strip() # room ID is after "r:"
-                tasks.append(asyncio.create_task(run_client(id)))
+                tasks.append(asyncio.create_task(run_client(id, args)))
     else:
         print("stderr is None")
 
@@ -52,4 +60,4 @@ if __name__ == "__main__":
         executable_path = "./target/release/netcanv"
     process = subprocess.run(["cargo", "build", *rest]) # build executable
     if process.returncode == 0:
-        asyncio.run(run_host())
+        asyncio.run(run_host(args))
