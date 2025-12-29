@@ -51,7 +51,7 @@ impl Language {
       }
    }
 
-   fn get_message(&self, key: &str) -> Option<FluentMessage> {
+   fn get_message(&self, key: &str) -> Option<FluentMessage<'_>> {
       Some(match self.bundle.get_message(key) {
          Some(message) => message,
          None => {
