@@ -98,7 +98,7 @@ error-could-not-initialize-backend = Nie udało się zinicjalizować renderera: 
 error-could-not-initialize-logger = Nie udało się zinicjalizować loggera: { $error }
 error-could-not-initialize-clipboard = Nie udało się zinicjalizować schowka: { $error }
 
-error-config-is-already-loaded = Konfiguracja użytkownika została wcześniej załadowana. Prosimy to zgłośić
+error-config-is-already-loaded = Konfiguracja użytkownika została wcześniej załadowana. Prosimy to zgłosić
 
 error-cli-args-are-already-parsed = Argumenty interfejsu wiersza poleceń zostały już przeanalizowane. Prosimy to zgłosić
 
