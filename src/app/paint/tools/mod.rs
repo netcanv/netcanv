@@ -186,7 +186,7 @@ pub struct Net<'peer> {
 
 impl<'peer> Net<'peer> {
    /// Creates a new `Net` for the given peer.
-   pub fn new(peer: &'peer Peer) -> Net {
+   pub fn new(peer: &'peer Peer) -> Net<'peer> {
       Self { peer }
    }
 
