@@ -8,14 +8,13 @@ use std::rc::Rc;
 use std::str::Chars;
 
 use glow::{HasContext, PixelUnpackData};
-use netcanv_renderer::paws::{point, vector, Rect, Vector};
+use netcanv_renderer::paws::{vector, Rect, Vector};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::shape::ShapeContext;
 use swash::zeno::Format;
 use swash::{CacheKey, FontRef};
 
-use crate::common::GlUtilities;
-use crate::common::RectMath;
+use crate::common::{GlUtilities, RectMath};
 use crate::rect_packer::RectPacker;
 
 const TEXTURE_ATLAS_SIZE: u32 = 1024;
