@@ -14,7 +14,6 @@ members = [
    "netcanv-i18n-macros",
    "netcanv-renderer",
    "netcanv-renderer-opengl",
-   "netcanv-renderer-wgpu",
    "netcanv-relay",
    "netcanv-protocol",
 ]
@@ -22,7 +21,6 @@ members = [
 [features]
 default = ["renderer-opengl"]
 renderer-opengl = ["netcanv-renderer-opengl"]
-renderer-wgpu = ["netcanv-renderer-wgpu"]
 
 tracy-profiling = ["profiling/profile-with-tracy"]
 
@@ -88,7 +86,6 @@ arboard = { git = "https://github.com/netcanv/arboard.git", rev = "91dd9ef37f0ff
 # Workspace
 netcanv-renderer = { path = "netcanv-renderer" }
 netcanv-renderer-opengl = { path = "netcanv-renderer-opengl", optional = true }
-netcanv-renderer-wgpu = { path = "netcanv-renderer-wgpu", optional = true }
 netcanv-protocol = { path = "netcanv-protocol", features = ["i18n"] }
 
 netcanv-i18n = { path = "netcanv-i18n" }
