@@ -21,7 +21,7 @@ impl RectPacker {
          shelf_y: 0.0,
          shelf_height: 0.0,
       };
-      // Pack a single pixel (including padding)
+      // Pack a single pixel
       packer.pack(1.0, 1.0);
       packer
    }
