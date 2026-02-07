@@ -15,6 +15,7 @@ use swash::zeno::Format;
 use swash::{CacheKey, FontRef};
 
 use crate::common::GlUtilities;
+use crate::common::RectMath;
 use crate::rect_packer::RectPacker;
 
 const TEXTURE_ATLAS_SIZE: u32 = 1024;
@@ -131,16 +132,6 @@ impl FontFace {
             glow::TEXTURE_2D,
             glow::TEXTURE_MAG_FILTER,
             glow::NEAREST as i32,
-         );
-         gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_S,
-            glow::CLAMP_TO_EDGE as i32,
-         );
-         gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_T,
-            glow::CLAMP_TO_EDGE as i32,
          );
          let swizzle_mask = [glow::ONE, glow::ONE, glow::ONE, glow::RED];
          gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
@@ -286,15 +277,9 @@ impl<'a> GlyphRenderer<'a> {
       let shaper = self.shape_context.builder(self.swash_font).size(size).build();
       let glyph_metrics = self.swash_font.glyph_metrics(shaper.normalized_coords()).scale(size);
 
-      let atlas_size = vector(TEXTURE_ATLAS_SIZE as f32, TEXTURE_ATLAS_SIZE as f32);
-      let uv_rect = Rect::new(
-         point(rect.left() / atlas_size.x, rect.top() / atlas_size.y),
-         vector(rect.width() / atlas_size.x, rect.height() / atlas_size.y),
-      );
-
       Ok(Glyph {
          size: rect.size,
-         uv_rect,
+         uv_rect: rect.uv(vector(TEXTURE_ATLAS_SIZE as f32, TEXTURE_ATLAS_SIZE as f32)),
          offset: vector(image.placement.left as f32, -(image.placement.top as f32)),
          advance_x: glyph_metrics.advance_width(glyph_id),
       })
