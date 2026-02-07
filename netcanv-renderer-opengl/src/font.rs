@@ -132,16 +132,6 @@ impl FontFace {
             glow::TEXTURE_MAG_FILTER,
             glow::NEAREST as i32,
          );
-         gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_S,
-            glow::CLAMP_TO_EDGE as i32,
-         );
-         gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_T,
-            glow::CLAMP_TO_EDGE as i32,
-         );
          let swizzle_mask = [glow::ONE, glow::ONE, glow::ONE, glow::RED];
          gl.texture_swizzle_mask(glow::TEXTURE_2D, &swizzle_mask);
          texture
