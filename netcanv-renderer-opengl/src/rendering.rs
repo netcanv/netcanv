@@ -387,7 +387,7 @@ impl RenderState {
             self.gl.blend_func_separate(
                glow::SRC_ALPHA,
                glow::ONE_MINUS_SRC_ALPHA,
-               glow::ONE,
+               glow::SRC_ALPHA,
                glow::ONE_MINUS_SRC_ALPHA,
             );
          },
